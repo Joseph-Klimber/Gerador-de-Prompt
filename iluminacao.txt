@@ -1,0 +1,50 @@
+Luz suave difusa
+Luz dura com sombras marcadas
+Iluminação lateral dramática
+Backlight intenso (contra-luz)
+Rim light destacando contorno
+Luz de topo (top lighting)
+Luz inferior (underlight dramático)
+Luz natural de janela
+Luz dourada de pôr do sol
+Luz fria azulada
+Luz quente alaranjada
+Iluminação neon colorida
+Iluminação mista quente/fria
+Iluminação cinematográfica
+Luz volumétrica com raios visíveis
+Luz filtrada por objetos
+Luz com sombra de persiana
+Iluminação difusa com neblina
+Luz refletida em superfícies
+Luz especular intensa
+Iluminação high key (clara)
+Iluminação low key (escura)
+Luz pontual focada
+Luz ambiente suave
+Iluminação com contraste alto
+Iluminação com contraste baixo
+Luz piscante
+Luz intermitente
+Luz de vela
+Luz de fogo
+Luz de tela (monitor/celular)
+Iluminação urbana noturna
+Luz de rua amarelada
+Luz de lua
+Luz subaquática
+Luz refratada
+Luz com flare de lente
+Luz com bloom
+Iluminação estroboscópica
+Iluminação de palco
+Luz direcional intensa
+Luz ambiente colorida
+Luz degradê
+Iluminação com reflexos molhados
+Luz com partículas no ar
+Iluminação difusa branca
+Luz recortada (hard edge shadow)
+Iluminação lateral dupla
+Luz indireta suave
+Iluminação com brilho metálico
