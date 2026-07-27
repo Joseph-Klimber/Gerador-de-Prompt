@@ -35,9 +35,20 @@ api_key_input = st.sidebar.text_input(
     help="Cole sua API Key do Google AI Studio aqui."
 )
 
-modelo_selecionado = st.sidebar.selectbox(
+# Mapeia as versões 3.x para os IDs nativos reconhecidos pela API do Gemini
+modelos_disponiveis = {
+    "3.6 Flash (Novo)": "gemini-3.6-flash",
+    "3.5 Flash Lite": "gemini-3.5-flash-lite",
+    "3.1 Pro": "gemini-3.1-pro"
+}
+
+modelo_rotulo = st.sidebar.selectbox(
     "🤖 Modelo:",
-    options=['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-1.5-flash']
+    options=list(modelos_disponiveis.keys())
+)
+
+# ID nativo enviado diretamente para o servidor da API
+modelo_selecionado = modelos_disponiveis[modelo_rotulo]
 )
 
 # ===========================================================================
