@@ -370,9 +370,24 @@ with st.sidebar:
 
     chave_input = st.text_input("Chave API Gemini:", type="password", key=chave_key)
     
-    modelos_disponiveis = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-flash']
-    modelo_salvo = config_salva.get("modelo_padrao", "gemini-2.5-flash")
-    modelo_selecionado = st.selectbox("Modelo Gemini:", modelos_disponiveis, index=modelos_disponiveis.index(modelo_salvo) if modelo_salvo in modelos_disponiveis else 0)
+    modelos_disponiveis = [
+        'gemini-3.6-flash',
+        'gemini-3.6-pro',
+        'gemini-3.5-flash',
+        'gemini-3.5-pro',
+        'gemini-3.0-flash',
+        'gemini-3.0-pro',
+        'gemini-2.5-flash',
+        'gemini-2.5-pro',
+        'gemini-2.0-flash',
+        'gemini-1.5-flash'
+    ]
+    modelo_salvo = config_salva.get("modelo_padrao", "gemini-3.6-flash")
+    modelo_selecionado = st.selectbox(
+        "Modelo Gemini:", 
+        modelos_disponiveis, 
+        index=modelos_disponiveis.index(modelo_salvo) if modelo_salvo in modelos_disponiveis else 0
+    )
 
     if st.button("💾 Salvar Configurações"):
         st.session_state.chaves_api[slot_chave] = chave_input.strip()
