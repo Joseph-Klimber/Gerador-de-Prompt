@@ -590,7 +590,3 @@ with tab2: renderizar_formulario("p2")
 with tab3: renderizar_formulario("p3")
 with tab4: renderizar_formulario("serie", is_serie=True)
 with tab5: renderizar_formulario("web", is_web=True)
-                st.code(response.text, language="text")
-                
-            except Exception as e:
-                st.error(f"⚠️ Ocorreu um erro ao chamar o Gemini: {e}")
