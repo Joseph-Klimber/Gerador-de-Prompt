@@ -1,16 +1,11 @@
 import os
+import requests
+from datetime import datetime
 import streamlit as st
 
-# Configuração da página (Deve ser a primeira chamada do Streamlit)
-st.set_page_config(
-    page_title="Gerador de Prompts IA",
-    page_icon="🎨",
-    layout="wide"
-)
+# COLE AQUI A URL QUE VOCÊ COPIOU NO PASSO 9 DA ETAPA 2
+URL_GOOGLE_API = "https://script.google.com/macros/s/AKfycbxFVAphTkmkfcySwFJXR141G0Vm54W9WM0aLOWIMAd4MqaoT9Zkh-9_PfBz48MqZEnI/exec"
 
-# ===========================================================================
-# 1. CONTROLE DE ACESSO POR PAGAMENTO (PAYWALL)
-# ===========================================================================
 def verificar_pagamento_usuario():
     if "pago" not in st.session_state:
         st.session_state.pago = False
@@ -20,7 +15,7 @@ def verificar_pagamento_usuario():
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             st.markdown("## 🔒 Área Exclusiva para Assinantes")
-            st.info("Para ter acesso liberado à ferramenta, realize a assinatura e informe seu e-mail cadastrado na compra.")
+            st.info("Informe seu e-mail de compra para acessar o gerador de prompts.")
             
             with st.form("form_pagamento"):
                 email_usuario = st.text_input("Seu E-mail de Compra:")
@@ -29,38 +24,38 @@ def verificar_pagamento_usuario():
                 if btn_verificar:
                     email_limpo = email_usuario.strip().lower()
                     permitido = False
+                    mensagem_erro = "⚠️ E-mail não encontrado na base de clientes ativos."
                     
-                    # Lê o arquivo liberados.txt do repositório privado
-                    if os.path.exists("liberados.txt"):
-                        with open("liberados.txt", "r", encoding="utf-8") as f:
-                            emails_liberados = [line.strip().lower() for line in f if line.strip()]
-                        if email_limpo in emails_liberados:
-                            permitido = True
+                    if email_limpo:
+                        try:
+                            # Consulta a Planilha do Google via Apps Script
+                            resposta = requests.get(f"{URL_GOOGLE_API}?email={email_limpo}")
+                            dados = resposta.json()
+                            
+                            if dados.get("encontrado"):
+                                data_expiracao_str = dados.get("expiracao")
+                                data_expiracao = datetime.strptime(data_expiracao_str, "%Y-%m-%d").date()
+                                data_hoje = datetime.now().date()
+                                
+                                # Valida se a data atual é menor ou igual à data limite
+                                if data_hoje <= data_expiracao:
+                                    permitido = True
+                                else:
+                                    mensagem_erro = f"⏳ Sua assinatura expirou em {data_expiracao.strftime('%d/%m/%Y')}. Renove seu plano para continuar."
+                        except Exception as e:
+                            mensagem_erro = "⚠️ Erro ao consultar servidor de licenças. Tente novamente."
                     
                     if permitido:
                         st.session_state.pago = True
                         st.session_state.usuario_email = email_limpo
-                        st.success("Acesso liberado com sucesso! Carregando sistema...")
+                        st.success("Acesso liberado com sucesso!")
                         st.rerun()
                     else:
-                        st.error("⚠️ E-mail não encontrado na base de clientes ativos. Caso tenha acabado de pagar, aguarde alguns instantes.")
+                        st.error(mensagem_erro)
             
-            st.markdown("---")
-            st.markdown("💡 **Dúvidas sobre o acesso?** Entre em contato com o suporte.")
-            
-        # Interrompe a execução do app se não estiver liberado
-        st.stop()
+            st.stop()
 
-# Executa a verificação de pagamento logo na entrada
 verificar_pagamento_usuario()
-# ===========================================================================
-# 3. CORPO PRINCIPAL DO APLICATIVO (O Gerador de Prompts)
-# ===========================================================================
-st.title("🎨 Gerador Profissional de Prompts com IA")
-st.write("Bem-vindo(a) à ferramenta exclusiva de geração de prompts.")
-
-# Aqui entra o restante da lógica das suas 592 linhas do gerador...
-st.success("🎉 Sistema liberado e pronto para uso!")
 # ===========================================================================
 # SETOR 1: CONFIGURAÇÕES, IMPORTAÇÕES E PERSISTÊNCIA DE DADOS
 # ===========================================================================
