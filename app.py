@@ -53,43 +53,6 @@ def verificar_pagamento_usuario():
 
 # Executa a verificação de pagamento logo na entrada
 verificar_pagamento_usuario()
-
-# ===========================================================================
-# 2. BARRA LATERAL (CONFIGURAÇÕES E MODELOS 3.X)
-# ===========================================================================
-with st.sidebar:
-    st.image("https://img.icons8.com/color/96/artificial-intelligence.png", width=80)
-    st.title("Configurações da API")
-    
-    # Seletor de modelos com a família 3.X atualizada
-    modelos_disponiveis = [
-        'gemini-3.6-flash',
-        'gemini-3.6-pro',
-        'gemini-3.5-flash',
-        'gemini-3.5-pro',
-        'gemini-3.0-flash',
-        'gemini-3.0-pro',
-        'gemini-2.5-flash',
-        'gemini-2.5-pro',
-        'gemini-2.0-flash',
-        'gemini-1.5-flash'
-    ]
-    
-    # Simulação de carregamento de configuração salva (substitua pela sua lógica anterior se houver)
-    modelo_salvo = "gemini-3.6-flash"
-    modelo_selecionado = st.selectbox(
-        "Modelo Gemini:", 
-        modelos_disponiveis, 
-        index=modelos_disponiveis.index(modelo_salvo) if modelo_salvo in modelos_disponiveis else 0
-    )
-    
-    st.markdown("---")
-    st.write(f"📧 **Conta:** {st.session_state.get('usuario_email', 'Convidado')}")
-    if st.sidebar.button("🚪 Bloquear / Sair", use_container_width=True):
-        st.session_state.pago = False
-        st.session_state.usuario_email = ""
-        st.rerun()
-
 # ===========================================================================
 # 3. CORPO PRINCIPAL DO APLICATIVO (O Gerador de Prompts)
 # ===========================================================================
