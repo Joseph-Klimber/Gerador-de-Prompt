@@ -1,3 +1,103 @@
+import os
+import streamlit as st
+
+# Configuração da página (Deve ser a primeira chamada do Streamlit)
+st.set_page_config(
+    page_title="Gerador de Prompts IA",
+    page_icon="🎨",
+    layout="wide"
+)
+
+# ===========================================================================
+# 1. CONTROLE DE ACESSO POR PAGAMENTO (PAYWALL)
+# ===========================================================================
+def verificar_pagamento_usuario():
+    if "pago" not in st.session_state:
+        st.session_state.pago = False
+
+    if not st.session_state.pago:
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.markdown("## 🔒 Área Exclusiva para Assinantes")
+            st.info("Para ter acesso liberado à ferramenta, realize a assinatura e informe seu e-mail cadastrado na compra.")
+            
+            with st.form("form_pagamento"):
+                email_usuario = st.text_input("Seu E-mail de Compra:")
+                btn_verificar = st.form_submit_button("Verificar Acesso", use_container_width=True)
+                
+                if btn_verificar:
+                    email_limpo = email_usuario.strip().lower()
+                    permitido = False
+                    
+                    # Lê o arquivo liberados.txt do repositório privado
+                    if os.path.exists("liberados.txt"):
+                        with open("liberados.txt", "r", encoding="utf-8") as f:
+                            emails_liberados = [line.strip().lower() for line in f if line.strip()]
+                        if email_limpo in emails_liberados:
+                            permitido = True
+                    
+                    if permitido:
+                        st.session_state.pago = True
+                        st.session_state.usuario_email = email_limpo
+                        st.success("Acesso liberado com sucesso! Carregando sistema...")
+                        st.rerun()
+                    else:
+                        st.error("⚠️ E-mail não encontrado na base de clientes ativos. Caso tenha acabado de pagar, aguarde alguns instantes.")
+            
+            st.markdown("---")
+            st.markdown("💡 **Dúvidas sobre o acesso?** Entre em contato com o suporte.")
+            
+        # Interrompe a execução do app se não estiver liberado
+        st.stop()
+
+# Executa a verificação de pagamento logo na entrada
+verificar_pagamento_usuario()
+
+# ===========================================================================
+# 2. BARRA LATERAL (CONFIGURAÇÕES E MODELOS 3.X)
+# ===========================================================================
+with st.sidebar:
+    st.image("https://img.icons8.com/color/96/artificial-intelligence.png", width=80)
+    st.title("Configurações da API")
+    
+    # Seletor de modelos com a família 3.X atualizada
+    modelos_disponiveis = [
+        'gemini-3.6-flash',
+        'gemini-3.6-pro',
+        'gemini-3.5-flash',
+        'gemini-3.5-pro',
+        'gemini-3.0-flash',
+        'gemini-3.0-pro',
+        'gemini-2.5-flash',
+        'gemini-2.5-pro',
+        'gemini-2.0-flash',
+        'gemini-1.5-flash'
+    ]
+    
+    # Simulação de carregamento de configuração salva (substitua pela sua lógica anterior se houver)
+    modelo_salvo = "gemini-3.6-flash"
+    modelo_selecionado = st.selectbox(
+        "Modelo Gemini:", 
+        modelos_disponiveis, 
+        index=modelos_disponiveis.index(modelo_salvo) if modelo_salvo in modelos_disponiveis else 0
+    )
+    
+    st.markdown("---")
+    st.write(f"📧 **Conta:** {st.session_state.get('usuario_email', 'Convidado')}")
+    if st.sidebar.button("🚪 Bloquear / Sair", use_container_width=True):
+        st.session_state.pago = False
+        st.session_state.usuario_email = ""
+        st.rerun()
+
+# ===========================================================================
+# 3. CORPO PRINCIPAL DO APLICATIVO (O Gerador de Prompts)
+# ===========================================================================
+st.title("🎨 Gerador Profissional de Prompts com IA")
+st.write("Bem-vindo(a) à ferramenta exclusiva de geração de prompts.")
+
+# Aqui entra o restante da lógica das suas 592 linhas do gerador...
+st.success("🎉 Sistema liberado e pronto para uso!")
 # ===========================================================================
 # SETOR 1: CONFIGURAÇÕES, IMPORTAÇÕES E PERSISTÊNCIA DE DADOS
 # ===========================================================================
