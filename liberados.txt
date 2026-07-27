@@ -1,0 +1,4 @@
+cliente1@email.com
+cliente2@email.com
+srs.sergio@yahoo.com.br
+mjbacker@proton.me
