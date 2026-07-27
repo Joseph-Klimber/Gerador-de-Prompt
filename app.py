@@ -49,7 +49,6 @@ modelo_rotulo = st.sidebar.selectbox(
 
 # ID nativo enviado diretamente para o servidor da API
 modelo_selecionado = modelos_disponiveis[modelo_rotulo]
-)
 
 # ===========================================================================
 # LÓGICA DE INTERFACE COM STREAMLIT (ABAS)
