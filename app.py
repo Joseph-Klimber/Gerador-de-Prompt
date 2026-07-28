@@ -4,7 +4,7 @@ from datetime import datetime
 import streamlit as st
 
 # COLE AQUI A URL QUE VOCÊ COPIOU NO PASSO 9 DA ETAPA 2
-URL_GOOGLE_API = "https://script.google.com/macros/s/AKfycbxFVAphTkmkfcySwFJXR141G0Vm54W9WM0aLOWIMAd4MqaoT9Zkh-9_PfBz48MqZEnI/exec"
+URL_GOOGLE_API = "https://script.google.com/macros/s/AKfycbyLlqkhYChBHM6K08DnNP67C9t7E2kRS3N0pINa65oYa81--Cv4amoJm3OZ_v_MSDA7/exec"
 
 def verificar_pagamento_usuario():
     if "pago" not in st.session_state:
