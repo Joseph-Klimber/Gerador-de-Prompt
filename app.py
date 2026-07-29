@@ -1,61 +1,136 @@
-import os
-import requests
-from datetime import datetime
 import streamlit as st
+import requests
 
-# COLE AQUI A URL QUE VOCÊ COPIOU NO PASSO 9 DA ETAPA 2
-URL_GOOGLE_API = "https://script.google.com/macros/s/AKfycbyLlqkhYChBHM6K08DnNP67C9t7E2kRS3N0pINa65oYa81--Cv4amoJm3OZ_v_MSDA7/exec"
+# 1. Configuração da Página
+st.set_page_config(
+    page_title="Gerador de Prompts IA", 
+    page_icon="🚀", 
+    layout="wide"
+)
 
-def verificar_pagamento_usuario():
-    if "pago" not in st.session_state:
-        st.session_state.pago = False
+# 2. SEUS LINKS DE CONFIGURAÇÃO (Substitua pelos seus dados reais)
+APPS_SCRIPT_URL = "https://script.google.com/macros/u/1/s/AKfycbyLlqkhYChBHM6K08DnNP67C9t7E2kRS3N0pINa65oYa81--Cv4amoJm3OZ_v_MSDA7/exec"
+LINK_KIWIFY_15_DIAS = "https://pay.kiwify.com.br/MXVL98k"
+LINK_KIWIFY_30_DIAS = "https://pay.kiwify.com.br/dyfEGe5"
+LINK_KIWIFY_90_DIAS = "https://pay.kiwify.com.br/xo0m3rF"
 
-    if not st.session_state.pago:
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            st.markdown("## 🔒 Área Exclusiva para Assinantes")
-            st.info("Informe seu e-mail de compra para acessar o gerador de prompts.")
-            
-            with st.form("form_pagamento"):
-                email_usuario = st.text_input("Seu E-mail de Compra:")
-                btn_verificar = st.form_submit_button("Verificar Acesso", use_container_width=True)
-                
-                if btn_verificar:
-                    email_limpo = email_usuario.strip().lower()
-                    permitido = False
-                    mensagem_erro = "⚠️ E-mail não encontrado na base de clientes ativos."
-                    
-                    if email_limpo:
-                        try:
-                            # Consulta a Planilha do Google via Apps Script
-                            resposta = requests.get(f"{URL_GOOGLE_API}?email={email_limpo}")
-                            dados = resposta.json()
-                            
-                            if dados.get("encontrado"):
-                                data_expiracao_str = dados.get("expiracao")
-                                data_expiracao = datetime.strptime(data_expiracao_str, "%Y-%m-%d").date()
-                                data_hoje = datetime.now().date()
-                                
-                                # Valida se a data atual é menor ou igual à data limite
-                                if data_hoje <= data_expiracao:
-                                    permitido = True
-                                else:
-                                    mensagem_erro = f"⏳ Sua assinatura expirou em {data_expiracao.strftime('%d/%m/%Y')}. Renove seu plano para continuar."
-                        except Exception as e:
-                            mensagem_erro = "⚠️ Erro ao consultar servidor de licenças. Tente novamente."
-                    
-                    if permitido:
-                        st.session_state.pago = True
-                        st.session_state.usuario_email = email_limpo
-                        st.success("Acesso liberado com sucesso!")
-                        st.rerun()
-                    else:
-                        st.error(mensagem_erro)
-            
-            st.stop()
+# 3. Função para checar acesso no Google Sheets via Google Apps Script
+def verificar_acesso_sheets(email):
+    try:
+        response = requests.get(APPS_SCRIPT_URL, params={"email": email}, timeout=5)
+        if response.status_code == 200:
+            dados = response.json()
+            return dados.get("encontrado", False), dados.get("expiracao", "")
+    except Exception as e:
+        st.error(f"Erro ao conectar com a base de dados: {e}")
+    return False, ""
 
-verificar_pagamento_usuario()
+# 4. Gerenciamento da Sessão do Usuário
+if "autenticado" not in st.session_state:
+    st.session_state.autenticado = False
+if "user_email" not in st.session_state:
+    st.session_state.user_email = ""
+if "expiracao" not in st.session_state:
+    st.session_state.expiracao = ""
+
+# ==============================================================================
+# TELA 1: LANDING PAGE + LOGIN (Exibida para quem AINDA NÃO SE AUTENTICOU)
+# ==============================================================================
+if not st.session_state.autenticado:
+    
+    # Cabeçalho Principal
+    st.markdown("<h1 style='text-align: center;'>🚀 Gerador de Prompts Profissionais</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; font-size: 1.2rem; color: #666;'>Crie prompts perfeitos em segundos e extraia o máximo de desempenho das Inteligências Artificiais.</p>", unsafe_allow_html=True)
+    
+    st.divider()
+
+    # Seção de Login (Para quem JÁ comprou)
+    st.markdown("### 🔑 Já é cliente? Acesse a ferramenta:")
+    col_login1, col_login2 = st.columns([3, 1])
+    
+    with col_login1:
+        email_input = st.text_input("E-mail de compra:", placeholder="seuemail@exemplo.com", label_visibility="collapsed")
+        
+    with col_login2:
+        if st.button("ENTRAR NA FERRAMENTA", type="primary", use_container_width=True):
+            if email_input:
+                com_acesso, data_exp = verificar_acesso_sheets(email_input)
+                if com_acesso:
+                    st.session_state.autenticado = True
+                    st.session_state.user_email = email_input
+                    st.session_state.expiracao = data_exp
+                    st.success("Acesso liberado!")
+                    st.rerun()
+                else:
+                    st.error("E-mail não encontrado ou acesso expirado.")
+            else:
+                st.warning("Por favor, digite o seu e-mail de compra.")
+
+    st.divider()
+
+    # Seção de Planos (Para quem AINDA NÃO comprou)
+    st.markdown("<h3 style='text-align: center;'>💳 Ainda não tem acesso? Escolha o plano ideal para você:</h3>", unsafe_allow_html=True)
+    st.write("")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    # Card 15 Dias
+    with col1:
+        st.markdown("### 🥉 Plano 15 Dias")
+        st.markdown("## R$ 19,90")
+        st.caption("Ideal para testes rápidos")
+        st.write("✓ Acesso total à ferramenta")
+        st.write("✓ Prompts otimizados ilimitados")
+        st.write("✓ Validade: **15 dias**")
+        st.write("")
+        st.link_button("Garantir 15 Dias", LINK_KIWIFY_15_DIAS, use_container_width=True)
+
+    # Card 30 Dias
+    with col2:
+        st.markdown("### 🥈 Plano 30 Dias")
+        st.markdown("## R$ 29,90")
+        st.caption("Plano mensal padrão")
+        st.write("✓ Acesso total à ferramenta")
+        st.write("✓ Prompts otimizados ilimitados")
+        st.write("✓ Validade: **30 dias**")
+        st.write("")
+        st.link_button("Garantir 30 Dias", LINK_KIWIFY_30_DIAS, use_container_width=True)
+
+    # Card 90 Dias (Destaque)
+    with col3:
+        st.markdown("### 🥇 Plano 90 Dias 🔥")
+        st.markdown("## R$ 59,90")
+        st.caption("🌟 **Mais Popular** — Leve 3, Pague 2")
+        st.write("✓ Acesso total à ferramenta")
+        st.write("✓ Prompts otimizados ilimitados")
+        st.write("✓ Validade: **90 dias**")
+        st.write("✓ **Economize R$ 29,80**")
+        st.link_button("GARANTIR 90 DIAS (OFERTA)", LINK_KIWIFY_90_DIAS, type="primary", use_container_width=True)
+
+# ==============================================================================
+# TELA 2: APLICATIVO PRINCIPAL (Exibida APENAS para quem está AUTENTICADO)
+# ==============================================================================
+else:
+    # Barra Lateral (Menu de Informações do Usuário)
+    with st.sidebar:
+        st.title("👤 Sua Conta")
+        st.write(f"**E-mail:** {st.session_state.user_email}")
+        st.write(f"**Validade:** {st.session_state.expiracao}")
+        st.divider()
+        if st.button("Sair / Trocar Conta", use_container_width=True):
+            st.session_state.autenticado = False
+            st.session_state.user_email = ""
+            st.session_state.expiracao = ""
+            st.rerun()
+
+    # 🎯 COLE AQUI O CÓDIGO DA SUA FERRAMENTA (GERADOR DE PROMPTS)
+    st.title("🎯 Gerador de Prompts IA")
+    st.write("Sua sessão está ativa! Crie seus prompts abaixo:")
+    
+    # Exemplo de conteúdo interno:
+    prompt_usuario = st.text_area("Digite o objetivo do seu prompt:")
+    if st.button("Gerar Prompt Otimizado"):
+        st.success("Aqui entra o seu código de geração!")
 # ===========================================================================
 # SETOR 1: CONFIGURAÇÕES, IMPORTAÇÕES E PERSISTÊNCIA DE DADOS
 # ===========================================================================
