@@ -17,7 +17,7 @@ st.set_page_config(
 # ==============================================================================
 # 2. CONSTANTES E LINKS DE CONFIGURAÇÃO
 # ==============================================================================
-APPS_SCRIPT_URL = "https://script.google.com/macros/u/1/s/AKfycbyLlqkhYChBHM6K08DnNP67C9t7E2kRS3N0pINa65oYa81--Cv4amoJm3OZ_v_MSDA7/exec"
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyLlqkhYChBHM6K08DnNP67C9t7E2kRS3N0pINa65oYa81--Cv4amoJm3OZ_v_MSDA7/exec"
 LINK_KIWIFY_15_DIAS = "https://pay.kiwify.com.br/MXVL98k"
 LINK_KIWIFY_30_DIAS = "https://pay.kiwify.com.br/dyfEGe5"
 LINK_KIWIFY_90_DIAS = "https://pay.kiwify.com.br/xo0m3rF"
@@ -885,14 +885,15 @@ if not st.session_state.autenticado:
         )
 
     with col_login2:
-        if st.button(
-            "ENTRAR NA FERRAMENTA", type="primary", use_container_width=True
-        ):
+        if st.button("ENTRAR NA FERRAMENTA", type="primary", use_container_width=True):
             if email_input:
-                com_acesso, data_exp = verificar_acesso_sheets(email_input)
+                # Trata o e-mail (remove espaços extras e força minúsculas)
+                email_limpo = email_input.strip().lower()
+                
+                com_acesso, data_exp = verificar_acesso_sheets(email_limpo)
                 if com_acesso:
                     st.session_state.autenticado = True
-                    st.session_state.user_email = email_input
+                    st.session_state.user_email = email_limpo
                     st.session_state.expiracao = data_exp
                     st.success("Acesso liberado!")
                     st.rerun()
