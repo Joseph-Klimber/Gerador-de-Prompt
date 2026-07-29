@@ -171,14 +171,29 @@ FORMATOS OBRIGATÓRIOS DE SAÍDA (OUTPUT)
 # ==============================================================================
 # 3. FUNÇÕES AUXILIARES E GERENCIAMENTO DE DADOS
 # ==============================================================================
+# 3. Função para checar acesso no Google Sheets via Google Apps Script
 def verificar_acesso_sheets(email):
     try:
-        response = requests.get(APPS_SCRIPT_URL, params={"email": email}, timeout=5)
+        # Tratamento basico no e-mail (remove espacos e força minusculas)
+        email_limpo = email.strip().lower()
+        
+        # Aumentamos o timeout para 15 segundos (Google Apps Script pode ser lento para "acordar")
+        response = requests.get(
+            APPS_SCRIPT_URL, 
+            params={"email": email_limpo}, 
+            timeout=15,
+            allow_redirects=True
+        )
+        
         if response.status_code == 200:
             dados = response.json()
             return dados.get("encontrado", False), dados.get("expiracao", "")
+            
+    except requests.exceptions.Timeout:
+        st.error("⚠️ O Google Sheets demorou a responder. Por favor, clique em ENRAR novamente.")
     except Exception as e:
         st.error(f"Erro ao conectar com a base de dados: {e}")
+        
     return False, ""
 
 
