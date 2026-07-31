@@ -854,9 +854,6 @@ def renderizar_formulario(
                 except Exception as e:
                     st.error(f"❌ Erro ao inicializar cliente: {str(e)}")
 
-# ==============================================================================
-# INÍCIO DA MODIFICAÇÃO (CORREÇÃO DE INDENTAÇÃO)
-# ==============================================================================
     if st.session_state.get(f"{prefixo}_resultado"):
         # Espaçamento visual automático
         st.write("")
@@ -876,10 +873,6 @@ def renderizar_formulario(
             mime="text/plain",
             key=f"{prefixo}_btn_download",
         )
-# ==============================================================================
-# FIM DA MODIFICAÇÃO
-# ==============================================================================
-
 
 # ==============================================================================
 # 4. GERENCIAMENTO DA SESSÃO DO USUÁRIO
