@@ -435,7 +435,7 @@ def chamar_gemini_api(dados_personagem, client, modelo="gemini-3.6-flash"):
         Plataforma Alvo Solicitada: {obter_str_limpa('plataforma_web', 'Midjourney v6.1')}
         
         Gere o prompt final otimizado em inglês e crie uma DESCRIÇÃO/LEGENDA EM PORTUGUÊS EXCLUSIVA E NARRATIVA baseada nos detalhes da cena fornecidos:
-        - Sujeito / Tema Principal: {obter_str_limpa('nome')}
+        - Sujeito / Tema Principal: {obter_str_limpa('nome')} (REQUISITO: Se for personagem conhecido, aplique o PROTOCOLO DE FIDELIDADE VISUAL 80%+ expandindo todas as suas características canônicas)
         - Tipo de Sujeito: {tipo_sujeito}
         - Categoria de Arte: {obter_str_limpa('categoria_arte', 'Anime / Manga / Ilustração')}
         - Nível de Sensualidade: {sensualidade}
@@ -454,7 +454,7 @@ def chamar_gemini_api(dados_personagem, client, modelo="gemini-3.6-flash"):
         prompt_usuario = f"""
         Gere os prompts de imagem em inglês e uma DESCRIÇÃO/LEGENDA EM PORTUGUÊS EXCLUSIVA E NARRATIVA para redes sociais conectando o sujeito, a ação, a expressão e o cenário abaixo:
         
-        - Nome / Sujeito: {obter_str_limpa('nome')}
+        - Nome / Sujeito: {obter_str_limpa('nome')} (REQUISITO: Se for personagem conhecido, aplique o PROTOCOLO DE FIDELIDADE VISUAL 80%+ expandindo todas as suas características canônicas)
         - Fluxo Base: {obter_str_limpa('fluxo', 'Illustrious')}
         - Tipo de Sujeito: {tipo_sujeito}
         - Categoria de Arte: {obter_str_limpa('categoria_arte', 'Anime / Manga / Ilustração')}
