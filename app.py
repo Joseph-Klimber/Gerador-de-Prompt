@@ -854,8 +854,11 @@ def renderizar_formulario(
                 except Exception as e:
                     st.error(f"❌ Erro ao inicializar cliente: {str(e)}")
 
-   if st.session_state.get(f"{prefixo}_resultado"):
-        # Inserção de quebra de linha e divisor visual automático
+# ==============================================================================
+# INÍCIO DA MODIFICAÇÃO (CORREÇÃO DE INDENTAÇÃO)
+# ==============================================================================
+    if st.session_state.get(f"{prefixo}_resultado"):
+        # Espaçamento visual automático
         st.write("")
         st.markdown("---")
         st.write("")
@@ -863,7 +866,7 @@ def renderizar_formulario(
         st.markdown("### 📝 Resultado:")
         st.code(st.session_state[f"{prefixo}_resultado"], language="markdown")
 
-        st.write("") # Quebra de linha entre o resultado e o botão de download
+        st.write("")
         
         nome_arquivo_dl = f"prompts_{(nome.replace(' ', '_').lower() if nome else 'gerado')}.txt"
         st.download_button(
@@ -873,6 +876,9 @@ def renderizar_formulario(
             mime="text/plain",
             key=f"{prefixo}_btn_download",
         )
+# ==============================================================================
+# FIM DA MODIFICAÇÃO
+# ==============================================================================
 
 
 # ==============================================================================
