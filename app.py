@@ -855,7 +855,7 @@ def renderizar_formulario(
                     st.error(f"❌ Erro ao inicializar cliente: {str(e)}")
 
     if st.session_state.get(f"{prefixo}_resultado"):
-        # Espaçamento visual automático
+        # Inserção de quebra de linha e divisor visual automático
         st.write("")
         st.markdown("---")
         st.write("")
@@ -863,7 +863,7 @@ def renderizar_formulario(
         st.markdown("### 📝 Resultado:")
         st.code(st.session_state[f"{prefixo}_resultado"], language="markdown")
 
-        st.write("")
+        st.write("") # Quebra de linha entre o resultado e o botão de download
         
         nome_arquivo_dl = f"prompts_{(nome.replace(' ', '_').lower() if nome else 'gerado')}.txt"
         st.download_button(
