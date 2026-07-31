@@ -387,11 +387,16 @@ def carregar_lista_integrada_web(arquivo_padrao, arquivo_web, genero_ref):
     return resultado if resultado else ["Opção Padrão 1"]
 
 
-def chamar_gemini_api(dados_personagem, client, modelo="gemini-2.5-flash"):
+def chamar_gemini_api(dados_personagem, client, modelo="gemini-3.6-flash"):
     if not client:
         return "❌ Erro: Cliente da API não inicializado. Verifique sua Chave API."
 
-    tipo_sujeito = dados_personagem.get("tipo_sujeito", "Feminino")
+    # Tratamento seguro contra valores None no dicionário
+    def obter_str_limpa(chave, valor_padrao=""):
+        val = dados_personagem.get(chave)
+        return (val if val is not None else valor_padrao).strip()
+
+    tipo_sujeito = obter_str_limpa("tipo_sujeito", "Feminino")
     is_objeto_ou_paisagem = tipo_sujeito in [
         "Paisagem / Cenário",
         "Objeto / Item",
@@ -405,52 +410,52 @@ def chamar_gemini_api(dados_personagem, client, modelo="gemini-2.5-flash"):
     emocao = (
         "Não se aplica"
         if is_objeto_ou_paisagem
-        else (dados_personagem.get("emocao", "").strip() or "Nenhuma específica")
+        else (obter_str_limpa("emocao") or "Nenhuma específica")
     )
 
     if dados_personagem.get("is_web_image"):
         prompt_usuario = f"""
         --- MODO GENERATOR IMAGEM WEB ATIVADO ---
-        Plataforma Alvo Solicitada: {dados_personagem.get('plataforma_web', 'Midjourney v6.1')}
+        Plataforma Alvo Solicitada: {obter_str_limpa('plataforma_web', 'Midjourney v6.1')}
         
-        Gere o prompt final otimizado em inglês com base nas especificações detalhadas fornecidas:
-        - Sujeito / Tema Principal: {dados_personagem.get('nome', '').strip()}
+        Gere o prompt final otimizado em inglês e crie uma DESCRIÇÃO/LEGENDA EM PORTUGUÊS EXCLUSIVA E NARRATIVA baseada nos detalhes da cena fornecidos:
+        - Sujeito / Tema Principal: {obter_str_limpa('nome')}
         - Tipo de Sujeito: {tipo_sujeito}
-        - Categoria de Arte: {dados_personagem.get('categoria_arte', 'Anime / Manga / Ilustração')}
+        - Categoria de Arte: {obter_str_limpa('categoria_arte', 'Anime / Manga / Ilustração')}
         - Nível de Sensualidade: {sensualidade}
-        - Orientação (Ratio): {dados_personagem.get('orientacao', '').strip()}
-        - Enquadramento: {dados_personagem.get('enquadramento', '').strip()}
-        - Ação do Sujeito / Estado: {dados_personagem.get('acao', '').strip()}
-        - Estilo Visual Específico: {dados_personagem.get('estilo', '').strip()}
+        - Orientação (Ratio): {obter_str_limpa('orientacao')}
+        - Enquadramento: {obter_str_limpa('enquadramento')}
+        - Ação do Sujeito / Estado: {obter_str_limpa('acao')}
+        - Estilo Visual Específico: {obter_str_limpa('estilo')}
         - Expressão / Emoção: {emocao}
-        - Pose / Posição / Ângulo: {dados_personagem.get('pose', '').strip()}
-        - Cenário / Ambiente: {dados_personagem.get('cenario', '').strip()}
-        - Iluminação: {dados_personagem.get('iluminacao', '').strip()}
-        - Efeitos Especiais: {dados_personagem.get('efeitos', '').strip()}
-        - Texto na Imagem (Tipografia Opcional): {dados_personagem.get('texto_web', 'Nenhum').strip()}
+        - Pose / Posição / Ângulo: {obter_str_limpa('pose')}
+        - Cenário / Ambiente: {obter_str_limpa('cenario')}
+        - Iluminação: {obter_str_limpa('iluminacao')}
+        - Efeitos Especiais: {obter_str_limpa('efeitos')}
+        - Texto na Imagem (Tipografia Opcional): {obter_str_limpa('texto_web', 'Nenhum')}
         """
     else:
         prompt_usuario = f"""
-        Gere os prompts de imagem com base nas seguintes especificações fornecidas pelo usuário:
+        Gere os prompts de imagem em inglês e uma DESCRIÇÃO/LEGENDA EM PORTUGUÊS EXCLUSIVA E NARRATIVA para redes sociais conectando o sujeito, a ação, a expressão e o cenário abaixo:
         
-        - Nome / Sujeito: {dados_personagem.get('nome', '').strip()}
-        - Fluxo Base: {dados_personagem.get('fluxo', 'Illustrious')}
+        - Nome / Sujeito: {obter_str_limpa('nome')}
+        - Fluxo Base: {obter_str_limpa('fluxo', 'Illustrious')}
         - Tipo de Sujeito: {tipo_sujeito}
-        - Categoria de Arte: {dados_personagem.get('categoria_arte', 'Anime / Manga / Ilustração')}
+        - Categoria de Arte: {obter_str_limpa('categoria_arte', 'Anime / Manga / Ilustração')}
         - Nível de Sensualidade: {sensualidade}
-        - Orientação (Ratio): {dados_personagem.get('orientacao', '').strip()}
-        - Enquadramento: {dados_personagem.get('enquadramento', '').strip()}
-        - Ação do Sujeito / Estado: {dados_personagem.get('acao', '').strip()}
-        - Estilo Visual Específico: {dados_personagem.get('estilo', '').strip()}
+        - Orientação (Ratio): {obter_str_limpa('orientacao')}
+        - Enquadramento: {obter_str_limpa('enquadramento')}
+        - Ação do Sujeito / Estado: {obter_str_limpa('acao')}
+        - Estilo Visual Específico: {obter_str_limpa('estilo')}
         - Expressão / Emoção: {emocao}
-        - Pose / Posição / Ângulo: {dados_personagem.get('pose', '').strip()}
-        - Cenário / Ambiente: {dados_personagem.get('cenario', '').strip()}
-        - Iluminação: {dados_personagem.get('iluminacao', '').strip()}
-        - Efeitos Especiais: {dados_personagem.get('efeitos', '').strip()}
+        - Pose / Posição / Ângulo: {obter_str_limpa('pose')}
+        - Cenário / Ambiente: {obter_str_limpa('cenario')}
+        - Iluminação: {obter_str_limpa('iluminacao')}
+        - Efeitos Especiais: {obter_str_limpa('efeitos')}
         """
 
         if dados_personagem.get("is_serie"):
-            alvos = dados_personagem.get("variaveis_alvo_str", "")
+            alvos = obter_str_limpa("variaveis_alvo_str")
             if not alvos:
                 alvos = "Pose, Cenário e Expressão"
 
