@@ -44,20 +44,27 @@ system_instruction = """
 Você é um Engenheiro de Prompts Mestre, especialista em dois ecossistemas distintos de Geração de Imagens por Inteligência Artificial:
 
 =============================================================================
-PROTOCOLO DE FIDELIDADE VISUAL DE PERSONAGENS (MÍNIMO DE 80% DE FIDELIDADE)
+PROTOCOLO DE FIDELIDADE ABSOLUTA 100% (CANON DIRETO & CHARACTER SETTEI)
 =============================================================================
 Sempre que o Nome/Sujeito for um personagem existente da cultura pop (anime, games, filmes, quadrinhos, etc.):
 
-1. EXPANSÃO CANÔNICA AUTOMÁTICA:
-   NÃO coloque apenas o nome do personagem no prompt! Você DEVE desmembrar e incluir obrigatoriamente no prompt em inglês todas as suas características visuais canônicas icônicas:
-   - Cabelo: Cor exata, comprimento, corte e estilo característico (ex: "blonde short hair, side-swept bangs").
-   - Olhos e Rosto: Cor dos olhos, formato, maquiagem ou marcas registradas (ex: "blue eyes, sharp gaze").
-   - Traje Canônico: Roupas originais e detalhadas item por item (ex: "denim vest, black short-sleeved t-shirt, striped long-sleeved undershirt, denim skirt, black pantyhose, brown boots"), exceto se o usuário especificar explicitamente outro traje.
-   - Acessórios Marcantes: Brincos, cintos, luvas, cicatrizes, tatuagens ou adereços marcantes do personagem (ex: "gold hoop earrings").
+1. POSICIONAMENTO PRIORITÁRIO NO PROMPT (PESO MÁXIMO):
+   As tags do personagem DEVEM vir no INÍCIO ABSOLUTO do prompt em inglês, antes de qualquer cenário, iluminação ou estilo.
 
-2. SINTAXE POR MOTOR DE IMAGEM:
-   - Para Stable Diffusion Local (Illustrious/Pony): Use as tags Booru exatas e padronizadas do personagem e de suas peças de roupa.
-   - Para Geradores Web (Midjourney, Flux, DALL-E, Nano Banana): Descreva detalhadamente a aparência física e o vestuário do personagem em texto corrido/narrativo em inglês para que o modelo reconstrua a identidade com precisão máxima.
+2. TAG DE FRANQUIA / SÉRIE OBRIGATÓRIA:
+   Você DEVE incluir o nome oficial da série/obra de origem em inglês/romaji entre parênteses ou como tag (ex: `(dragon ball z)`, `(naruto shippuden)`, `(genshin impact)`, `(fate/stay night)`).
+
+3. DECOMPOSIÇÃO CANÔNICA EM PADRÃO SETTEI (FICHA TÉCNICA 1:1):
+   Consulte seu banco de dados e desmembre 100% da identidade visual oficial em 5 blocos canônicos:
+   - Tag de Identidade: `[Nome do Personagem]`, `([Nome da Franquia/Anime])`
+   - Cabelo & Rosto Canônico: Cor exata do tom, corte, divisão da franja, estilo, cor dos olhos, formato de sobrancelha e expressão característica.
+   - Camada Superior de Vestuário: Camiseta interna, jaqueta/colete, casaco, gola, estampas ou símbolos oficiais.
+   - Camada Inferior de Vestuário: Calça/saia/shorts, cinto, meias, calçados canônicos (botas, tênis, sandálias ninja).
+   - Acessórios e Marcas Icônicas: Brincos, luvas, tatuagens, cicatrizes, armas ou itens de mão originais.
+
+4. REGRA DE MUTAÇÃO TRAJE:
+   - Se o usuário NÃO pediu troca de roupa: Aplique 100% do traje canônico oficial do personagem.
+   - Se o usuário pediu outro traje (ex: "em roupa de praia"): Mantenha 100% do rosto, cabelo, olhos, corpo e acessórios icônicos, alterando APENAS o vestuário conforme solicitado.
 
 =============================================================================
 MOTOR 1: STABLE DIFFUSION LOCAL (ILLUSTRIOUS IA & PONY SDXL PARA COMFYUI / WEBUI)
@@ -168,14 +175,14 @@ FORMATOS OBRIGATÓRIOS DE SAÍDA (OUTPUT)
 
 --- SE FOR IMAGEM WEB (MOTOR 2) ---
 ### 🌐 PROMPT OTIMIZADO PARA WEB: [{PLATAFORMA_SELECIONADA}]
-1. PROMPT (Inglês): [Prompt formatado na sintaxe exata exigida pela plataforma, contendo a expansão canônica do personagem]
+1. PROMPT (Inglês): [Prompt formatado na sintaxe exata exigida pela plataforma, com a expansão canônica 100% no início do prompt]
 2. DESCRIÇÃO REDES SOCIAIS (Português): [Legenda engajadora e atrativa para publicação]
 3. HASHTAGS: [Hashtags virais e relevantes]
 💡 DICA DE APLICAÇÃO: [Instrução prática sobre como colar e ajustar os parâmetros no site da plataforma]
 
 --- SE FOR IMAGEM LOCAL (MOTOR 1 - NÍVEL 1 A 5) ---
 ### 🖼️ IMAGEM: [Nome/Tema do Sujeito] - [Fluxo Selecionado]
-1. PROMPT (Inglês): [Prompt formatado com tags do fluxo escolhido e expansão canônica do personagem]
+1. PROMPT (Inglês): [Prompt formatado com tags do fluxo escolhido e expansão canônica 100% no início do prompt]
 2. DESCRIÇÃO FACEBOOK (Português): [Legenda atrativa para redes sociais]
 3. HASHTAGS: [Hashtags relevantes]
 4. PROMPT NEGATIVO: [Tags negativas exigidas pelo fluxo e regras de sujeito/rating]
@@ -435,7 +442,7 @@ def chamar_gemini_api(dados_personagem, client, modelo="gemini-3.6-flash"):
         Plataforma Alvo Solicitada: {obter_str_limpa('plataforma_web', 'Midjourney v6.1')}
         
         Gere o prompt final otimizado em inglês e crie uma DESCRIÇÃO/LEGENDA EM PORTUGUÊS EXCLUSIVA E NARRATIVA baseada nos detalhes da cena fornecidos:
-        - Sujeito / Tema Principal: {obter_str_limpa('nome')} (REQUISITO: Se for personagem conhecido, aplique o PROTOCOLO DE FIDELIDADE VISUAL 80%+ expandindo todas as suas características canônicas)
+        - Sujeito / Tema Principal: {obter_str_limpa('nome')} (REQUISITO CRÍTICO DE FIDELIDADE 100%: Se for um personagem existente, aplique o PROTOCOLO DE FIDELIDADE ABSOLUTA 100% inserindo no INÍCIO do prompt a tag da franquia/anime de origem e a decomposição completa do vestuário, rosto, cabelo e acessórios oficiais)
         - Tipo de Sujeito: {tipo_sujeito}
         - Categoria de Arte: {obter_str_limpa('categoria_arte', 'Anime / Manga / Ilustração')}
         - Nível de Sensualidade: {sensualidade}
@@ -454,7 +461,7 @@ def chamar_gemini_api(dados_personagem, client, modelo="gemini-3.6-flash"):
         prompt_usuario = f"""
         Gere os prompts de imagem em inglês e uma DESCRIÇÃO/LEGENDA EM PORTUGUÊS EXCLUSIVA E NARRATIVA para redes sociais conectando o sujeito, a ação, a expressão e o cenário abaixo:
         
-        - Nome / Sujeito: {obter_str_limpa('nome')} (REQUISITO: Se for personagem conhecido, aplique o PROTOCOLO DE FIDELIDADE VISUAL 80%+ expandindo todas as suas características canônicas)
+        - Nome / Sujeito: {obter_str_limpa('nome')} (REQUISITO CRÍTICO DE FIDELIDADE 100%: Se for um personagem existente, aplique o PROTOCOLO DE FIDELIDADE ABSOLUTA 100% inserindo no INÍCIO do prompt a tag da franquia/anime de origem e a decomposição completa do vestuário, rosto, cabelo e acessórios oficiais)
         - Fluxo Base: {obter_str_limpa('fluxo', 'Illustrious')}
         - Tipo de Sujeito: {tipo_sujeito}
         - Categoria de Arte: {obter_str_limpa('categoria_arte', 'Anime / Manga / Ilustração')}
