@@ -212,7 +212,7 @@ def verificar_acesso_sheets(email):
 def carregar_config():
     config = {
         "chaves": {"Chave 1": "", "Chave 2": ""},
-        "modelo_padrao": "gemini-2.5-flash",
+        "modelo_padrao": "gemini-3.6-flash",
     }
     if os.path.exists(CONFIG_FILE):
         try:
@@ -1028,7 +1028,6 @@ else:
             "gemini-3.5-pro",
             "gemini-3.0-flash",
             "gemini-3.0-pro",
-            "gemini-2.5-flash",
             "gemini-2.5-pro",
             "gemini-2.0-flash",
             "gemini-1.5-flash",
