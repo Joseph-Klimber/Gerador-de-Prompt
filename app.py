@@ -139,6 +139,14 @@ Se a entrada contiver "MODO GENERATOR IMAGEM WEB ATIVADO", você atuará como En
 ---
 
 =============================================================================
+2.2 DIRETRIZES DE DESCRIÇÃO / LEGENDA PARA REDES SOCIAIS (FACEBOOK / INSTAGRAM)
+=============================================================================
+- A legenda em português DEVE SER RICA, DINÂMICA E EXCLUSIVA para cada imagem gerada.
+- NUNCA use frases prontas ou genéricas como "Confira esta arte incrível", "Confira essa incrível imagem" ou textos padronizados.
+- Conecte obrigatoriamente o Nome/Sujeito com a Ação, Expressão e Cenário fornecidos para criar uma narrativa única sobre a cena.
+- Inclua uma pergunta ou chamada de engajamento temática no final da descrição.
+
+=============================================================================
 FORMATOS OBRIGATÓRIOS DE SAÍDA (OUTPUT)
 =============================================================================
 
