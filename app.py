@@ -439,6 +439,8 @@ def chamar_gemini_api(dados_personagem, client, modelo="gemini-3.6-flash"):
         --- MODO GENERATOR IMAGEM WEB ATIVADO ---
         Plataforma Alvo Solicitada: {obter_str_limpa('plataforma_web', 'Midjourney v6.1')}
         
+        Gere o prompt final otimizado em inglês e crie uma DESCRIÇÃO/LEGENDA CURTA EM PORTUGUÊS (COM CTA OBRIGATÓRIA NO FINAL) baseada nos detalhes da cena fornecidos:
+        
         Gere o prompt final otimizado em inglês e crie uma DESCRIÇÃO/LEGENDA EM PORTUGUÊS EXCLUSIVA E NARRATIVA baseada nos detalhes da cena fornecidos:
         - Sujeito / Tema Principal: {obter_str_limpa('nome')} (REQUISITO CRÍTICO DE FIDELIDADE 100%: Se for um personagem existente, aplique o PROTOCOLO DE FIDELIDADE ABSOLUTA 100% inserindo no INÍCIO do prompt a tag da franquia/anime de origem e a decomposição completa do vestuário, rosto, cabelo e acessórios oficiais)
         - Tipo de Sujeito: {tipo_sujeito}
@@ -456,8 +458,9 @@ def chamar_gemini_api(dados_personagem, client, modelo="gemini-3.6-flash"):
         - Texto na Imagem (Tipografia Opcional): {obter_str_limpa('texto_web', 'Nenhum')}
         """
     else:
+        else:
         prompt_usuario = f"""
-        Gere os prompts de imagem em inglês e uma DESCRIÇÃO/LEGENDA EM PORTUGUÊS EXCLUSIVA E NARRATIVA para redes sociais conectando o sujeito, a ação, a expressão e o cenário abaixo:
+        Gere os prompts de imagem em inglês e uma DESCRIÇÃO/LEGENDA CURTA EM PORTUGUÊS (COM CTA OBRIGATÓRIA NO FINAL) para redes sociais conectando o sujeito, a ação, a expressão e o cenário abaixo:
         
         - Nome / Sujeito: {obter_str_limpa('nome')} (REQUISITO CRÍTICO DE FIDELIDADE 100%: Se for um personagem existente, aplique o PROTOCOLO DE FIDELIDADE ABSOLUTA 100% inserindo no INÍCIO do prompt a tag da franquia/anime de origem e a decomposição completa do vestuário, rosto, cabelo e acessórios oficiais)
         - Fluxo Base: {obter_str_limpa('fluxo', 'Illustrious')}
