@@ -40,7 +40,6 @@ opcoes_categoria_arte = [
     "Pintura Clássica / Artística",
 ]
 
-system_instruction = """
 system_instruction = """Você é um Engenheiro de Prompts Mestre, especialista em dois ecossistemas distintos de Geração de Imagens por Inteligência Artificial:
 
 =============================================================================
