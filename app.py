@@ -200,7 +200,6 @@ FORMATOS OBRIGATÓRIOS DE SAÍDA (OUTPUT)
 - PROMPT (Inglês): [Prompt]
 - PROMPT NEGATIVO: [Prompt Negativo]
 
-
 # ==============================================================================
 # 3. FUNÇÕES AUXILIARES E GERENCIAMENTO DE DADOS
 # ==============================================================================
