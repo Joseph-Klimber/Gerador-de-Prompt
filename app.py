@@ -412,7 +412,6 @@ def chamar_gemini_api(dados_personagem, client, modelo="gemini-3.6-flash"):
     if not client:
         return "❌ Erro: Cliente da API não inicializado. Verifique sua Chave API."
 
-    # Tratamento seguro contra valores None no dicionário
     def obter_str_limpa(chave, valor_padrao=""):
         val = dados_personagem.get(chave)
         return (val if val is not None else valor_padrao).strip()
@@ -435,47 +434,43 @@ def chamar_gemini_api(dados_personagem, client, modelo="gemini-3.6-flash"):
     )
 
     if dados_personagem.get("is_web_image"):
-        prompt_usuario = f"""
-        --- MODO GENERATOR IMAGEM WEB ATIVADO ---
-        Plataforma Alvo Solicitada: {obter_str_limpa('plataforma_web', 'Midjourney v6.1')}
-        
-        Gere o prompt final otimizado em inglês e crie uma DESCRIÇÃO/LEGENDA CURTA EM PORTUGUÊS (COM CTA OBRIGATÓRIA NO FINAL) baseada nos detalhes da cena fornecidos:
-        
-        Gere o prompt final otimizado em inglês e crie uma DESCRIÇÃO/LEGENDA EM PORTUGUÊS EXCLUSIVA E NARRATIVA baseada nos detalhes da cena fornecidos:
-        - Sujeito / Tema Principal: {obter_str_limpa('nome')} (REQUISITO CRÍTICO DE FIDELIDADE 100%: Se for um personagem existente, aplique o PROTOCOLO DE FIDELIDADE ABSOLUTA 100% inserindo no INÍCIO do prompt a tag da franquia/anime de origem e a decomposição completa do vestuário, rosto, cabelo e acessórios oficiais)
-        - Tipo de Sujeito: {tipo_sujeito}
-        - Categoria de Arte: {obter_str_limpa('categoria_arte', 'Anime / Manga / Ilustração')}
-        - Nível de Sensualidade: {sensualidade}
-        - Orientação (Ratio): {obter_str_limpa('orientacao')}
-        - Enquadramento: {obter_str_limpa('enquadramento')}
-        - Ação do Sujeito / Estado: {obter_str_limpa('acao')}
-        - Estilo Visual Específico: {obter_str_limpa('estilo')}
-        - Expressão / Emoção: {emocao}
-        - Pose / Posição / Ângulo: {obter_str_limpa('pose')}
-        - Cenário / Ambiente: {obter_str_limpa('cenario')}
-        - Iluminação: {obter_str_limpa('iluminacao')}
-        - Efeitos Especiais: {obter_str_limpa('efeitos')}
-        - Texto na Imagem (Tipografia Opcional): {obter_str_limpa('texto_web', 'Nenhum')}
-        """
+        prompt_usuario = f"""--- MODO GENERATOR IMAGEM WEB ATIVADO ---
+Plataforma Alvo Solicitada: {obter_str_limpa('plataforma_web', 'Midjourney v6.1')}
+
+Gere o prompt final otimizado em inglês e crie uma DESCRIÇÃO/LEGENDA CURTA EM PORTUGUÊS (COM CTA OBRIGATÓRIA NO FINAL) baseada nos detalhes da cena fornecidos:
+- Sujeito / Tema Principal: {obter_str_limpa('nome')} (REQUISITO CRÍTICO DE FIDELIDADE 100%: Se for um personagem existente, aplique o PROTOCOLO DE FIDELIDADE ABSOLUTA 100% inserindo no INÍCIO do prompt a tag da franquia/anime de origem e a decomposição completa do vestuário, rosto, cabelo e acessórios oficiais)
+- Tipo de Sujeito: {tipo_sujeito}
+- Categoria de Arte: {obter_str_limpa('categoria_arte', 'Anime / Manga / Ilustração')}
+- Nível de Sensualidade: {sensualidade}
+- Orientação (Ratio): {obter_str_limpa('orientacao')}
+- Enquadramento: {obter_str_limpa('enquadramento')}
+- Ação do Sujeito / Estado: {obter_str_limpa('acao')}
+- Estilo Visual Específico: {obter_str_limpa('estilo')}
+- Expressão / Emoção: {emocao}
+- Pose / Posição / Ângulo: {obter_str_limpa('pose')}
+- Cenário / Ambiente: {obter_str_limpa('cenario')}
+- Iluminação: {obter_str_limpa('iluminacao')}
+- Efeitos Especiais: {obter_str_limpa('efeitos')}
+- Texto na Imagem (Tipografia Opcional): {obter_str_limpa('texto_web', 'Nenhum')}
+"""
     else:
-        prompt_usuario = f"""
-        Gere os prompts de imagem em inglês e uma DESCRIÇÃO/LEGENDA CURTA EM PORTUGUÊS (COM CTA OBRIGATÓRIA NO FINAL) para redes sociais conectando o sujeito, a ação, a expressão e o cenário abaixo:
-        
-        - Nome / Sujeito: {obter_str_limpa('nome')} (REQUISITO CRÍTICO DE FIDELIDADE 100%: Se for um personagem existente, aplique o PROTOCOLO DE FIDELIDADE ABSOLUTA 100% inserindo no INÍCIO do prompt a tag da franquia/anime de origem e a decomposição completa do vestuário, rosto, cabelo e acessórios oficiais)
-        - Fluxo Base: {obter_str_limpa('fluxo', 'Illustrious')}
-        - Tipo de Sujeito: {tipo_sujeito}
-        - Categoria de Arte: {obter_str_limpa('categoria_arte', 'Anime / Manga / Ilustração')}
-        - Nível de Sensualidade: {sensualidade}
-        - Orientação (Ratio): {obter_str_limpa('orientacao')}
-        - Enquadramento: {obter_str_limpa('enquadramento')}
-        - Ação do Sujeito / Estado: {obter_str_limpa('acao')}
-        - Estilo Visual Específico: {obter_str_limpa('estilo')}
-        - Expressão / Emoção: {emocao}
-        - Pose / Posição / Ângulo: {obter_str_limpa('pose')}
-        - Cenário / Ambiente: {obter_str_limpa('cenario')}
-        - Iluminação: {obter_str_limpa('iluminacao')}
-        - Efeitos Especiais: {obter_str_limpa('efeitos')}
-        """
+        prompt_usuario = f"""Gere os prompts de imagem em inglês e uma DESCRIÇÃO/LEGENDA CURTA EM PORTUGUÊS (COM CTA OBRIGATÓRIA NO FINAL) para redes sociais conectando o sujeito, a ação, a expressão e o cenário abaixo:
+
+- Nome / Sujeito: {obter_str_limpa('nome')} (REQUISITO CRÍTICO DE FIDELIDADE 100%: Se for um personagem existente, aplique o PROTOCOLO DE FIDELIDADE ABSOLUTA 100% inserindo no INÍCIO do prompt a tag da franquia/anime de origem e a decomposição completa do vestuário, rosto, cabelo e acessórios oficiais)
+- Fluxo Base: {obter_str_limpa('fluxo', 'Illustrious')}
+- Tipo de Sujeito: {tipo_sujeito}
+- Categoria de Arte: {obter_str_limpa('categoria_arte', 'Anime / Manga / Ilustração')}
+- Nível de Sensualidade: {sensualidade}
+- Orientação (Ratio): {obter_str_limpa('orientacao')}
+- Enquadramento: {obter_str_limpa('enquadramento')}
+- Ação do Sujeito / Estado: {obter_str_limpa('acao')}
+- Estilo Visual Específico: {obter_str_limpa('estilo')}
+- Expressão / Emoção: {emocao}
+- Pose / Posição / Ângulo: {obter_str_limpa('pose')}
+- Cenário / Ambiente: {obter_str_limpa('cenario')}
+- Iluminação: {obter_str_limpa('iluminacao')}
+- Efeitos Especiais: {obter_str_limpa('efeitos')}
+"""
 
         if dados_personagem.get("is_serie"):
             alvos = obter_str_limpa("variaveis_alvo_str")
@@ -483,12 +478,11 @@ def chamar_gemini_api(dados_personagem, client, modelo="gemini-3.6-flash"):
                 alvos = "Pose, Cenário e Expressão"
 
             prompt_usuario += f"""
-            
-            --- MODO SÉRIE CONSISTENTE ATIVADO ---
-            - Elementos para Variar Dinamicamente: {alvos}
-            - Quantidade de Variações a Gerar: {dados_personagem.get('total_variacoes', 5)} variações completas.
-            - Rigidez da Consistência: Nível {dados_personagem.get('rigidez', 3)} de 5.
-            """
+--- MODO SÉRIE CONSISTENTE ATIVADO ---
+- Elementos para Variar Dinamicamente: {alvos}
+- Quantidade de Variações a Gerar: {dados_personagem.get('total_variacoes', 5)} variações completas.
+- Rigidez da Consistência: Nível {dados_personagem.get('rigidez', 3)} de 5.
+"""
 
     try:
         response = client.models.generate_content(
@@ -503,7 +497,10 @@ def chamar_gemini_api(dados_personagem, client, modelo="gemini-3.6-flash"):
         else:
             return "⚠️ A API retornou uma resposta vazia."
     except Exception as e:
-        return f"❌ Erro na comunicação com o modelo '{modelo}': {str(e)}"
+        erro_str = str(e)
+        if "503" in erro_str or "UNAVAILABLE" in erro_str or "high demand" in erro_str:
+            return "⚠️ Você está usando API gratuita. O jeito é esperar um pouco e tentar de novo daqui uns 10 segundos."
+        return f"❌ Erro na comunicação com o modelo '{modelo}': {erro_str}"
 
 
 def st_campo_hibrido(label, placeholder, opcoes, key_prefix, disabled=False):
