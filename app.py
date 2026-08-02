@@ -458,7 +458,6 @@ def chamar_gemini_api(dados_personagem, client, modelo="gemini-3.6-flash"):
         - Texto na Imagem (Tipografia Opcional): {obter_str_limpa('texto_web', 'Nenhum')}
         """
     else:
-        else:
         prompt_usuario = f"""
         Gere os prompts de imagem em inglês e uma DESCRIÇÃO/LEGENDA CURTA EM PORTUGUÊS (COM CTA OBRIGATÓRIA NO FINAL) para redes sociais conectando o sujeito, a ação, a expressão e o cenário abaixo:
         
