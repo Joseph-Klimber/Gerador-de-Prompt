@@ -41,7 +41,7 @@ opcoes_categoria_arte = [
 ]
 
 system_instruction = """
-Você é um Engenheiro de Prompts Mestre, especialista em dois ecossistemas distintos de Geração de Imagens por Inteligência Artificial:
+system_instruction = """Você é um Engenheiro de Prompts Mestre, especialista em dois ecossistemas distintos de Geração de Imagens por Inteligência Artificial:
 
 =============================================================================
 PROTOCOLO DE FIDELIDADE ABSOLUTA 100% (CANON DIRETO & CHARACTER SETTEI)
