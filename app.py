@@ -124,7 +124,6 @@ Se a entrada contiver "MODO SÉRIE CONSISTENTE ATIVADO":
   - Se "Anime / Manga / Ilustração": Force estética 2D/Ilustrada (ex: anime style, vibrant colors, lineart, cel shading, digital illustration).
   - Se "Arte Digital / 3D Render": Use termos de renderização gráfica (ex: 3d render, octane render, unreal engine 5, volumetric lighting, digital concept art).
   - Se "Pintura Clássica / Artística": Use termos de técnicas tradicionais (ex: oil painting, brush strokes, canvas texture, impressionism, fine art).
-
 ---
 
 =============================================================================
