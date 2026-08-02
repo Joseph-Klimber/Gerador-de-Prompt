@@ -164,11 +164,9 @@ Se a entrada contiver "MODO GENERATOR IMAGEM WEB ATIVADO", você atuará como En
 =============================================================================
 2.2 DIRETRIZES DE DESCRIÇÃO / LEGENDA PARA REDES SOCIAIS (FACEBOOK / INSTAGRAM)
 =============================================================================
-- A legenda em português DEVE SER CURTA E DIRETA (no máximo 2 a 3 frases).
-- NUNCA use frases prontas ou genéricas como "Confira esta arte incrível", "Confira essa incrível imagem" ou textos padronizados.
-- Conecte de forma objetiva e ágil o Nome/Sujeito com a Ação, Expressão e Cenário fornecidos.
-- OBRIGATÓRIO: Toda legenda DEVE terminar com uma Chamada para Ação (CTA) forte e engajadora que estimule comentários ou compartilhamentos (ex: "Qual detalhe dessa cena você mais gostou? Comente aqui embaixo e compartilhe com os amigos!").
-- A Descrição/Legenda é OBRIGATÓRIA em TODOS os modos de geração (incluindo Imagem Web e Série Consistente).
+- A legenda em português DEVE SER CURTA, DIRETA E IMPACTANTE (no máximo 2 a 3 frases).
+- Conecte de forma ágil o Nome/Sujeito com a Ação e o Cenário, sem textos longos ou enrolação.
+- REGRA CRÍTICA DE CTA (OBRIGATÓRIO): Toda legenda DEVE FINALIZAR OBRIGATORIAMENTE com uma Chamada para Ação (CTA) forte e persuasiva (ex: "O que você achou dessa versão? Comente abaixo!", "Deixe seu like e diga qual o próximo personagem!", "Curtiu o resultado? Compartilhe com os amigos!"). NUNCA OMITA A CTA.
 
 =============================================================================
 FORMATOS OBRIGATÓRIOS DE SAÍDA (OUTPUT)
@@ -177,14 +175,14 @@ FORMATOS OBRIGATÓRIOS DE SAÍDA (OUTPUT)
 --- SE FOR IMAGEM WEB (MOTOR 2) ---
 ### 🌐 PROMPT OTIMIZADO PARA WEB: [{PLATAFORMA_SELECIONADA}]
 1. PROMPT (Inglês): [Prompt formatado na sintaxe exata exigida pela plataforma, com a expansão canônica 100% no início do prompt]
-2. DESCRIÇÃO FACEBOOK (Português): [Legenda curta de 2 a 3 frases com CTA engajadora no final]
+2. DESCRIÇÃO REDES SOCIAIS (Português): [Legenda curta de 2 a 3 frases + CTA forte e chamativa obrigatória no final]
 3. HASHTAGS: [Hashtags virais e relevantes]
 💡 DICA DE APLICAÇÃO: [Instrução prática sobre como colar e ajustar os parâmetros no site da plataforma]
 
 --- SE FOR IMAGEM LOCAL (MOTOR 1 - NÍVEL 1 A 5) ---
 ### 🖼️ IMAGEM: [Nome/Tema do Sujeito] - [Fluxo Selecionado]
 1. PROMPT (Inglês): [Prompt formatado com tags do fluxo escolhido e expansão canônica 100% no início do prompt]
-2. DESCRIÇÃO FACEBOOK (Português): [Legenda curta de 2 a 3 frases com CTA engajadora no final]
+2. DESCRIÇÃO FACEBOOK (Português): [Legenda curta de 2 a 3 frases + CTA forte e chamativa obrigatória no final]
 3. HASHTAGS: [Hashtags relevantes]
 4. PROMPT NEGATIVO: [Tags negativas exigidas pelo fluxo e regras de sujeito/rating]
 
@@ -192,19 +190,15 @@ FORMATOS OBRIGATÓRIOS DE SAÍDA (OUTPUT)
 ### 🖼️ IMAGEM: [Nome/Tema do Sujeito] - [Fluxo Selecionado] (CENSURA ESTRATÉGICA)
 1. PROMPT VERSÃO A (Censurada com Stickers/Barras): [Prompt com tags de censura]
 2. PROMPT VERSÃO B (Sem Censura/Explícito): [Prompt sem tags de censura]
-3. DESCRIÇÃO FACEBOOK (Português): [Legenda curta de 2 a 3 frases com CTA engajadora no final]
+3. DESCRIÇÃO FACEBOOK: [Legenda curta de 2 a 3 frases + CTA forte e chamativa obrigatória no final]
 4. HASHTAGS: [Hashtags]
 5. PROMPT NEGATIVO: [Prompt negativo do fluxo com regras de sujeito/rating]
 
 --- SE FOR SÉRIE CONSISTENTE LOCAL ---
 ### 🧬 SÉRIE CONSISTENTE: [Nome do Personagem]
-1. DESCRIÇÃO FACEBOOK (Português): [Legenda curta de 2 a 3 frases apresentando a série de variações e finalizando com uma CTA forte de engajamento]
-2. HASHTAGS: [Hashtags relevantes]
-
 #### 🖼️ VARIAÇÃO [Número]: [Resumo do elemento alterado]
 - PROMPT (Inglês): [Prompt]
 - PROMPT NEGATIVO: [Prompt Negativo]
-"""
 
 
 # ==============================================================================
