@@ -436,7 +436,7 @@ def chamar_gemini_api(dados_personagem, client, modelo="gemini-3.6-flash"):
 
     if dados_personagem.get("is_web_image"):
         prompt_usuario = f
-        """
+    """
         --- MODO GENERATOR IMAGEM WEB ATIVADO ---
         Plataforma Alvo Solicitada: {obter_str_limpa('plataforma_web', 'Midjourney v6.1')}
         
