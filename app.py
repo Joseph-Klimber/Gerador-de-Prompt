@@ -199,6 +199,7 @@ FORMATOS OBRIGATÓRIOS DE SAÍDA (OUTPUT)
 #### 🖼️ VARIAÇÃO [Número]: [Resumo do elemento alterado]
 - PROMPT (Inglês): [Prompt]
 - PROMPT NEGATIVO: [Prompt Negativo]
+"""
 
 # ==============================================================================
 # 3. FUNÇÕES AUXILIARES E GERENCIAMENTO DE DADOS
