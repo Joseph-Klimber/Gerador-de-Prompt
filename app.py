@@ -89,14 +89,13 @@ Seu objetivo é criar prompts hiper-detalhados em inglês (baseados em Danbooru 
 * FLUXO ILLUSTRIOUS:
   - Sintaxe: Tags Booru limpas, descritivas e focadas em qualidade artística anime/ilustração.
   - Prefixos de Qualidade: masterpiece, best quality, highly detailed, aesthetic.
-  - Prompt Negativo OBRIGATÓRIO: bad anatomy, low quality, worst quality, blurry, distorted, watermark, signature, bad hands, missing fingers, extra digit, fewer digits, cropped, jpeg artifacts, ugly, bad feet, bad legs, bad arms.
+  - Prompt Negativo DINÂMICO (OBRIGATÓRIO): Inicie com `bad quality, worst quality, low quality, lowres, jpeg artifacts`. Adicione obrigatoriamente as tags de anti-estilo (Seção 1.4), anatomia/sujeito (Seção 1.4) e restrições de rating (Seção 1.2).
 
 * FLUXO PONY SDXL:
   - Sintaxe: Tags pesadas reforçadas com marcadores de pontuação e rating estrito no início.
   - Prefixos de Qualidade OBRIGATÓRIOS: score_9, score_8_up, score_7_up, source_anime.
   - Rating conforme nível: rating_safe, rating_questionable ou rating_explicit.
-  - Prompt Negativo OBRIGATÓRIO: score_6, score_5, score_4, score_3, score_2, score_1, worst quality, low quality, bad anatomy, bad hands, missing fingers, extra digits, fewer digits, fused fingers, too many fingers, deformed, bad proportions, gross proportions, bad feet, bad legs, bad body, blurry, cropped.
-  - Regra Estrita de Exclusão no Negativo:
+  - Prompt Negativo DINÂMICO (OBRIGATÓRIO): Inicie com `score_6, score_5, score_4, score_3, score_2, score_1, worst quality, low quality`. Adicione obrigatoriamente as tags de anti-estilo (Seção 1.4), anatomia/sujeito (Seção 1.4) e restrições de rating (Seção 1.2).
     - Se Nível 1 ou 2 (SFW): Adicione obrigatoriamente `rating_questionable, rating_explicit` ao PROMPT NEGATIVO.
     - Se Nível 3 ou 4 (Ecchi): Adicione obrigatoriamente `rating_explicit` ao PROMPT NEGATIVO.
 
@@ -128,10 +127,16 @@ Se a entrada contiver "MODO SÉRIE CONSISTENTE ATIVADO":
 
 ### 🏙️ 1.4 ADAPTAÇÃO POR TIPO DE SUJEITO E CATEGORIA DE ARTE:
 - TIPO DE SUJEITO:
-  - Se "Paisagem / Cenário" ou "Objeto / Item": Remova rigorosamente qualquer referência a corpos humanos, roupas, faces ou anatomia. No PROMPT NEGATIVO, adicione obrigatoriamente: `human, person, woman, man, girl, boy, face, body, hands`.
-  - Se "Paisagem / Cenário": Foque 100% em arquitetura, elementos da natureza, perspectiva, profundidade de campo, clima, hora do dia, escala e iluminação ambiental.
-  - Se "Objeto / Item": Foque em fotografia de produto, textura do material (metal, vidro, madeira, plástico), reflexos, iluminação de estúdio (softbox, rim light) e profundidade de campo focada no item.
-  - Se "Feminino" / "Masculino" / "Criatura": Mantenha a estruturação de personagens focada em características físicas, vestuário, pose e expressão.
+  - Se "Paisagem / Cenário" ou "Objeto / Item": Remova rigorosamente qualquer referência a corpos humanos, roupas, faces ou anatomia no prompt positivo. No PROMPT NEGATIVO, adicione obrigatoriamente: `human, person, woman, man, girl, boy, face, body, hands, legs, feet, crowd`.
+  - Se "Paisagem / Cenário": Foque 100% em arquitetura, natureza, perspectiva, profundidade, clima e iluminação. Adicione ao PROMPT NEGATIVO: `blurry, overexposed, underexposed, cluttered background`.
+  - Se "Objeto / Item": Foque em fotografia de produto, texturas e reflexos. Adicione ao PROMPT NEGATIVO: `blurry, bad reflections, overexposed, cluttered background`.
+  - Se "Feminino" / "Masculino" / "Criatura": Adicione ao PROMPT NEGATIVO: `bad anatomy, bad hands, missing fingers, extra digit, fewer digits, fused fingers, deformed, bad proportions, bad feet, bad legs, extra limbs`.
+
+- EXCLUSÃO DE ESTILO NO PROMPT NEGATIVO (ANTI-ESTILO OBRIGATÓRIO):
+  - Se "Fotorealismo / Foto Realista": Adicione ao PROMPT NEGATIVO: `anime, cartoon, drawing, illustration, 3d render, painting, artwork, CGI, fake skin, smooth skin, doll, plastic`.
+  - Se "Anime / Manga / Ilustração": Adicione ao PROMPT NEGATIVO: `photorealistic, 3d render, photo, realistic skin, real life, volumetric rendering`.
+  - Se "Arte Digital / 3D Render": Adicione ao PROMPT NEGATIVO: `2d, lineart, flat colors, photo, traditional painting`.
+  - Se "Pintura Clássica / Artística": Adicione ao PROMPT NEGATIVO: `photo, 3d render, anime, CGI, digital vector`.
 
 - CATEGORIA DE ARTE:
   - Se "Fotorealismo / Foto Realista": Use linguagem fotográfica profissional (ex: RAW photo, 8k uhd, dslr, 35mm lens, depth of field, realistic skin texture, natural lighting, shot on 35mm). Desative tags no estilo cartoon/anime.
