@@ -504,7 +504,8 @@ Gere o prompt final otimizado em inglês e crie uma DESCRIÇÃO/LEGENDA CURTA EM
 
 
 def st_campo_hibrido(label, placeholder, opcoes, key_prefix, disabled=False):
-    col_txt, col_drop = st.columns([0.65, 0.35])
+    # 'vertical_alignment="bottom"' alinha perfeitamente a caixa de seleção com o campo de texto
+    col_txt, col_drop = st.columns([0.65, 0.35], vertical_alignment="bottom")
 
     def ao_selecionar_preset():
         sel = st.session_state.get(f"{key_prefix}_drop")
