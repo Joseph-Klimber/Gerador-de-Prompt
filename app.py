@@ -15,6 +15,20 @@ st.set_page_config(
     page_title="Gerador de Prompts IA", page_icon="🚀", layout="wide"
 )
 
+# --- INJEÇÃO CSS PARA QUEBRA DE LINHA AUTOMÁTICA NO RESULTADO ---
+st.markdown(
+    """
+    <style>
+    /* Força quebra de linha automática nos blocos st.code */
+    code {
+        white-space: pre-wrap !important;
+        word-break: break-word !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # ==============================================================================
 # 2. CONSTANTES E LINKS DE CONFIGURAÇÃO
 # ==============================================================================
