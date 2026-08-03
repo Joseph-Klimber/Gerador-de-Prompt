@@ -271,7 +271,6 @@ Gere o prompt final otimizado em inglês e crie uma DESCRIÇÃO/LEGENDA CURTA EM
             return "⚠️ Você está usando API gratuita. O jeito é esperar um pouco e tentar de novo daqui uns 10 segundos."
         return f"❌ Erro na comunicação com o modelo '{modelo}': {erro_str}"
 
-
 def st_campo_hibrido(label, placeholder, opcoes, key_prefix, disabled=False):
     col_txt, col_drop = st.columns([0.65, 0.35])
 
