@@ -7,39 +7,9 @@ from google.genai import types
 import requests
 import streamlit as st
 
-# ==============================================================================
-# 1. CONFIGURAÇÃO DA PÁGINA (Apenas UMA chamada no topo)
-# ==============================================================================
-st.set_page_config(
-    page_title="Gerador de Prompts IA", page_icon="🚀", layout="wide"
-)
-
-# ==============================================================================
-# 2. CONSTANTES E LINKS DE CONFIGURAÇÃO
-# ==============================================================================
-APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyLlqkhYChBHM6K08DnNP67C9t7E2kRS3N0pINa65oYa81--Cv4amoJm3OZ_v_MSDA7/exec"
-LINK_KIWIFY_15_DIAS = "https://pay.kiwify.com.br/MXVL98k"
-LINK_KIWIFY_30_DIAS = "https://pay.kiwify.com.br/dyfEGe5"
-LINK_KIWIFY_90_DIAS = "https://pay.kiwify.com.br/xo0m3rF"
-
-CONFIG_FILE = "config_prompts.json"
-PASTA_RESULTADOS = "resultados"
-PASTA_LISTAS = "listas"
-
-opcoes_tipo_sujeito = [
-    "Feminino",
-    "Masculino",
-    "Objeto / Item",
-    "Paisagem / Cenário",
-    "Criatura / Monstro / Androide",
-]
-opcoes_categoria_arte = [
-    "Anime / Manga / Ilustração",
-    "Fotorealismo / Foto Realista",
-    "Arte Digital / 3D Render",
-    "Pintura Clássica / Artística",
-]
-
+# =============================================================================
+# SYSTEM INSTRUCTION (SISTEMA DE REGRAS)
+# =============================================================================
 system_instruction = """Você é um Engenheiro de Prompts Mestre, especialista em dois ecossistemas distintos de Geração de Imagens por Inteligência Artificial:
 
 =============================================================================
@@ -47,15 +17,15 @@ PROTOCOLO DE FIDELIDADE ABSOLUTA 100% (CANON DIRETO & CHARACTER SETTEI)
 =============================================================================
 Sempre que o Nome/Sujeito for um personagem existente da cultura pop (anime, games, filmes, quadrinhos, etc.):
 
-1. POSICIONAMENTO PRIORITÁRIO NO PROMPT (PESO MÁXIMO):
-   As tags do personagem DEVEM vir no INÍCIO ABSOLUTO do prompt em inglês, antes de qualquer cenário, iluminação ou estilo.
+1. POSICIONAMENTO PRIORITÁRIO ABSOLUTO (PRIMEIRA COISA DO PROMPT - TOKEN 0):
+   O NOME DO PERSONAGEM e a TAG DA FRANQUIA DEVEM SER OBRIGATORIAMENTE A PRIMEIRA COISA DO PROMPT em inglês (Token 0).
+   Estrutura exata de início do prompt: `character_name, (franchise_name), [Prefixos de Qualidade do Motor], [Decomposição Canônica Settei]...`
 
 2. TAG DE FRANQUIA / SÉRIE OBRIGATÓRIA:
-   Você DEVE incluir o nome oficial da série/obra de origem em inglês/romaji entre parênteses ou como tag (ex: `(dragon ball z)`, `(naruto shippuden)`, `(genshin impact)`, `(fate/stay night)`).
+   Você DEVE incluir o nome oficial da série/obra de origem em inglês/romaji entre parênteses ou como tag logo após o nome do personagem (ex: `hatsune miku, (vocaloid)`, `goku, (dragon ball z)`, `naruto uzumaki, (naruto shippuden)`).
 
 3. DECOMPOSIÇÃO CANÔNICA EM PADRÃO SETTEI (FICHA TÉCNICA 1:1):
-   Consulte seu banco de dados e desmembre 100% da identidade visual oficial em 5 blocos canônicos:
-   - Tag de Identidade: `[Nome do Personagem]`, `([Nome da Franquia/Anime])`
+   Imediatamente após a tag de nome e franquia no início do prompt, desmembre 100% da identidade visual oficial em ordem:
    - Cabelo & Rosto Canônico: Cor exata do tom, corte, divisão da franja, estilo, cor dos olhos, formato de sobrancelha e expressão característica.
    - Camada Superior de Vestuário: Camiseta interna, jaqueta/colete, casaco, gola, estampas ou símbolos oficiais.
    - Camada Inferior de Vestuário: Calça/saia/shorts, cinto, meias, calçados canônicos (botas, tênis, sandálias ninja).
@@ -73,12 +43,12 @@ Seu objetivo é criar prompts hiper-detalhados em inglês (baseados em Danbooru 
 ### 📐 1.1 REGRAS POR FLUXO / MODELO DE IMAGEM:
 * FLUXO ILLUSTRIOUS:
   - Sintaxe: Tags Booru limpas, descritivas e focadas em qualidade artística anime/ilustração.
-  - Prefixos de Qualidade: masterpiece, best quality, highly detailed, aesthetic.
+  - Prefixos de Qualidade: masterpiece, best quality, highly detailed, aesthetic (inseridos logo após as tags do personagem).
   - Prompt Negativo OBRIGATÓRIO: bad anatomy, low quality, worst quality, blurry, distorted, watermark, signature, bad hands, missing fingers, extra digit, fewer digits, cropped, jpeg artifacts, ugly, bad feet, bad legs, bad arms.
 
 * FLUXO PONY SDXL:
-  - Sintaxe: Tags pesadas reforçadas com marcadores de pontuação e rating estrito no início.
-  - Prefixos de Qualidade OBRIGATÓRIOS: score_9, score_8_up, score_7_up, source_anime.
+  - Sintaxe: Tags pesadas reforçadas com marcadores de pontuação e rating estrito.
+  - Prefixos de Qualidade OBRIGATÓRIOS: score_9, score_8_up, score_7_up, source_anime (inseridos logo após as tags do personagem).
   - Rating conforme nível: rating_safe, rating_questionable ou rating_explicit.
   - Prompt Negativo OBRIGATÓRIO: score_6, score_5, score_4, score_3, score_2, score_1, worst quality, low quality, bad anatomy, bad hands, missing fingers, extra digits, fewer digits, fused fingers, too many fingers, deformed, bad proportions, gross proportions, bad feet, bad legs, bad body, blurry, cropped.
   - Regra Estrita de Exclusão no Negativo:
@@ -123,6 +93,7 @@ Se a entrada contiver "MODO SÉRIE CONSISTENTE ATIVADO":
   - Se "Anime / Manga / Ilustração": Force estética 2D/Ilustrada (ex: anime style, vibrant colors, lineart, cel shading, digital illustration).
   - Se "Arte Digital / 3D Render": Use termos de renderização gráfica (ex: 3d render, octane render, unreal engine 5, volumetric lighting, digital concept art).
   - Se "Pintura Clássica / Artística": Use termos de técnicas tradicionais (ex: oil painting, brush strokes, canvas texture, impressionism, fine art).
+
 ---
 
 =============================================================================
@@ -172,247 +143,46 @@ FORMATOS OBRIGATÓRIOS DE SAÍDA (OUTPUT)
 
 --- SE FOR IMAGEM WEB (MOTOR 2) ---
 ### 🌐 PROMPT OTIMIZADO PARA WEB: [{PLATAFORMA_SELECIONADA}]
-1. PROMPT (Inglês): [Prompt formatado na sintaxe exata exigida pela plataforma, com a expansão canônica 100% no início do prompt]
+1. PROMPT (Inglês): [Inicie OBRIGATORIAMENTE com o nome do personagem e franquia no Token 0, seguido do prompt formatado na sintaxe exata exigida pela plataforma]
 2. DESCRIÇÃO REDES SOCIAIS (Português): [Legenda curta de 2 a 3 frases + CTA forte e chamativa obrigatória no final]
 3. HASHTAGS: [Hashtags virais e relevantes]
 💡 DICA DE APLICAÇÃO: [Instrução prática sobre como colar e ajustar os parâmetros no site da plataforma]
 
 --- SE FOR IMAGEM LOCAL (MOTOR 1 - NÍVEL 1 A 5) ---
 ### 🖼️ IMAGEM: [Nome/Tema do Sujeito] - [Fluxo Selecionado]
-1. PROMPT (Inglês): [Prompt formatado com tags do fluxo escolhido e expansão canônica 100% no início do prompt]
+1. PROMPT (Inglês): [Inicie OBRIGATORIAMENTE com o nome do personagem e franquia no Token 0, seguido dos prefixos do fluxo e decomposição Settei completa]
 2. DESCRIÇÃO FACEBOOK (Português): [Legenda curta de 2 a 3 frases + CTA forte e chamativa obrigatória no final]
 3. HASHTAGS: [Hashtags relevantes]
 4. PROMPT NEGATIVO: [Tags negativas exigidas pelo fluxo e regras de sujeito/rating]
 
 --- SE FOR IMAGEM LOCAL (MOTOR 1 - NÍVEL 6 - CENSURA ESTRATÉGICA) ---
 ### 🖼️ IMAGEM: [Nome/Tema do Sujeito] - [Fluxo Selecionado] (CENSURA ESTRATÉGICA)
-1. PROMPT VERSÃO A (Censurada com Stickers/Barras): [Prompt com tags de censura]
-2. PROMPT VERSÃO B (Sem Censura/Explícito): [Prompt sem tags de censura]
+1. PROMPT VERSÃO A (Censurada com Stickers/Barras): [Inicie OBRIGATORIAMENTE com nome e franquia no Token 0, seguido das tags de censura]
+2. PROMPT VERSÃO B (Sem Censura/Explícito): [Inicie OBRIGATORIAMENTE com nome e franquia no Token 0, mantendo o prompt sem tags de censura]
 3. DESCRIÇÃO FACEBOOK: [Legenda curta de 2 a 3 frases + CTA forte e chamativa obrigatória no final]
 4. HASHTAGS: [Hashtags]
 5. PROMPT NEGATIVO: [Prompt negativo do fluxo com regras de sujeito/rating]
 
---- SE FOR SÉRIE CONSISTENTE LOCAL ---
-### 🧬 SÉRIE CONSISTENTE: [Nome do Personagem]
+--- SE FOR SÉRIE CONSISTENTE LOCAL OU WEB ---
+### 🧬 SÉRIE CONSISTENTE: [Nome do Personagem] - [{PLATAFORMA_OU_FLUXO}]
 #### 🖼️ VARIAÇÃO [Número]: [Resumo do elemento alterado]
-- PROMPT (Inglês): [Prompt]
-- PROMPT NEGATIVO: [Prompt Negativo]
+- PROMPT (Inglês): [Inicie OBRIGATORIAMENTE com o nome do personagem e franquia no Token 0]
+- PROMPT NEGATIVO / PARÂMETROS: [Prompt Negativo se Local, ou Parâmetros Nativos se Web]
 """
 
-# ==============================================================================
-# 3. FUNÇÕES AUXILIARES E GERENCIAMENTO DE DADOS
-# ==============================================================================
-# 3. Função para checar acesso no Google Sheets via Google Apps Script
-def verificar_acesso_sheets(email):
-    try:
-        # Tratamento basico no e-mail (remove espacos e força minusculas)
-        email_limpo = email.strip().lower()
-        
-        # Aumentamos o timeout para 15 segundos (Google Apps Script pode ser lento para "acordar")
-        response = requests.get(
-            APPS_SCRIPT_URL, 
-            params={"email": email_limpo}, 
-            timeout=15,
-            allow_redirects=True
-        )
-        
-        if response.status_code == 200:
-            dados = response.json()
-            return dados.get("encontrado", False), dados.get("expiracao", "")
-            
-    except requests.exceptions.Timeout:
-        st.error("⚠️ O Google Sheets demorou a responder. Por favor, clique em ENRAR novamente.")
-    except Exception as e:
-        st.error(f"Erro ao conectar com a base de dados: {e}")
-        
-    return False, ""
-
-
-def carregar_config():
-    config = {
-        "chaves": {"Chave 1": "", "Chave 2": ""},
-        "modelo_padrao": "gemini-3.6-flash",
-    }
-    if os.path.exists(CONFIG_FILE):
-        try:
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                dados = json.load(f)
-                config.update(dados)
-        except Exception:
-            pass
-
-    if not config["chaves"].get("Chave 1") and os.path.exists(".api_key.txt"):
-        try:
-            with open(".api_key.txt", "r", encoding="utf-8") as f:
-                chave_txt = f.read().strip()
-                if chave_txt:
-                    config["chaves"]["Chave 1"] = chave_txt
-        except Exception:
-            pass
-
-    return config
-
-
-def salvar_config(chaves_dict, modelo_padrao):
-    dados = {"chaves": chaves_dict, "modelo_padrao": modelo_padrao}
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump(dados, f, indent=4, ensure_ascii=False)
-
-
-def salvar_resultado_manual(texto, nome_sujeito):
-    if not texto:
-        return "⚠️ Nenhum resultado para salvar."
-    os.makedirs(PASTA_RESULTADOS, exist_ok=True)
-    timestamp = time.strftime("%Y%m%d_%H%M%S")
-    nome_clean = (
-        nome_sujeito.replace(" ", "_").lower() if nome_sujeito else "prompts"
-    )
-    nome_arquivo = f"prompts_{nome_clean}_{timestamp}.txt"
-    caminho_completo = os.path.join(PASTA_RESULTADOS, nome_arquivo)
-    with open(caminho_completo, "w", encoding="utf-8") as f:
-        f.write(texto)
-    return f"💾 Cópia salva no servidor: `{caminho_completo}`"
-
-
-def carregar_lista_dual(nome_arquivo, genero="feminino"):
-    caminho_arquivo = nome_arquivo
-    if not os.path.exists(caminho_arquivo):
-        caminho_alt = os.path.join(PASTA_LISTAS, nome_arquivo)
-        if os.path.exists(caminho_alt):
-            caminho_arquivo = caminho_alt
-
-    if os.path.exists(caminho_arquivo):
-        try:
-            with open(caminho_arquivo, "r", encoding="utf-8") as f:
-                linhas = [
-                    l.strip()
-                    for l in f.readlines()
-                    if l.strip() and not l.startswith("#")
-                ]
-
-            bloco_atual = None
-            linhas_genero = []
-            linhas_gerais = []
-
-            for linha in linhas:
-                linha_lower = linha.lower()
-                if "[feminino]" in linha_lower:
-                    bloco_atual = "feminino"
-                    continue
-                elif "[masculino]" in linha_lower:
-                    bloco_atual = "masculino"
-                    continue
-                elif (
-                    "[geral]" in linha_lower or "[ambos]" in linha_lower
-                ):
-                    bloco_atual = "geral"
-                    continue
-
-                if bloco_atual == genero:
-                    linhas_genero.append(linha)
-                elif bloco_atual == "geral":
-                    linhas_gerais.append(linha)
-                elif bloco_atual is None:
-                    linhas_gerais.append(linha)
-
-            resultado = list(
-                dict.fromkeys(
-                    linhas_genero if linhas_genero else linhas_gerais
-                )
-            )
-            if resultado:
-                return resultado
-        except Exception:
-            pass
-
-    return ["Opção Padrão 1", "Opção Padrão 2"]
-
-
-def carregar_lista_nomes(genero="feminino"):
-    arquivo_alvo = (
-        "nomes_femininos.txt" if genero == "feminino" else "nomes_masculinos.txt"
-    )
-    caminhos_tentativa = [
-        os.path.join(PASTA_LISTAS, arquivo_alvo),
-        arquivo_alvo,
-        os.path.join(PASTA_LISTAS, "personagens.txt"),
-        "personagens.txt",
-    ]
-
-    for caminho in caminhos_tentativa:
-        if os.path.exists(caminho):
-            try:
-                with open(caminho, "r", encoding="utf-8") as f:
-                    linhas = list(
-                        dict.fromkeys(
-                            [
-                                l.strip()
-                                for l in f
-                                if l.strip()
-                                and not l.startswith("#")
-                                and not l.startswith("[")
-                            ]
-                        )
-                    )
-                if linhas:
-                    return linhas
-            except Exception:
-                pass
-
-    if genero == "feminino":
-        return [
-            "Nami",
-            "Nico Robin",
-            "Android 18",
-            "Tsunade",
-            "Hinata Hyuga",
-            "Mikasa Ackerman",
-            "Yor Forger",
-        ]
-    return [
-        "Goku",
-        "Vegeta",
-        "Luffy",
-        "Zoro",
-        "Naruto",
-        "Sasuke",
-        "Gojo Satoru",
-        "Levi Ackerman",
-    ]
-
-
-def carregar_lista_integrada_web(arquivo_padrao, arquivo_web, genero_ref):
-    opcoes = []
-    opcoes.extend(carregar_lista_dual(arquivo_padrao, genero_ref))
-    caminho_web = arquivo_web
-    if not os.path.exists(caminho_web):
-        caminho_alt = os.path.join(PASTA_LISTAS, arquivo_web)
-        if os.path.exists(caminho_alt):
-            caminho_web = caminho_alt
-
-    if os.path.exists(caminho_web):
-        try:
-            with open(caminho_web, "r", encoding="utf-8") as f:
-                linhas = [
-                    l.strip()
-                    for l in f
-                    if l.strip() and not l.startswith("#")
-                ]
-                opcoes.extend(linhas)
-        except Exception:
-            pass
-
-    resultado = list(dict.fromkeys(opcoes))
-    return resultado if resultado else ["Opção Padrão 1"]
-
-
-def chamar_gemini_api(dados_personagem, client, modelo="gemini-3.6-flash"):
+# =============================================================================
+# FUNÇÃO DE CHAMADA DA API GEMINI
+# =============================================================================
+def chamar_gemini_api(dados_personagem, client, modelo="gemini-3.5-flash"):
     if not client:
         return "❌ Erro: Cliente da API não inicializado. Verifique sua Chave API."
 
     def obter_str_limpa(chave, valor_padrao=""):
         val = dados_personagem.get(chave)
-        return (val if val is not None else valor_padrao).strip()
+        if val is None:
+            return valor_padrao
+        val_str = str(val).strip()
+        return val_str if val_str else valor_padrao
 
     tipo_sujeito = obter_str_limpa("tipo_sujeito", "Feminino")
     is_objeto_ou_paisagem = tipo_sujeito in [
@@ -420,15 +190,18 @@ def chamar_gemini_api(dados_personagem, client, modelo="gemini-3.6-flash"):
         "Objeto / Item",
     ]
 
-    sensualidade = (
-        "Não se aplica (Inativo para Paisagem/Objeto)"
-        if is_objeto_ou_paisagem
-        else dados_personagem.get("intensidade", 6)
-    )
+    # Higienização do Nível de Sensualidade
+    if is_objeto_ou_paisagem:
+        sensualidade = "Não se aplica (Inativo para Paisagem/Objeto)"
+    else:
+        raw_intensidade = obter_str_limpa("intensidade", "6")
+        limpo_intensidade = raw_intensidade.replace("Nível", "").strip()
+        sensualidade = f"Nível {limpo_intensidade}"
+
     emocao = (
         "Não se aplica"
         if is_objeto_ou_paisagem
-        else (obter_str_limpa("emocao") or "Nenhuma específica")
+        else obter_str_limpa("emocao", "Nenhuma específica")
     )
 
     if dados_personagem.get("is_web_image"):
@@ -436,7 +209,7 @@ def chamar_gemini_api(dados_personagem, client, modelo="gemini-3.6-flash"):
 Plataforma Alvo Solicitada: {obter_str_limpa('plataforma_web', 'Midjourney v6.1')}
 
 Gere o prompt final otimizado em inglês e crie uma DESCRIÇÃO/LEGENDA CURTA EM PORTUGUÊS (COM CTA OBRIGATÓRIA NO FINAL) baseada nos detalhes da cena fornecidos:
-- Sujeito / Tema Principal: {obter_str_limpa('nome')} (REQUISITO CRÍTICO DE FIDELIDADE 100%: Se for um personagem existente, aplique o PROTOCOLO DE FIDELIDADE ABSOLUTA 100% inserindo no INÍCIO do prompt a tag da franquia/anime de origem e a decomposição completa do vestuário, rosto, cabelo e acessórios oficiais)
+- Sujeito / Tema Principal: {obter_str_limpa('nome')} (REQUISITO CRÍTICO DE FIDELIDADE 100%: Se for um personagem existente, O NOME DO PERSONAGEM E A TAG DA FRANQUIA DEVEM SER A PRIMEIRA COISA ABSOLUTA DO PROMPT em inglês no Token 0, seguidos imediatamente da decomposição canônica completa de cabelo, rosto, roupas oficiais e acessórios)
 - Tipo de Sujeito: {tipo_sujeito}
 - Categoria de Arte: {obter_str_limpa('categoria_arte', 'Anime / Manga / Ilustração')}
 - Nível de Sensualidade: {sensualidade}
@@ -454,7 +227,7 @@ Gere o prompt final otimizado em inglês e crie uma DESCRIÇÃO/LEGENDA CURTA EM
     else:
         prompt_usuario = f"""Gere os prompts de imagem em inglês e uma DESCRIÇÃO/LEGENDA CURTA EM PORTUGUÊS (COM CTA OBRIGATÓRIA NO FINAL) para redes sociais conectando o sujeito, a ação, a expressão e o cenário abaixo:
 
-- Nome / Sujeito: {obter_str_limpa('nome')} (REQUISITO CRÍTICO DE FIDELIDADE 100%: Se for um personagem existente, aplique o PROTOCOLO DE FIDELIDADE ABSOLUTA 100% inserindo no INÍCIO do prompt a tag da franquia/anime de origem e a decomposição completa do vestuário, rosto, cabelo e acessórios oficiais)
+- Nome / Sujeito: {obter_str_limpa('nome')} (REQUISITO CRÍTICO DE FIDELIDADE 100%: Se for um personagem existente, O NOME DO PERSONAGEM E A TAG DA FRANQUIA DEVEM SER A PRIMEIRA COISA ABSOLUTA DO PROMPT em inglês no Token 0, seguidos imediatamente da decomposição canônica completa de cabelo, rosto, roupas oficiais e acessórios)
 - Fluxo Base: {obter_str_limpa('fluxo', 'Illustrious')}
 - Tipo de Sujeito: {tipo_sujeito}
 - Categoria de Arte: {obter_str_limpa('categoria_arte', 'Anime / Manga / Ilustração')}
@@ -470,12 +243,9 @@ Gere o prompt final otimizado em inglês e crie uma DESCRIÇÃO/LEGENDA CURTA EM
 - Efeitos Especiais: {obter_str_limpa('efeitos')}
 """
 
-        if dados_personagem.get("is_serie"):
-            alvos = obter_str_limpa("variaveis_alvo_str")
-            if not alvos:
-                alvos = "Pose, Cenário e Expressão"
-
-            prompt_usuario += f"""
+    if dados_personagem.get("is_serie"):
+        alvos = obter_str_limpa("variaveis_alvo_str", "Pose, Cenário e Expressão")
+        prompt_usuario += f"""
 --- MODO SÉRIE CONSISTENTE ATIVADO ---
 - Elementos para Variar Dinamicamente: {alvos}
 - Quantidade de Variações a Gerar: {dados_personagem.get('total_variacoes', 5)} variações completas.
@@ -487,7 +257,8 @@ Gere o prompt final otimizado em inglês e crie uma DESCRIÇÃO/LEGENDA CURTA EM
             model=modelo,
             contents=prompt_usuario,
             config=types.GenerateContentConfig(
-                system_instruction=system_instruction, temperature=0.7
+                system_instruction=system_instruction,
+                temperature=0.7,
             ),
         )
         if response and hasattr(response, "text") and response.text is not None:
