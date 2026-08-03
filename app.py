@@ -1,6 +1,7 @@
 import json
 import os
 import random
+import re
 import time
 from google import genai
 from google.genai import types
@@ -202,13 +203,10 @@ FORMATOS OBRIGATÓRIOS DE SAÍDA (OUTPUT)
 # ==============================================================================
 # 3. FUNÇÕES AUXILIARES E GERENCIAMENTO DE DADOS
 # ==============================================================================
-# 3. Função para checar acesso no Google Sheets via Google Apps Script
+# Função para checar acesso no Google Sheets via Google Apps Script
 def verificar_acesso_sheets(email):
     try:
-        # Tratamento basico no e-mail (remove espacos e força minusculas)
         email_limpo = email.strip().lower()
-        
-        # Aumentamos o timeout para 15 segundos (Google Apps Script pode ser lento para "acordar")
         response = requests.get(
             APPS_SCRIPT_URL, 
             params={"email": email_limpo}, 
@@ -217,11 +215,14 @@ def verificar_acesso_sheets(email):
         )
         
         if response.status_code == 200:
-            dados = response.json()
-            return dados.get("encontrado", False), dados.get("expiracao", "")
+            if "application/json" in response.headers.get("Content-Type", ""):
+                dados = response.json()
+                return dados.get("encontrado", False), dados.get("expiracao", "")
+            else:
+                st.error("⚠️ O servidor respondeu com formato inválido.")
             
     except requests.exceptions.Timeout:
-        st.error("⚠️ O Google Sheets demorou a responder. Por favor, clique em ENRAR novamente.")
+        st.error("⚠️ O Google Sheets demorou a responder. Por favor, clique em ENTRAR novamente.")
     except Exception as e:
         st.error(f"Erro ao conectar com a base de dados: {e}")
         
@@ -231,7 +232,7 @@ def verificar_acesso_sheets(email):
 def carregar_config():
     config = {
         "chaves": {"Chave 1": "", "Chave 2": ""},
-        "modelo_padrao": "gemini-3.6-flash",
+        "modelo_padrao": "gemini-2.5-flash",
     }
     if os.path.exists(CONFIG_FILE):
         try:
@@ -264,16 +265,16 @@ def salvar_resultado_manual(texto, nome_sujeito):
         return "⚠️ Nenhum resultado para salvar."
     os.makedirs(PASTA_RESULTADOS, exist_ok=True)
     timestamp = time.strftime("%Y%m%d_%H%M%S")
-    nome_clean = (
-        nome_sujeito.replace(" ", "_").lower() if nome_sujeito else "prompts"
-    )
-    nome_arquivo = f"prompts_{nome_clean}_{timestamp}.txt"
+    # Sanitização contra caracteres inválidos em nomes de arquivo
+    nome_sanitizado = re.sub(r'[^\w\-]', '_', nome_sujeito).lower() if nome_sujeito else "prompts"
+    nome_arquivo = f"prompts_{nome_sanitizado}_{timestamp}.txt"
     caminho_completo = os.path.join(PASTA_RESULTADOS, nome_arquivo)
     with open(caminho_completo, "w", encoding="utf-8") as f:
         f.write(texto)
     return f"💾 Cópia salva no servidor: `{caminho_completo}`"
 
 
+@st.cache_data(show_spinner=False)
 def carregar_lista_dual(nome_arquivo, genero="feminino"):
     caminho_arquivo = nome_arquivo
     if not os.path.exists(caminho_arquivo):
@@ -310,16 +311,10 @@ def carregar_lista_dual(nome_arquivo, genero="feminino"):
 
                 if bloco_atual == genero:
                     linhas_genero.append(linha)
-                elif bloco_atual == "geral":
-                    linhas_gerais.append(linha)
-                elif bloco_atual is None:
+                elif bloco_atual == "geral" or bloco_atual is None:
                     linhas_gerais.append(linha)
 
-            resultado = list(
-                dict.fromkeys(
-                    linhas_genero if linhas_genero else linhas_gerais
-                )
-            )
+            resultado = list(dict.fromkeys(linhas_genero + linhas_gerais))
             if resultado:
                 return resultado
         except Exception:
@@ -328,6 +323,7 @@ def carregar_lista_dual(nome_arquivo, genero="feminino"):
     return ["Opção Padrão 1", "Opção Padrão 2"]
 
 
+@st.cache_data(show_spinner=False)
 def carregar_lista_nomes(genero="feminino"):
     arquivo_alvo = (
         "nomes_femininos.txt" if genero == "feminino" else "nomes_masculinos.txt"
@@ -381,6 +377,7 @@ def carregar_lista_nomes(genero="feminino"):
     ]
 
 
+@st.cache_data(show_spinner=False)
 def carregar_lista_integrada_web(arquivo_padrao, arquivo_web, genero_ref):
     opcoes = []
     opcoes.extend(carregar_lista_dual(arquivo_padrao, genero_ref))
@@ -396,7 +393,7 @@ def carregar_lista_integrada_web(arquivo_padrao, arquivo_web, genero_ref):
                 linhas = [
                     l.strip()
                     for l in f
-                    if l.strip() and not l.startswith("#")
+                    if l.strip() and not l.startswith("#") and not l.startswith("[")
                 ]
                 opcoes.extend(linhas)
         except Exception:
@@ -406,7 +403,7 @@ def carregar_lista_integrada_web(arquivo_padrao, arquivo_web, genero_ref):
     return resultado if resultado else ["Opção Padrão 1"]
 
 
-def chamar_gemini_api(dados_personagem, client, modelo="gemini-3.6-flash"):
+def chamar_gemini_api(dados_personagem, client, modelo="gemini-2.5-flash"):
     if not client:
         return "❌ Erro: Cliente da API não inicializado. Verifique sua Chave API."
 
@@ -423,7 +420,7 @@ def chamar_gemini_api(dados_personagem, client, modelo="gemini-3.6-flash"):
     sensualidade = (
         "Não se aplica (Inativo para Paisagem/Objeto)"
         if is_objeto_ou_paisagem
-        else dados_personagem.get("intensidade", 6)
+        else dados_personagem.get("intensidade", 2)
     )
     emocao = (
         "Não se aplica"
@@ -490,6 +487,11 @@ Gere o prompt final otimizado em inglês e crie uma DESCRIÇÃO/LEGENDA CURTA EM
                 system_instruction=system_instruction, temperature=0.7
             ),
         )
+        if response and hasattr(response, "candidates") and response.candidates:
+            cand = response.candidates[0]
+            if hasattr(cand, "finish_reason") and str(cand.finish_reason) == "SAFETY":
+                return "⚠️ A requisição foi bloqueada pelos filtros de segurança da API Gemini."
+        
         if response and hasattr(response, "text") and response.text is not None:
             return response.text
         else:
@@ -508,6 +510,7 @@ def st_campo_hibrido(label, placeholder, opcoes, key_prefix, disabled=False):
         sel = st.session_state.get(f"{key_prefix}_drop")
         if sel and sel not in ["Presets...", "Digite manualmente..."]:
             st.session_state[f"{key_prefix}_txt"] = sel
+            st.session_state[f"{key_prefix}_drop"] = "Presets..."
 
     validas = list(
         dict.fromkeys(
@@ -533,11 +536,16 @@ def st_campo_hibrido(label, placeholder, opcoes, key_prefix, disabled=False):
             key=f"{key_prefix}_drop",
             on_change=ao_selecionar_preset,
             disabled=disabled,
+            label_visibility="collapsed",
         )
     return val
 
 
-def autocompletar_campos(prefixo, genero_ref, is_web=False):
+def autocompletar_campos(prefixo, is_web=False):
+    tipo_sujeito_atual = st.session_state.get(f"{prefixo}_tipo_sujeito", "Feminino")
+    genero_ref = "masculino" if tipo_sujeito_atual == "Masculino" else "feminino"
+    is_obj_or_land = tipo_sujeito_atual in ["Paisagem / Cenário", "Objeto / Item"]
+
     if not st.session_state.get(f"{prefixo}_nome_txt", "").strip():
         nomes = carregar_lista_nomes(genero_ref)
         if nomes:
@@ -554,6 +562,9 @@ def autocompletar_campos(prefixo, genero_ref, is_web=False):
     }
 
     for campo, (arq_std, arq_web) in campos_map.items():
+        if campo == "emocao" and is_obj_or_land:
+            continue
+
         key = f"{prefixo}_{campo}_txt"
         if not st.session_state.get(key, "").strip():
             lista = (
@@ -642,7 +653,7 @@ def renderizar_formulario(
             "Sensualidade (1-6):",
             1,
             6,
-            6,
+            2,
             disabled=is_obj_or_land,
             key=f"{prefixo}_intensidade",
         )
@@ -815,7 +826,7 @@ def renderizar_formulario(
             "✨ AUTOCOMPLETAR",
             key=f"{prefixo}_btn_auto",
             on_click=autocompletar_campos,
-            args=(prefixo, g_ref, is_web),
+            args=(prefixo, is_web),
             use_container_width=True,
         )
     with btn_col3:
@@ -886,7 +897,6 @@ def renderizar_formulario(
                     st.error(f"❌ Erro ao inicializar cliente: {str(e)}")
 
     if st.session_state.get(f"{prefixo}_resultado"):
-        # Inserção de quebra de linha e divisor visual automático
         st.write("")
         st.markdown("---")
         st.write("")
@@ -894,9 +904,10 @@ def renderizar_formulario(
         st.markdown("### 📝 Resultado:")
         st.code(st.session_state[f"{prefixo}_resultado"], language="markdown")
 
-        st.write("") # Quebra de linha entre o resultado e o botão de download
+        st.write("")
         
-        nome_arquivo_dl = f"prompts_{(nome.replace(' ', '_').lower() if nome else 'gerado')}.txt"
+        nome_sanitizado = re.sub(r'[^\w\-]', '_', nome).lower() if nome else 'gerado'
+        nome_arquivo_dl = f"prompts_{nome_sanitizado}.txt"
         st.download_button(
             label="📥 BAIXAR ARQUIVO DE PROMPTS (.TXT)",
             data=st.session_state[f"{prefixo}_resultado"],
@@ -943,7 +954,6 @@ if not st.session_state.autenticado:
     with col_login2:
         if st.button("ENTRAR NA FERRAMENTA", type="primary", use_container_width=True):
             if email_input:
-                # Trata o e-mail (remove espaços extras e força minúsculas)
                 email_limpo = email_input.strip().lower()
                 
                 com_acesso, data_exp = verificar_acesso_sheets(email_limpo)
@@ -951,7 +961,6 @@ if not st.session_state.autenticado:
                     st.session_state.autenticado = True
                     st.session_state.user_email = email_limpo
                     st.session_state.expiracao = data_exp
-                    st.success("Acesso liberado!")
                     st.rerun()
                 else:
                     st.error("E-mail não encontrado ou acesso expirado.")
@@ -1040,17 +1049,13 @@ else:
         )
 
         modelos_disponiveis = [
-            "gemini-3.6-flash",
-            "gemini-3.6-pro",
-            "gemini-3.5-flash",
-            "gemini-3.5-pro",
-            "gemini-3.0-flash",
-            "gemini-3.0-pro",
+            "gemini-2.5-flash",
             "gemini-2.5-pro",
             "gemini-2.0-flash",
             "gemini-1.5-flash",
+            "gemini-1.5-pro",
         ]
-        modelo_salvo = config_salva.get("modelo_padrao", "gemini-3.6-flash")
+        modelo_salvo = config_salva.get("modelo_padrao", "gemini-2.5-flash")
         modelo_selecionado = st.selectbox(
             "Modelo Gemini:",
             modelos_disponiveis,
@@ -1062,7 +1067,10 @@ else:
         )
 
         if st.button("💾 Salvar Configurações"):
-            st.session_state.chaves_api[slot_chave] = chave_input.strip()
+            for slot in st.session_state.chaves_api.keys():
+                s_key = f"input_key_{slot}"
+                if s_key in st.session_state:
+                    st.session_state.chaves_api[slot] = st.session_state[s_key].strip()
             salvar_config(st.session_state.chaves_api, modelo_selecionado)
             st.success("Configurações salvas com sucesso!")
 
