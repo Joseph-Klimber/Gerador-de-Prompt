@@ -9,17 +9,16 @@ import requests
 import streamlit as st
 
 # ==============================================================================
-# 1. CONFIGURAÇÃO DA PÁGINA (Apenas UMA chamada no topo)
+# 1. CONFIGURAÇÃO DA PÁGINA E CSS GLOBAL
 # ==============================================================================
 st.set_page_config(
     page_title="Gerador de Prompts IA", page_icon="🚀", layout="wide"
 )
 
-# --- INJEÇÃO CSS PARA QUEBRA DE LINHA AUTOMÁTICA NO RESULTADO ---
+# Injeção de CSS para forçar quebra de linha automática (word wrap) no resultado
 st.markdown(
     """
     <style>
-    /* Força quebra de linha automática nos blocos st.code */
     code {
         white-space: pre-wrap !important;
         word-break: break-word !important;
@@ -55,6 +54,30 @@ opcoes_categoria_arte = [
     "Pintura Clássica / Artística",
 ]
 
+opcoes_sensualidade = [
+    "1 - Seguro (SFW)",
+    "2 - Menos Seguro",
+    "3 - Ecchi Leve",
+    "4 - Ecchi",
+    "5 - Picante",
+    "6 - Dual (Com & Sem Censura)",
+]
+
+opcoes_seios = [
+    "Padrão do Personagem / Não especificar",
+    "Pequenos",
+    "Médios",
+    "Grandes",
+    "Volumosos",
+]
+
+opcoes_mamilos = [
+    "Não especificar",
+    "Discretos",
+    "Eretos",
+    "Muito eretos",
+]
+
 system_instruction = """Você é um Engenheiro de Prompts Mestre, especialista em dois ecossistemas distintos de Geração de Imagens por Inteligência Artificial:
 
 =============================================================================
@@ -68,7 +91,7 @@ Sempre que o Nome/Sujeito for um personagem existente da cultura pop (anime, gam
 
 2. DESCONSTRUÇÃO CANÔNICA EM TAGS BOORU INDIVIDUAIS (PROIBIDO RESUMIR):
    Você DEVE consultar seu conhecimento de banco de dados e desmembrar a imagem oficial do personagem em tags booru atômicas exatas nas seguintes camadas:
-   - Rosto e Cabelo: Tom exato de cor, comprimento, divisão da franja, acessórios de cabelo, cor dos olhos, sobrancelha.
+   - Rosto e Cabelo: Tom exato de cor, comprimento, divisão da franja, estilo, cor dos olhos, formato de sobrancelha.
    - Vestuário Superior: Roupa interna, jaqueta/colete, gola, estampa das mangas, botões, marcas ou logos oficiais.
    - Vestuário Inferior: Cinto, saia/calça/shorts, textura, meias (pantyhose, thighhighs).
    - Calçados e Acessórios: Botas, brincos, luvas, tatuagens, cicatrizes, armas e itens icônicos.
@@ -80,104 +103,99 @@ Sempre que o Nome/Sujeito for um personagem existente da cultura pop (anime, gam
 
 4. REGRA DE MUTAÇÃO DE TRAJE:
    - Se o usuário NÃO pediu troca de roupa: Aplique 100% das tags do traje canônico oficial.
-   - Se o usuário pediu novo traje (ex: "em roupa de banho"): Remova APENAS as tags das roupas originais. MANENHA 100% das tags de rosto, cabelo, olhos, corpo, brincos e características físicas canônicas!
+   - Se o usuário pediu novo traje (ex: "em roupa de banho"): Remova APENAS as tags das roupas originais. MANTENHA 100% das tags de rosto, cabelo, olhos, corpo, brincos e características físicas canônicas!
+
+=============================================================================
+REGRA RIGOROSA: PROMPT NEGATIVO DINÂMICO E CONTEXTUALIZADO (100% ADAPTATIVO)
+=============================================================================
+Você NUNCA deve entregar um prompt negativo estático ou padronizado. O prompt negativo DEVE ser gerado do zero adaptando-se estritamente aos parâmetros da requisição combinando 5 camadas:
+
+1. CAMADA BASE DO MOTOR:
+   - Se Pony SDXL: Inicie obrigatoriamente com `score_6, score_5, score_4, score_3, score_2, score_1, worst quality, low quality`.
+   - Se Illustrious: Inicie obrigatoriamente com `bad quality, worst quality, low quality, lowres, jpeg artifacts`.
+
+2. CAMADA DE ANTI-ESTILO (EXCLUSÃO CRÍTICA DE ESTILO OPOSTO):
+   - Se Categoria = "Fotorealismo / Foto Realista": Adicione obrigatoriamente `anime, cartoon, drawing, illustration, 3d render, painting, artwork, CGI, fake skin, smooth skin, doll, plastic`.
+   - Se Categoria = "Anime / Manga / Ilustração": Adicione obrigatoriamente `photorealistic, 3d render, photo, realistic skin, real life, volumetric rendering`.
+   - Se Categoria = "Arte Digital / 3D Render": Adicione obrigatoriamente `2d, lineart, flat colors, photo, traditional painting`.
+   - Se Categoria = "Pintura Clássica / Artística": Adicione obrigatoriamente `photo, 3d render, anime, CGI, digital vector`.
+
+3. CAMADA DE ANATOMIA E SUJEITO:
+   - Se Sujeito = "Paisagem" ou "Objeto": NUNCA inclua tags de anatomia humana no prompt positivo. No PROMPT NEGATIVO, adicione obrigatoriamente `human, person, woman, man, girl, boy, face, body, hands, legs, feet, crowd`.
+   - Se Sujeito = "Feminino", "Masculino" ou "Criatura": Adicione tags anatômicas precisas baseadas no enquadramento (ex: se for Busto/Rosto, foque em `cross-eyed, bad eyes, deformed iris, bad mouth, bad teeth, bad face`; se for Corpo Todo, inclua `bad anatomy, bad hands, missing fingers, extra digit, fewer digits, fused fingers, bad feet, bad legs, extra limbs, disconnected limbs, deformed body`).
+
+4. CAMADA DE ILUMINAÇÃO E COMPOSIÇÃO:
+   - Negue artefatos ambientais com base no cenário e estilo escolhidos (`blurry, bad lighting, overexposed, underexposed, dark shadows, watermark, signature, text, banner, border, cropped, out of frame, cluttered background`).
+
+5. CAMADA DE RATING / SENSUALIDADE:
+   - Nível 1 ou 2 (SFW): Adicione obrigatoriamente `rating_questionable, rating_explicit, nsfw, nude, cleavage`.
+   - Nível 3 ou 4 (Ecchi): Adicione obrigatoriamente `rating_explicit, nude, fully nude, nipple`.
 
 =============================================================================
 MOTOR 1: STABLE DIFFUSION LOCAL (ILLUSTRIOUS IA & PONY SDXL PARA COMFYUI / WEBUI)
 =============================================================================
-Seu objetivo é criar prompts hiper-detalhados em inglês (baseados em Danbooru e conceitos visuais) e organizar a saída em formato estruturado.
+Seu objetivo é criar prompts hiper-detalhados em inglês e organizar a saída em formato estruturado.
 
 ### 📐 1.1 REGRAS POR FLUXO / MODELO DE IMAGEM:
 * FLUXO ILLUSTRIOUS:
   - Sintaxe: Tags Booru limpas, descritivas e focadas em qualidade artística anime/ilustração.
   - Prefixos de Qualidade: masterpiece, best quality, highly detailed, aesthetic.
-  - Prompt Negativo DINÂMICO (OBRIGATÓRIO): Inicie com `bad quality, worst quality, low quality, lowres, jpeg artifacts`. Adicione obrigatoriamente as tags de anti-estilo (Seção 1.4), anatomia/sujeito (Seção 1.4) e restrições de rating (Seção 1.2).
 
 * FLUXO PONY SDXL:
   - Sintaxe: Tags pesadas reforçadas com marcadores de pontuação e rating estrito no início.
   - Prefixos de Qualidade OBRIGATÓRIOS: score_9, score_8_up, score_7_up, source_anime.
   - Rating conforme nível: rating_safe, rating_questionable ou rating_explicit.
-  - Prompt Negativo DINÂMICO (OBRIGATÓRIO): Inicie com `score_6, score_5, score_4, score_3, score_2, score_1, worst quality, low quality`. Adicione obrigatoriamente as tags de anti-estilo (Seção 1.4), anatomia/sujeito (Seção 1.4) e restrições de rating (Seção 1.2).
-    - Se Nível 1 ou 2 (SFW): Adicione obrigatoriamente `rating_questionable, rating_explicit` ao PROMPT NEGATIVO.
-    - Se Nível 3 ou 4 (Ecchi): Adicione obrigatoriamente `rating_explicit` ao PROMPT NEGATIVO.
 
 ---
 
-### 🧠 1.2 PROTOCOLO DE SENSUALIDADE E CENSURA (NÍVEIS 1 A 6):
-- Nível 1 (SFW/Comportado): Modéstia total. Roupas do personagem fiéis e normais. rating_safe.
-- Nível 2 (Sutil/Atraente): Poses atraentes, roupas normais com leve ajuste de caimento. rating_safe.
-- Nível 3 (Ecchi/Sugestivo): Roupas de banho (biquíni), lingerie, maiôs, trajes de academia ajustados. rating_questionable.
-- Nível 4 (Risco/Ousado): Micro trajes, transparências estratégicas, decotes profundos, molhada. rating_questionable.
-- Nível 5 (Máximo Convencional): Nudez artística ou trajes mínimos explícitos. rating_explicit.
-- Nível 6 (Censura Estratégica / Cobertura Total):
-  - VERSÃO A (Censurada): Aplicação de adereços de censura no prompt: censored, bar censorship, sticker censorship, mosaic censorship, heart stickers covering chest.
-  - VERSÃO B (Sem Censura): Remover as tags de censura, mantendo a cena em rating_explicit.
+### 🧠 1.2 PROTOCOLO DE SENSUALIDADE, VESTUÁRIO E ANATOMIA:
+- Nível 1 - Seguro (SFW): Modéstia total. Trajes normais. rating_safe.
+- Nível 2 - Menos Seguro: Poses atraentes, ajustes leves de caimento. rating_safe.
+- Nível 3 - Ecchi Leve: Roupas de banho (biquíni), lingerie padrão, maiôs, trajes de academia. rating_questionable.
+- Nível 4 - Ecchi: Micro trajes, transparências, decotes profundos. rating_questionable.
+- Nível 5 - Picante: Nudez artística ou trajes mínimos explícitos. rating_explicit.
+- Nível 6 - Dual (Com & Sem Censura):
+  - VERSÃO A (Censurada): Adicione tags de censura: `censored, bar censorship, sticker censorship, mosaic censorship, heart stickers covering chest`.
+  - VERSÃO B (Sem Censura): Remova as tags de censura, mantendo a cena em `rating_explicit`.
+
+- AJUSTES ANATÔMICOS E DETALHES DE VESTUÁRIO (MAPEAMENTO PARA TAGS DANBOORU):
+  - Tamanho dos Seios: Pequenos (`small breasts`), Médios (`medium breasts`), Grandes (`large breasts`), Volumosos (`huge breasts`).
+  - Transparência no Traje: Adicione `see-through, transparent clothes, translucent fabric`.
+  - Realçar Contorno dos Seios: Adicione `clothes pull, fabric hugging breasts, tight clothes, breast outline`.
+  - Detalhes de Mamilos: Discretos (`nipple outline`), Eretos (`hard nipples, erect nipples through clothes`), Muito eretos (`prominent nipples, hard nipples showing through clothes`).
 
 ---
 
 ### 🧬 1.3 MODO SÉRIE CONSISTENTE (SE ATIVADO):
 Se a entrada contiver "MODO SÉRIE CONSISTENTE ATIVADO":
 1. Gere exatamente a quantidade de variações solicitada.
-2. Mantenha os traços faciais, cabelo e identidade do personagem rigorosamente congelados.
+2. Mantenha os traços faciais, cabelo e identidade do personagem congelados.
 3. Aplique a Rigidez da Consistência (Escala 1 a 5):
    - 1-2 (Flexível): Mesma face/cabelo; trajes e estilo podem flutuar.
    - 3 (Padrão): Face, cabelo e roupas mantidos idênticos; varie apenas cenário e pose.
    - 4-5 (Trava Total): Fixação absoluta de 100% de todos os atributos visuais.
-4. Varie APENAS os elementos solicitados (ex: trocar apenas o cenário ou apenas a pose).
+4. Varie APENAS os elementos solicitados.
 
----
-
-### 🏙️ 1.4 ADAPTAÇÃO POR TIPO DE SUJEITO E CATEGORIA DE ARTE:
-- TIPO DE SUJEITO:
-  - Se "Paisagem / Cenário" ou "Objeto / Item": Remova rigorosamente qualquer referência a corpos humanos, roupas, faces ou anatomia no prompt positivo. No PROMPT NEGATIVO, adicione obrigatoriamente: `human, person, woman, man, girl, boy, face, body, hands, legs, feet, crowd`.
-  - Se "Paisagem / Cenário": Foque 100% em arquitetura, natureza, perspectiva, profundidade, clima e iluminação. Adicione ao PROMPT NEGATIVO: `blurry, overexposed, underexposed, cluttered background`.
-  - Se "Objeto / Item": Foque em fotografia de produto, texturas e reflexos. Adicione ao PROMPT NEGATIVO: `blurry, bad reflections, overexposed, cluttered background`.
-  - Se "Feminino" / "Masculino" / "Criatura": Adicione ao PROMPT NEGATIVO: `bad anatomy, bad hands, missing fingers, extra digit, fewer digits, fused fingers, deformed, bad proportions, bad feet, bad legs, extra limbs`.
-
-- EXCLUSÃO DE ESTILO NO PROMPT NEGATIVO (ANTI-ESTILO OBRIGATÓRIO):
-  - Se "Fotorealismo / Foto Realista": Adicione ao PROMPT NEGATIVO: `anime, cartoon, drawing, illustration, 3d render, painting, artwork, CGI, fake skin, smooth skin, doll, plastic`.
-  - Se "Anime / Manga / Ilustração": Adicione ao PROMPT NEGATIVO: `photorealistic, 3d render, photo, realistic skin, real life, volumetric rendering`.
-  - Se "Arte Digital / 3D Render": Adicione ao PROMPT NEGATIVO: `2d, lineart, flat colors, photo, traditional painting`.
-  - Se "Pintura Clássica / Artística": Adicione ao PROMPT NEGATIVO: `photo, 3d render, anime, CGI, digital vector`.
-
-- CATEGORIA DE ARTE:
-  - Se "Fotorealismo / Foto Realista": Use linguagem fotográfica profissional (ex: RAW photo, 8k uhd, dslr, 35mm lens, depth of field, realistic skin texture, natural lighting, shot on 35mm). Desative tags no estilo cartoon/anime.
-  - Se "Anime / Manga / Ilustração": Force estética 2D/Ilustrada (ex: anime style, vibrant colors, lineart, cel shading, digital illustration).
-  - Se "Arte Digital / 3D Render": Use termos de renderização gráfica (ex: 3d render, octane render, unreal engine 5, volumetric lighting, digital concept art).
-  - Se "Pintura Clássica / Artística": Use termos de técnicas tradicionais (ex: oil painting, brush strokes, canvas texture, impressionism, fine art).
 ---
 
 =============================================================================
 MOTOR 2: GERADOR DE PROMPTS PARA IAS DE IMAGEM VIA WEB
 =============================================================================
-Se a entrada contiver "MODO GENERATOR IMAGEM WEB ATIVADO", você atuará como Engenheiro de Prompts especialista em plataformas de imagem web. Adapte A SINTAXE E A ESTRUTURA do prompt em inglês de acordo com a "Plataforma Alvo" selecionada e processe todos os blocos de detalhes fornecidos:
+Se a entrada contiver "MODO GENERATOR IMAGEM WEB ATIVADO", adapte A SINTAXE E A ESTRUTURA do prompt em inglês para a plataforma escolhida:
 
 ### 🌐 2.1 REGRAS POR PLATAFORMA WEB:
-
 1. 🍌 Nano Banana / Web Engine:
-   - Sintaxe: Linguagem hiper-detalhada, focada na máxima fidelidade gráfica e física de renderização do motor.
-   - Detalhes OBRIGATÓRIOS: Especifique detalhadamente texturas de pele/materiais, física de iluminação global, ray tracing, profundidade de campo, dispersão de subsuperfície (subsurface scattering) e renderização 8k.
-   - Estrutura: Prompt corrido em inglês técnico e visualmente rico, incluindo a especificação do aspect ratio na descrição.
-
+   - Sintaxe: Linguagem hiper-detalhada, focada na máxima fidelidade gráfica, ray tracing, profundidade de campo e renderização 8k.
 2. 🎨 Midjourney v6.1:
-   - Sintaxe: Palavras-chave e blocos conceituais separados por vírgulas em inglês fluente e descritivo.
-   - Parâmetros OBRIGATÓRIOS no final do prompt: Adicione os comandos nativos do Midjourney correspondentes ao ratio selecionado (Ex: `--ar 16:9` ou `--ar 9:16`), acrescidos de `--v 6.1 --stylize 250`.
-
+   - Sintaxe: Palavras-chave em inglês descritivo. Adicione parâmetros no final (Ex: `--ar 16:9 --v 6.1 --stylize 250`).
 3. ⚡ Flux.1 (Dev/Schnell):
    - Sintaxe: Descrição em linguagem natural fluida e contínua (estilo parágrafo narrativo).
-   - Foco: Descreva a composição da cena, a posição do sujeito/objeto/paisagem, a lente utilizada (ex: 85mm lens), o tipo de iluminação e o ambiente em um texto coeso sem empilhar apenas tags soltas.
-
 4. 🔤 Ideogram 2.0:
-   - Sintaxe: Foco prioritário na integração entre arte visual e tipografia/texto renderizado.
-   - Regra Rígida de Texto: Se houver "Texto na Imagem", coloque a palavra ou frase exatamente entre aspas duplas dentro do prompt (Ex: a stylish graphic poster that displays the text "Coffee Shop" in bold neon letters).
-
+   - Sintaxe: Foco na integração entre arte e tipografia. Coloque textos exatos entre aspas duplas no prompt.
 5. 🖼️ DALL-E 3 / Bing Image Creator:
-   - Sintaxe: Prompt narrativo amplo, expressivo e highly conceitual.
-   - Foco: Riqueza de contexto, composição artística, estilo de arte claramente definido (ex: fotorealismo, pintura a óleo, arte digital) e paleta de cores.
-
+   - Sintaxe: Prompt narrativo amplo, expressivo e altamente conceitual.
 6. 🎭 Leonardo.Ai / SeaArt:
-   - Sintaxe: Combinação de tags de estilo/preset com descrições estruturadas.
-   - Foco: Iluminação de estúdio, detalhamento visual do sujeito/cenário, renderização 3D/Cinematográfica e atmosfera ambiental.
+   - Sintaxe: Tags de estilo com descrições estruturadas e iluminação ambiental.
 
 ---
 
@@ -185,8 +203,8 @@ Se a entrada contiver "MODO GENERATOR IMAGEM WEB ATIVADO", você atuará como En
 2.2 DIRETRIZES DE DESCRIÇÃO / LEGENDA PARA REDES SOCIAIS (FACEBOOK / INSTAGRAM)
 =============================================================================
 - A legenda em português DEVE SER CURTA, DIRETA E IMPACTANTE (no máximo 2 a 3 frases).
-- Conecte de forma ágil o Nome/Sujeito com a Ação e o Cenário, sem textos longos ou enrolação.
-- REGRA CRÍTICA DE CTA (OBRIGATÓRIO): Toda legenda DEVE FINALIZAR OBRIGATORIAMENTE com uma Chamada para Ação (CTA) forte e persuasiva (ex: "O que você achou dessa versão? Comente abaixo!", "Deixe seu like e diga qual o próximo personagem!", "Curtiu o resultado? Compartilhe com os amigos!"). NUNCA OMITA A CTA.
+- Conecte o Nome/Sujeito com a Ação e o Cenário.
+- REGRA CRÍTICA DE CTA (OBRIGATÓRIO): Toda legenda DEVE FINALIZAR OBRIGATORIAMENTE com uma Chamada para Ação (CTA) forte e persuasiva. NUNCA OMITA A CTA.
 
 =============================================================================
 FORMATOS OBRIGATÓRIOS DE SAÍDA (OUTPUT)
@@ -194,37 +212,36 @@ FORMATOS OBRIGATÓRIOS DE SAÍDA (OUTPUT)
 
 --- SE FOR IMAGEM WEB (MOTOR 2) ---
 ### 🌐 PROMPT OTIMIZADO PARA WEB: [{PLATAFORMA_SELECIONADA}]
-1. PROMPT (Inglês): [Prompt formatado na sintaxe exata exigida pela plataforma, com a expansão canônica 100% no início do prompt]
-2. DESCRIÇÃO REDES SOCIAIS (Português): [Legenda curta de 2 a 3 frases + CTA forte e chamativa obrigatória no final]
+1. PROMPT (Inglês): [Prompt formatado com expansão canônica 100% no início]
+2. DESCRIÇÃO REDES SOCIAIS (Português): [Legenda curta de 2 a 3 frases + CTA forte]
 3. HASHTAGS: [Hashtags virais e relevantes]
-💡 DICA DE APLICAÇÃO: [Instrução prática sobre como colar e ajustar os parâmetros no site da plataforma]
+💡 DICA DE APLICAÇÃO: [Instrução prática sobre como usar no site]
 
---- SE FOR IMAGEM LOCAL (MOTOR 1 - NÍVEL 1 A 5) ---
+--- SE FOR IMAGEM LOCAL (MOTOR 1 - NÍVEIS 1 A 5) ---
 ### 🖼️ IMAGEM: [Nome/Tema do Sujeito] - [Fluxo Selecionado]
-1. PROMPT (Inglês): [Prompt formatado com tags do fluxo escolhido e expansão canônica 100% no início do prompt]
-2. DESCRIÇÃO FACEBOOK (Português): [Legenda curta de 2 a 3 frases + CTA forte e chamativa obrigatória no final]
+1. PROMPT (Inglês): [Prompt formatado com tags do fluxo e expansão canônica 100% no início]
+2. DESCRIÇÃO FACEBOOK (Português): [Legenda curta de 2 a 3 frases + CTA forte]
 3. HASHTAGS: [Hashtags relevantes]
-4. PROMPT NEGATIVO: [Tags negativas exigidas pelo fluxo e regras de sujeito/rating]
+4. PROMPT NEGATIVO: [Prompt negativo dinâmico de 5 camadas]
 
---- SE FOR IMAGEM LOCAL (MOTOR 1 - NÍVEL 6 - CENSURA ESTRATÉGICA) ---
-### 🖼️ IMAGEM: [Nome/Tema do Sujeito] - [Fluxo Selecionado] (CENSURA ESTRATÉGICA)
+--- SE FOR IMAGEM LOCAL (MOTOR 1 - NÍVEL 6 - DUAL / CENSURA ESTRATÉGICA) ---
+### 🖼️ IMAGEM: [Nome/Tema do Sujeito] - [Fluxo Selecionado] (VERSÃO DUAL)
 1. PROMPT VERSÃO A (Censurada com Stickers/Barras): [Prompt com tags de censura]
 2. PROMPT VERSÃO B (Sem Censura/Explícito): [Prompt sem tags de censura]
-3. DESCRIÇÃO FACEBOOK: [Legenda curta de 2 a 3 frases + CTA forte e chamativa obrigatória no final]
+3. DESCRIÇÃO FACEBOOK: [Legenda curta de 2 a 3 frases + CTA forte]
 4. HASHTAGS: [Hashtags]
-5. PROMPT NEGATIVO: [Prompt negativo do fluxo com regras de sujeito/rating]
+5. PROMPT NEGATIVO: [Prompt negativo dinâmico de 5 camadas]
 
 --- SE FOR SÉRIE CONSISTENTE LOCAL ---
 ### 🧬 SÉRIE CONSISTENTE: [Nome do Personagem]
 #### 🖼️ VARIAÇÃO [Número]: [Resumo do elemento alterado]
 - PROMPT (Inglês): [Prompt]
-- PROMPT NEGATIVO: [Prompt Negativo]
+- PROMPT NEGATIVO: [Prompt Negativo Dinâmico]
 """
 
 # ==============================================================================
 # 3. FUNÇÕES AUXILIARES E GERENCIAMENTO DE DADOS
 # ==============================================================================
-# Função para checar acesso no Google Sheets via Google Apps Script
 def verificar_acesso_sheets(email):
     try:
         email_limpo = email.strip().lower()
@@ -286,7 +303,6 @@ def salvar_resultado_manual(texto, nome_sujeito):
         return "⚠️ Nenhum resultado para salvar."
     os.makedirs(PASTA_RESULTADOS, exist_ok=True)
     timestamp = time.strftime("%Y%m%d_%H%M%S")
-    # Sanitização contra caracteres inválidos em nomes de arquivo
     nome_sanitizado = re.sub(r'[^\w\-]', '_', nome_sujeito).lower() if nome_sujeito else "prompts"
     nome_arquivo = f"prompts_{nome_sanitizado}_{timestamp}.txt"
     caminho_completo = os.path.join(PASTA_RESULTADOS, nome_arquivo)
@@ -439,9 +455,9 @@ def chamar_gemini_api(dados_personagem, client, modelo="gemini-3.6-flash"):
     ]
 
     sensualidade = (
-        "Não se aplica (Inativo para Paisagem/Objeto)"
+        "Inativo (Paisagem/Objeto)"
         if is_objeto_ou_paisagem
-        else dados_personagem.get("intensidade", 2)
+        else obter_str_limpa("sensualidade", "2 - Menos Seguro")
     )
     emocao = (
         "Não se aplica"
@@ -449,15 +465,25 @@ def chamar_gemini_api(dados_personagem, client, modelo="gemini-3.6-flash"):
         else (obter_str_limpa("emocao") or "Nenhuma específica")
     )
 
+    seios = "Não especificar" if is_objeto_ou_paisagem else obter_str_limpa("seios", "Padrão do Personagem / Não especificar")
+    mamilos = "Não especificar" if is_objeto_ou_paisagem else obter_str_limpa("mamilos", "Não especificar")
+    transparencia = "Não" if is_objeto_ou_paisagem else ("Sim" if dados_personagem.get("transparencia") else "Não")
+    contorno = "Não" if is_objeto_ou_paisagem else ("Sim" if dados_personagem.get("contorno") else "Não")
+
     if dados_personagem.get("is_web_image"):
         prompt_usuario = f"""--- MODO GENERATOR IMAGEM WEB ATIVADO ---
 Plataforma Alvo Solicitada: {obter_str_limpa('plataforma_web', 'Midjourney v6.1')}
 
 Gere o prompt final otimizado em inglês e crie uma DESCRIÇÃO/LEGENDA CURTA EM PORTUGUÊS (COM CTA OBRIGATÓRIA NO FINAL) baseada nos detalhes da cena fornecidos:
-- f"- Sujeito / Tema Principal: {obter_str_limpa('nome')} (EXIGÊNCIA DE FIDELIDADE CANÔNICA 1:1: Se for um personagem existente, desmembre OBRIGATORIAMENTE em tags Booru detalhadas do Danbooru para rosto, cabelo, olhos, vestuário canônico completo e acessórios no início do prompt!)"
+- Sujeito / Tema Principal: {obter_str_limpa('nome')} (EXIGÊNCIA DE FIDELIDADE CANÔNICA 1:1: Se for um personagem existente, desmembre OBRIGATORIAMENTE em tags Booru detalhadas do Danbooru para rosto, cabelo, olhos, vestuário canônico completo e acessórios no início do prompt!)
 - Tipo de Sujeito: {tipo_sujeito}
 - Categoria de Arte: {obter_str_limpa('categoria_arte', 'Anime / Manga / Ilustração')}
 - Nível de Sensualidade: {sensualidade}
+- Detalhes Anatômicos / Vestuário:
+  * Tamanho dos Seios: {seios}
+  * Transparência no Traje: {transparencia}
+  * Realçar Contorno dos Seios: {contorno}
+  * Estilo dos Mamilos: {mamilos}
 - Orientação (Ratio): {obter_str_limpa('orientacao')}
 - Enquadramento: {obter_str_limpa('enquadramento')}
 - Ação do Sujeito / Estado: {obter_str_limpa('acao')}
@@ -470,13 +496,18 @@ Gere o prompt final otimizado em inglês e crie uma DESCRIÇÃO/LEGENDA CURTA EM
 - Texto na Imagem (Tipografia Opcional): {obter_str_limpa('texto_web', 'Nenhum')}
 """
     else:
-        prompt_usuario = f"""Gere os prompts de imagem em inglês e uma DESCRIÇÃO/LEGENDA CURTA EM PORTUGUÊS (COM CTA OBRIGATÓRIA NO FINAL) para redes sociais conectando o sujeito, a ação, a expressão e o cenário abaixo:
+        prompt_usuario = f"""Gere os prompts de imagem em inglês e uma DESCRIÇÃO/LEGENDA CURTA EM PORTUGUÊS (COM CTA OBRIGATÓRIA NO FINAL) para redes sociais conectando os detalhes abaixo:
 
-- Nome / Sujeito: {obter_str_limpa('nome')} (REQUISITO CRÍTICO DE FIDELIDADE 100%: Se for um personagem existente, aplique o PROTOCOLO DE FIDELIDADE ABSOLUTA 100% inserindo no INÍCIO do prompt a tag da franquia/anime de origem e a decomposição completa do vestuário, rosto, cabelo e acessórios oficiais)
+- Nome / Sujeito: {obter_str_limpa('nome')} (EXIGÊNCIA DE FIDELIDADE CANÔNICA 1:1: Se for um personagem existente, desmembre OBRIGATORIAMENTE em tags Booru detalhadas do Danbooru para rosto, cabelo, olhos, vestuário canônico completo e acessórios no início do prompt!)
 - Fluxo Base: {obter_str_limpa('fluxo', 'Illustrious')}
 - Tipo de Sujeito: {tipo_sujeito}
 - Categoria de Arte: {obter_str_limpa('categoria_arte', 'Anime / Manga / Ilustração')}
 - Nível de Sensualidade: {sensualidade}
+- Detalhes Anatômicos / Vestuário:
+  * Tamanho dos Seios: {seios}
+  * Transparência no Traje: {transparencia}
+  * Realçar Contorno dos Seios: {contorno}
+  * Estilo dos Mamilos: {mamilos}
 - Orientação (Ratio): {obter_str_limpa('orientacao')}
 - Enquadramento: {obter_str_limpa('enquadramento')}
 - Ação do Sujeito / Estado: {obter_str_limpa('acao')}
@@ -525,7 +556,7 @@ Gere o prompt final otimizado em inglês e crie uma DESCRIÇÃO/LEGENDA CURTA EM
 
 
 def st_campo_hibrido(label, placeholder, opcoes, key_prefix, disabled=False):
-    # 'vertical_alignment="bottom"' alinha perfeitamente a caixa de seleção com o campo de texto
+    # Alinhamento vertical na base para alinhar a caixa de texto com o dropdown de Presets
     col_txt, col_drop = st.columns([0.65, 0.35], vertical_alignment="bottom")
 
     def ao_selecionar_preset():
@@ -671,14 +702,42 @@ def renderizar_formulario(
         )
 
         is_obj_or_land = tipo_sujeito in ["Paisagem / Cenário", "Objeto / Item"]
-        intensidade = st.slider(
-            "Sensualidade (1-6):",
-            1,
-            6,
-            2,
+
+        sensualidade = st.select_slider(
+            "Sensualidade:",
+            options=opcoes_sensualidade,
+            value="2 - Menos Seguro",
             disabled=is_obj_or_land,
-            key=f"{prefixo}_intensidade",
+            key=f"{prefixo}_sensualidade",
         )
+
+        # Painel de Ajustes de Vestuário e Anatomia
+        with st.expander("👙 Ajustes de Vestuário e Anatomia", expanded=not is_obj_or_land):
+            seios = st.selectbox(
+                "Tamanho dos Seios:",
+                opcoes_seios,
+                disabled=is_obj_or_land,
+                key=f"{prefixo}_seios",
+            )
+            mamilos = st.selectbox(
+                "Detalhes dos Mamilos:",
+                opcoes_mamilos,
+                disabled=is_obj_or_land,
+                key=f"{prefixo}_mamilos",
+            )
+            col_v1, col_v2 = st.columns(2)
+            with col_v1:
+                transparencia = st.checkbox(
+                    "Transparência no Traje",
+                    disabled=is_obj_or_land,
+                    key=f"{prefixo}_transparencia",
+                )
+            with col_v2:
+                contorno = st.checkbox(
+                    "Realçar Contorno dos Seios",
+                    disabled=is_obj_or_land,
+                    key=f"{prefixo}_contorno",
+                )
 
         orientacao = st.selectbox(
             "Orientação (Ratio):",
@@ -870,7 +929,11 @@ def renderizar_formulario(
         "nome": nome,
         "tipo_sujeito": tipo_sujeito,
         "categoria_arte": categoria_arte,
-        "intensidade": intensidade,
+        "sensualidade": sensualidade,
+        "seios": seios,
+        "mamilos": mamilos,
+        "transparencia": transparencia,
+        "contorno": contorno,
         "orientacao": orientacao,
         "enquadramento": enquadramento,
         "acao": acao,
@@ -1072,7 +1135,7 @@ else:
 
         modelos_disponiveis = [
             "gemini-3.6-flash",
-            "gemini-3.5-pro",
+            "gemini-3.6-pro",
             "gemini-2.5-flash",
         ]
         modelo_salvo = config_salva.get("modelo_padrao", "gemini-3.6-flash")
