@@ -1075,7 +1075,7 @@ else:
             "gemini-3.5-pro",
             "gemini-2.5-flash",
         ]
-        modelo_salvo = config_salva.get("modelo_padrao", "gemini-2.5-flash")
+        modelo_salvo = config_salva.get("modelo_padrao", "gemini-3.6-flash")
         modelo_selecionado = st.selectbox(
             "Modelo Gemini:",
             modelos_disponiveis,
