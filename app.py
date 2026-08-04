@@ -251,7 +251,7 @@ def verificar_acesso_sheets(email):
 def carregar_config():
     config = {
         "chaves": {"Chave 1": "", "Chave 2": ""},
-        "modelo_padrao": "gemini-2.5-flash",
+        "modelo_padrao": "gemini-3.6-flash",
     }
     if os.path.exists(CONFIG_FILE):
         try:
@@ -422,7 +422,7 @@ def carregar_lista_integrada_web(arquivo_padrao, arquivo_web, genero_ref):
     return resultado if resultado else ["Opção Padrão 1"]
 
 
-def chamar_gemini_api(dados_personagem, client, modelo="gemini-2.5-flash"):
+def chamar_gemini_api(dados_personagem, client, modelo="gemini-3.6-flash"):
     if not client:
         return "❌ Erro: Cliente da API não inicializado. Verifique sua Chave API."
 
@@ -1069,11 +1069,9 @@ else:
         )
 
         modelos_disponiveis = [
+            "gemini-3.6-flash",
+            "gemini-3.5-pro",
             "gemini-2.5-flash",
-            "gemini-2.5-pro",
-            "gemini-2.0-flash",
-            "gemini-1.5-flash",
-            "gemini-1.5-pro",
         ]
         modelo_salvo = config_salva.get("modelo_padrao", "gemini-2.5-flash")
         modelo_selecionado = st.selectbox(
