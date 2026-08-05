@@ -992,8 +992,11 @@ def renderizar_formulario(
                 try:
                     client = genai.Client(api_key=chave_atual)
                     resultado = chamar_gemini_api(
-                        dados, client, modelo=modelo_selecionado
-                    )
+            dados, 
+            client, 
+            modelo=modelo_selecionado,
+            usar_busca_web=st.session_state.get("usar_busca_web", False)
+        )
                     st.session_state[f"{prefixo}_resultado"] = resultado
                 except Exception as e:
                     st.error(f"❌ Erro ao inicializar cliente: {str(e)}")
@@ -1153,7 +1156,6 @@ else:
         modelos_disponiveis = [
             "gemini-3.6-flash",
             "gemini-3.5-flash",
-            "gemini-2.5-flash",
         ]
         modelo_salvo = config_salva.get("modelo_padrao", "gemini-3.6-flash")
         modelo_selecionado = st.selectbox(
@@ -1165,14 +1167,25 @@ else:
                 else 0
             ),
         )
+        usar_busca_web = st.checkbox(
+    "🌐 Ativar Pesquisa Web em Tempo Real (Google Grounding)",
+    value=False,
+    key="usar_busca_web"
+    help="⚠️ REQUER CHAVE DE API PAGA (Pay-as-you-go). Se estiver usando a cota gratuita do Google AI Studio, esta opção causará o erro 429 RESOURCE_EXHAUSTED."
+)
+
+if usar_busca_web:
+    st.caption("ℹ️ *Apenas para chaves com faturamento ativo. Melhora a precisão de cores e cânone.*")
 
         if st.button("💾 Salvar Configurações"):
-            for slot in st.session_state.chaves_api.keys():
-                s_key = f"input_key_{slot}"
-                if s_key in st.session_state:
-                    st.session_state.chaves_api[slot] = st.session_state[s_key].strip()
-            salvar_config(st.session_state.chaves_api, modelo_selecionado)
-            st.success("Configurações salvas com sucesso!")
+    for slot in st.session_state.chaves_api.keys():
+        s_key = f"input_key_{slot}"
+        if s_key in st.session_state:
+            st.session_state.chaves_api[slot] = st.session_state[s_key].strip()
+            
+    # Salva o modelo e o estado da busca web
+    salvar_config(st.session_state.chaves_api, modelo_selecionado, usar_busca_web)
+    st.success("Configurações salvas com sucesso!")
 
         st.divider()
         if st.button("Sair / Trocar Conta", use_container_width=True):
