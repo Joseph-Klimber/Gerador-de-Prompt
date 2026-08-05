@@ -1179,9 +1179,9 @@ if usar_busca_web:
 
     if st.button("💾 Salvar Configurações"):
         for slot in st.session_state.chaves_api.keys():
-        s_key = f"input_key_{slot}"
-        if s_key in st.session_state:
-            st.session_state.chaves_api[slot] = st.session_state[s_key].strip()
+            s_key = f"input_key_{slot}"
+            if s_key in st.session_state:
+                st.session_state.chaves_api[slot] = st.session_state[s_key].strip()
             
     # Salva o modelo e o estado da busca web
     salvar_config(st.session_state.chaves_api, modelo_selecionado, usar_busca_web)
