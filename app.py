@@ -553,7 +553,7 @@ Gere o prompt final otimizado em inglês e crie uma DESCRIÇÃO/LEGENDA CURTA EM
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction,
                 temperature=0.7,
-                tools=[{"google_search": {}}],  # Ativa a pesquisa web para validação de cânone
+                # tools=[{"google_search": {}}],  # Ativa a pesquisa web para validação de cânone
             ),
         )
         if response and hasattr(response, "candidates") and response.candidates:
