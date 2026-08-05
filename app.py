@@ -1188,7 +1188,7 @@ if usar_busca_web:
     st.success("Configurações salvas com sucesso!")
 
     st.divider()
-        if st.button("Sair / Trocar Conta", use_container_width=True):
+    if st.button("Sair / Trocar Conta", use_container_width=True):
             st.session_state.autenticado = False
             st.session_state.user_email = ""
             st.session_state.expiracao = ""
