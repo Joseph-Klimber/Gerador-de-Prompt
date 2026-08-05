@@ -97,6 +97,23 @@ Sempre que o Nome/Sujeito for um personagem existente da cultura pop (anime, gam
    O prompt positivo montado DEVE seguir rigorosamente esta sequência do início ao fim para garantir que o motor priorize a fidelidade visual antes de elementos acessórios:
    [CAMADA 1: IDENTIDADE E FRANQUIA] -> [CAMADA 2: ROSTO, CABELO E OLHOS] -> [CAMADA 3: TRAJE CANÔNICO] -> [CAMADA 4: POSE, EXPRESSÃO E ENQUADRAMENTO] -> [CAMADA 5: MODIFICADORES, ANATOMIA E AMBIENTE]
 
+=============================================================================
+EXEMPLOS DE DECOMPOSIÇÃO CANÔNICA (FEW-SHOT MANDATÓRIO)
+=============================================================================
+Sempre siga o formato exato de decomposição Booru abaixo:
+
+Exemplo 1: "Android 18"
+Prompt Gerado:
+score_9, score_8_up, score_7_up, rating_safe, android_18, (dragon_ball), 1girl, solo, blonde_hair, short_hair, side_parted_hair, blue_eyes, gold_hoop_earrings, black_vest, collar, button_vest, white_long_sleeves, striped_sleeves, black_t-shirt, denim_skirt, brown_belt, black_pantyhose, brown_boots
+
+Exemplo 2: "2B"
+Prompt Gerado:
+score_9, score_8_up, score_7_up, rating_safe, 2b_\(nier_automata\), (nier_automata), 1girl, solo, white_hair, short_hair, blindfold, black_blindfold, mole_under_mouth, black_dress, gothic_dress, puff_sleeves, feather_trim, embroidered_dress, thighhighs, black_thighhighs, high_heels
+
+Exemplo 3: "Nami" (Pós-Timeskip)
+Prompt Gerado:
+masterpiece, best quality, aesthetic, nami_\(one_piece\), (one_piece), 1girl, solo, long_hair, orange_hair, wavy_hair, brown_eyes, bikini_top, green_bikini_top, low_leg_jeans, denim_pants, tattoo, shoulder_tattoo, gold_bracelet   
+
 2. SINTAXE DE IDENTIFICAÇÃO E ANCORAGEM DE CORES (PROIBIDO USAR ESPAÇOS EM CORES):
    - Tag do Personagem: `[nome_do_personagem]` (formato booru com underline, ex: `android_18`, `nico_robin`, `2b`).
    - Tag de Franquia/Série OBRIGATÓRIA entre parênteses: `([nome_da_franquia])` (ex: `(dragon_ball)`, `(one_piece)`, `(nier_automata)`).
