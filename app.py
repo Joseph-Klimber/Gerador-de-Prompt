@@ -1187,7 +1187,7 @@ if usar_busca_web:
     salvar_config(st.session_state.chaves_api, modelo_selecionado, usar_busca_web)
     st.success("Configurações salvas com sucesso!")
 
-        st.divider()
+    st.divider()
         if st.button("Sair / Trocar Conta", use_container_width=True):
             st.session_state.autenticado = False
             st.session_state.user_email = ""
