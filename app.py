@@ -1169,8 +1169,7 @@ else:
         )
         usar_busca_web = st.checkbox(
     "🌐 Ativar Pesquisa Web em Tempo Real (Google Grounding)",
-    value=False,
-    key="usar_busca_web"
+    value=False,key="usar_busca_web"
     help="⚠️ REQUER CHAVE DE API PAGA (Pay-as-you-go). Se estiver usando a cota gratuita do Google AI Studio, esta opção causará o erro 429 RESOURCE_EXHAUSTED."
 )
 
