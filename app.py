@@ -1177,7 +1177,7 @@ else:
 if usar_busca_web:
     st.caption("ℹ️ *Apenas para chaves com faturamento ativo. Melhora a precisão de cores e cânone.*")
 
-        if st.button("💾 Salvar Configurações"):
+    if st.button("💾 Salvar Configurações"):
     for slot in st.session_state.chaves_api.keys():
         s_key = f"input_key_{slot}"
         if s_key in st.session_state:
