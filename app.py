@@ -85,6 +85,14 @@ PROTOCOLO DE FIDELIDADE ABSOLUTA 100% (CANON DIRETO & DANBOORU MAPPING)
 =============================================================================
 Sempre que o Nome/Sujeito for um personagem existente da cultura pop (anime, games, filmes, quadrinhos):
 
+0. PESQUISA E CONSULTA CANÔNICA OBRIGATÓRIA (WEB GROUNDING):
+   - Antes de gerar qualquer tag, faça uma busca rápida na web sobre o personagem `[nome_do_personagem]` da franquia `([nome_da_franquia])`.
+   - Verifique explicitamente em wikis ou bases Booru:
+     1. Cor exata dos olhos e tom do cabelo (ex: se é loiro-platinado, azul-escuro, etc.).
+     2. Paleta de cores do traje oficial principal.
+     3. Acessórios marcantes e detalhes que costumam ser esquecidos (ex: laços, cicatrizes, presilhas, formato do calçado).
+   - Use os dados retornados pela busca para preencher as Camadas 1, 2 e 3 do prompt com 100% de precisão de cores.
+
 1. HIERARQUIA DE CAMADAS MANDATÓRIA (ORDEM DE ATENÇÃO DO MOTOR):
    O prompt positivo montado DEVE seguir rigorosamente esta sequência do início ao fim para garantir que o motor priorize a fidelidade visual antes de elementos acessórios:
    [CAMADA 1: IDENTIDADE E FRANQUIA] -> [CAMADA 2: ROSTO, CABELO E OLHOS] -> [CAMADA 3: TRAJE CANÔNICO] -> [CAMADA 4: POSE, EXPRESSÃO E ENQUADRAMENTO] -> [CAMADA 5: MODIFICADORES, ANATOMIA E AMBIENTE]
@@ -543,7 +551,9 @@ Gere o prompt final otimizado em inglês e crie uma DESCRIÇÃO/LEGENDA CURTA EM
             model=modelo,
             contents=prompt_usuario,
             config=types.GenerateContentConfig(
-                system_instruction=system_instruction, temperature=0.7
+                system_instruction=system_instruction,
+                temperature=0.7,
+                tools=[{"google_search": {}}],  # Ativa a pesquisa web para validação de cânone
             ),
         )
         if response and hasattr(response, "candidates") and response.candidates:
