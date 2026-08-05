@@ -554,7 +554,7 @@ Gere o prompt final otimizado em inglês e crie uma DESCRIÇÃO/LEGENDA CURTA EM
     try:
         config_kwargs = {
             "system_instruction": system_instruction,
-            "temperature": 0.7,
+            "temperature": 0.4,
         }
         if usar_busca_web:
             config_kwargs["tools"] = [{"google_search": {}}]
