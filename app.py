@@ -208,7 +208,7 @@ Se a entrada contiver "MODO GENERATOR IMAGEM WEB ATIVADO", adapte A SINTAXE E A 
 4. 🔤 Ideogram 2.0:
    - Sintaxe: Foco na integração entre arte e tipografia. Coloque textos exatos entre aspas duplas no prompt.
 5. 🖼️ DALL-E 3 / Bing Image Creator:
-   - Sintaxe: Prompt narrativo amplo, expressivo e altamente conceitual.
+   - Sintaxe: Prompt narrativo amplo, expressivo e highly conceitual.
 6. 🎭 Leonardo.Ai / SeaArt:
    - Sintaxe: Tags de estilo com descrições estruturadas e iluminação ambiental.
 
@@ -286,6 +286,7 @@ def carregar_config():
     config = {
         "chaves": {"Chave 1": "", "Chave 2": ""},
         "modelo_padrao": "gemini-3.6-flash",
+        "usar_busca_web": False,
     }
     if os.path.exists(CONFIG_FILE):
         try:
@@ -307,8 +308,12 @@ def carregar_config():
     return config
 
 
-def salvar_config(chaves_dict, modelo_padrao):
-    dados = {"chaves": chaves_dict, "modelo_padrao": modelo_padrao}
+def salvar_config(chaves_dict, modelo_padrao, usar_busca_web=False):
+    dados = {
+        "chaves": chaves_dict, 
+        "modelo_padrao": modelo_padrao,
+        "usar_busca_web": usar_busca_web,
+    }
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(dados, f, indent=4, ensure_ascii=False)
 
@@ -455,7 +460,7 @@ def carregar_lista_integrada_web(arquivo_padrao, arquivo_web, genero_ref):
     return resultado if resultado else ["Opção Padrão 1"]
 
 
-def chamar_gemini_api(dados_personagem, client, modelo="gemini-3.6-flash"):
+def chamar_gemini_api(dados_personagem, client, modelo="gemini-3.6-flash", usar_busca_web=False):
     if not client:
         return "❌ Erro: Cliente da API não inicializado. Verifique sua Chave API."
 
@@ -547,14 +552,17 @@ Gere o prompt final otimizado em inglês e crie uma DESCRIÇÃO/LEGENDA CURTA EM
 """
 
     try:
+        config_kwargs = {
+            "system_instruction": system_instruction,
+            "temperature": 0.7,
+        }
+        if usar_busca_web:
+            config_kwargs["tools"] = [{"google_search": {}}]
+
         response = client.models.generate_content(
             model=modelo,
             contents=prompt_usuario,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                temperature=0.7,
-                # tools=[{"google_search": {}}],  # Ativa a pesquisa web para validação de cânone
-            ),
+            config=types.GenerateContentConfig(**config_kwargs),
         )
         if response and hasattr(response, "candidates") and response.candidates:
             cand = response.candidates[0]
@@ -992,11 +1000,11 @@ def renderizar_formulario(
                 try:
                     client = genai.Client(api_key=chave_atual)
                     resultado = chamar_gemini_api(
-            dados, 
-            client, 
-            modelo=modelo_selecionado,
-            usar_busca_web=st.session_state.get("usar_busca_web", False)
-        )
+                        dados, 
+                        client, 
+                        modelo=modelo_selecionado,
+                        usar_busca_web=st.session_state.get("usar_busca_web", False)
+                    )
                     st.session_state[f"{prefixo}_resultado"] = resultado
                 except Exception as e:
                     st.error(f"❌ Erro ao inicializar cliente: {str(e)}")
@@ -1168,27 +1176,26 @@ else:
             ),
         )
         usar_busca_web = st.checkbox(
-    "🌐 Ativar Pesquisa Web em Tempo Real (Google Grounding)",
-    value=False,
-    key="usar_busca_web",
-    help="⚠️ REQUER CHAVE DE API PAGA (Pay-as-you-go). Se estiver usando a cota gratuita do Google AI Studio, esta opção causará o erro 429 RESOURCE_EXHAUSTED."
-)
+            "🌐 Ativar Pesquisa Web em Tempo Real (Google Grounding)",
+            value=config_salva.get("usar_busca_web", False),
+            key="usar_busca_web",
+            help="⚠️ REQUER CHAVE DE API PAGA (Pay-as-you-go). Se estiver usando a cota gratuita do Google AI Studio, esta opção causará o erro 429 RESOURCE_EXHAUSTED."
+        )
 
-if usar_busca_web:
-    st.caption("ℹ️ *Apenas para chaves com faturamento ativo. Melhora a precisão de cores e cânone.*")
+        if usar_busca_web:
+            st.caption("ℹ️ *Apenas para chaves com faturamento ativo. Melhora a precisão de cores e cânone.*")
 
-    if st.button("💾 Salvar Configurações"):
-        for slot in st.session_state.chaves_api.keys():
-            s_key = f"input_key_{slot}"
-            if s_key in st.session_state:
-                st.session_state.chaves_api[slot] = st.session_state[s_key].strip()
-            
-    # Salva o modelo e o estado da busca web
-    salvar_config(st.session_state.chaves_api, modelo_selecionado, usar_busca_web)
-    st.success("Configurações salvas com sucesso!")
+        if st.button("💾 Salvar Configurações"):
+            for slot in st.session_state.chaves_api.keys():
+                s_key = f"input_key_{slot}"
+                if s_key in st.session_state:
+                    st.session_state.chaves_api[slot] = st.session_state[s_key].strip()
+            # Salva o modelo e o estado da busca web
+            salvar_config(st.session_state.chaves_api, modelo_selecionado, usar_busca_web)
+            st.success("Configurações salvas com sucesso!")
 
-    st.divider()
-     if st.button("Sair / Trocar Conta", use_container_width=True):
+        st.divider()
+        if st.button("Sair / Trocar Conta", use_container_width=True):
             st.session_state.autenticado = False
             st.session_state.user_email = ""
             st.session_state.expiracao = ""
