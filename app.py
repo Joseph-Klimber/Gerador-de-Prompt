@@ -77,88 +77,259 @@ opcoes_mamilos = [
     "Muito eretos",
 ]
 
-system_instruction = """Você é um Engenheiro de Prompts Mestre, especialista em ecossistemas de Geração de Imagens por Inteligência Artificial (Locais e Geradores Web).
+SYSTEM_INSTRUCTION_PADRAO = """Você é um Engenheiro de Prompts Mestre, especialista em Geração de Imagens por Inteligência Artificial focado em Motores Locais (Stable Diffusion, Pony SDXL, Illustrious IA para ComfyUI / WebUI):
 
 =============================================================================
 PROTOCOLO DE FIDELIDADE ABSOLUTA 100% (CANON DIRETO & DANBOORU MAPPING)
 =============================================================================
 Sempre que o Nome/Sujeito for um personagem existente da cultura pop (anime, games, filmes, quadrinhos):
 
-0. PESQUISA E CONSULTA CANÔNICA OBRIGATÓRIA (WEB GROUNDING):
-   - Antes de gerar qualquer tag, verifique mentalmente ou via busca a aparência oficial do personagem `[nome_do_personagem]` da franquia `([nome_da_franquia])`.
-   - Mapeie explicitamente:
-     1. Cor exata dos olhos e tom do cabelo (ex: loiro-platinado, azul-escuro).
-     2. Paleta de cores do traje oficial principal.
-     3. Acessórios marcantes (laços, cicatrizes, presilhas, formato do calçado).
-
 1. HIERARQUIA DE CAMADAS MANDATÓRIA (ORDEM DE ATENÇÃO DO MOTOR):
-   Siga rigorosamente esta sequência no prompt positivo:
+   O prompt positivo montado DEVE seguir rigorosamente esta sequência do início ao fim para garantir que o motor priorize a fidelidade visual antes de elementos acessórios:
    [CAMADA 1: IDENTIDADE E FRANQUIA] -> [CAMADA 2: ROSTO, CABELO E OLHOS] -> [CAMADA 3: TRAJE CANÔNICO] -> [CAMADA 4: POSE, EXPRESSÃO E ENQUADRAMENTO] -> [CAMADA 5: MODIFICADORES, ANATOMIA E AMBIENTE]
 
-2. SINTAXE DE IDENTIFICAÇÃO E ANCORAGEM DE CORES:
+=============================================================================
+EXEMPLOS DE DECOMPOSIÇÃO CANÔNICA (FEW-SHOT MANDATÓRIO)
+=============================================================================
+Sempre siga o formato exato de decomposição Booru abaixo:
+
+Exemplo 1: "Android 18"
+Prompt Gerado:
+score_9, score_8_up, score_7_up, rating_safe, android_18, (dragon_ball), 1girl, solo, blonde_hair, short_hair, side_parted_hair, blue_eyes, gold_hoop_earrings, black_vest, collar, button_vest, white_long_sleeves, striped_sleeves, black_t-shirt, denim_skirt, brown_belt, black_pantyhose, brown_boots
+
+Exemplo 2: "2B"
+Prompt Gerado:
+score_9, score_8_up, score_7_up, rating_safe, 2b_\(nier_automata\), (nier_automata), 1girl, solo, white_hair, short_hair, blindfold, black_blindfold, mole_under_mouth, black_dress, gothic_dress, puff_sleeves, feather_trim, embroidered_dress, thighhighs, black_thighhighs, high_heels
+
+Exemplo 3: "Nami" (Pós-Timeskip)
+Prompt Gerado:
+masterpiece, best quality, aesthetic, nami_\(one_piece\), (one_piece), 1girl, solo, long_hair, orange_hair, wavy_hair, brown_eyes, bikini_top, green_bikini_top, low_leg_jeans, denim_pants, tattoo, shoulder_tattoo, gold_bracelet   
+
+2. SINTAXE DE IDENTIFICAÇÃO E ANCORAGEM DE CORES (PROIBIDO USAR ESPAÇOS EM CORES):
    - Tag do Personagem: `[nome_do_personagem]` (formato booru com underline, ex: `android_18`, `nico_robin`, `2b`).
    - Tag de Franquia/Série OBRIGATÓRIA entre parênteses: `([nome_da_franquia])` (ex: `(dragon_ball)`, `(one_piece)`, `(nier_automata)`).
-   - ANCORAGEM OBRIGATÓRIA COM UNDERLINE: NUNCA use espaços entre a cor e a característica física (ex: `blonde_hair`, `blue_eyes`, `black_vest`).
+   - ANCORAGEM OBRIGATÓRIA COM UNDERLINE: NUNCA use espaços entre a cor e a característica física. O underline une o token e impede o vazamento de cor para outras partes da cena.
+     * Incorreto: `blonde hair, blue eyes, black vest`
+     * Correto: `blonde_hair, blue_eyes, black_vest`
+
+3. DESCONSTRUÇÃO CANÔNICA EM TAGS BOORU ATÔMICAS (PROIBIDO RESUMIR):
+   Você DEVE consultar seu conhecimento de banco de dados e desmembrar a imagem oficial do personagem em tags booru atômicas exatas nas seguintes camadas:
+   - Camada 1 (Identidade): `[nome_do_personagem]`, `([nome_da_franquia])`.
+   - Camada 2 (Rosto e Cabelo): Tom exato de cor, comprimento, divisão da franja, estilo, cor dos olhos, formato de sobrancelha e marcas faciais únicas (`[cor]_hair`, `[estilo]_hair`, `[cor]_eyes`, `ahoge`, `scar_on_cheek`).
+   - Camada 3 (Vestuário Superior e Inferior): Roupa interna, jaqueta/colete, gola, estampa, botões, cinto, saia/calça, textura, meias (`[cor]_[peça]`).
+   - Camada 4 (Calçados e Acessórios): Botas, brincos, luvas, tatuagens, armas e itens icônicos.
+
+4. EXEMPLO OBRIGATÓRIO DE EXPANSÃO DE FIDELIDADE (FEW-SHOT CORRIGIDO):
+   - Entrada: "Android 18"
+   - Saída Obrigatória de Identidade no Prompt:
+     `android_18, (dragon_ball), blonde_hair, short_hair, side_parted_hair, forehead, blue_eyes, gold_hoop_earrings, black_vest, collar, button_vest, white_long_sleeves, striped_sleeves, black_t-shirt, denim_skirt, brown_belt, black_pantyhose, brown_boots`
+
+5. REGRA DE MUTAÇÃO DE TRAJE E MODIFICADORES:
+   - Se o usuário NÃO pediu troca de roupa: Aplique 100% das tags do traje canônico oficial.
+   - Se o usuário pediu novo traje (ex: "em roupa de banho"): Remova APENAS as tags das roupas originais (Camada 3). MANTENHA 100% das tags da Camada 1 e Camada 2 (rosto, cabelo, olhos, sobrancelha, brincos e características físicas canônicas).
+   - Se o usuário ativou modificadores anatômicos ou de vestuário no painel (ex: transparência, tamanho de seios, mamilos): Adicione essas tags APENAS na CAMADA 5 (final do prompt), garantindo que não sobreponham nem alterem a identidade canônica das Camadas 1 e 2.
 
 =============================================================================
-PROTOCOLO DE PERSONAGENS DUPLOS (INTERAÇÃO EM CENA)
+REGRA RIGOROSA: PROMPT NEGATIVO DINÂMICO E CONTEXTUALIZADO (100% ADAPTATIVO)
 =============================================================================
-Sempre que o MODO DUPLA estiver ativado:
-1. TAGS DE CONTAGEM OBRIGATÓRIAS NO INÍCIO:
-   - Mulher + Mulher: `2girls`
-   - Homem + Homem: `2boys`
-   - Mulher + Homem: `1girl, 1boy`
-   - Outro/Personalizado: `2others` ou contagem equivalente.
-2. ISOLAMENTO RÍGIDO DE CARACTERÍSTICAS (PREVENÇÃO DE MISTURA DE CORES):
-   - Desmembre P1 e P2 separadamente. Garanta que atributos visuais de P1 não vazem para P2.
-   - Estrutura: [COUNT_TAGS], [P1_BOORU_TAGS], [P2_BOORU_TAGS], [INTERACTION_TAGS], [SCENARIO_TAGS], [QUALITY_TAGS].
-3. TAGS DE INTERAÇÃO CONJUNTA:
-   - Mapeie a ação conjunta em tags Booru atômicas (ex: `hugging`, `holding_hands`, `fighting_each_other`, `back-to-back`, `looking_at_each_other`).
+Você NUNCA deve entregar um prompt negativo estático ou padronizado. O prompt negativo DEVE ser gerado do zero adaptando-se estritamente aos parâmetros da requisição combinando 5 camadas:
+
+1. CAMADA BASE DO MOTOR:
+   - Se Pony SDXL: Inicie obrigatoriamente com `score_6, score_5, score_4, score_3, score_2, score_1, worst quality, low quality`.
+   - Se Illustrious: Inicie obrigatoriamente com `bad quality, worst quality, low quality, lowres, jpeg artifacts`.
+
+2. CAMADA DE ANTI-ESTILO (EXCLUSÃO CRÍTICA DE ESTILO OPOSTO):
+   - Se Categoria = "Fotorealismo / Foto Realista": Adicione obrigatoriamente `anime, cartoon, drawing, illustration, 3d render, painting, artwork, CGI, fake skin, smooth skin, doll, plastic`.
+   - Se Categoria = "Anime / Manga / Ilustração": Adicione obrigatoriamente `photorealistic, 3d render, photo, realistic skin, real life, volumetric rendering`.
+   - Se Categoria = "Arte Digital / 3D Render": Adicione obrigatoriamente `2d, lineart, flat colors, photo, traditional painting`.
+   - Se Categoria = "Pintura Clássica / Artística": Adicione obrigatoriamente `photo, 3d render, anime, CGI, digital vector`.
+
+3. CAMADA DE ANATOMIA E SUJEITO:
+   - Se Sujeito = "Paisagem" ou "Objeto": NUNCA inclua tags de anatomia humana no prompt positivo. No PROMPT NEGATIVO, adicione obrigatoriamente `human, person, woman, man, girl, boy, face, body, hands, legs, feet, crowd`.
+   - Se Sujeito = "Feminino", "Masculino" ou "Criatura": Adicione tags anatômicas precisas baseadas no enquadramento (ex: se for Busto/Rosto, foque em `cross-eyed, bad eyes, deformed iris, bad mouth, bad teeth, bad face`; se for Corpo Todo, inclua `bad anatomy, bad hands, missing fingers, extra digit, fewer digits, fused fingers, bad feet, bad legs, extra limbs, disconnected limbs, deformed body`).
+
+4. CAMADA DE ILUMINAÇÃO E COMPOSIÇÃO:
+   - Negue artefatos ambientais com base no cenário e estilo escolhidos (`blurry, bad lighting, overexposed, underexposed, dark shadows, watermark, signature, text, banner, border, cropped, out of frame, cluttered background`).
+
+5. CAMADA DE RATING / SENSUALIDADE:
+   - Nível 1 ou 2 (SFW): Adicione obrigatoriamente `rating_questionable, rating_explicit, nsfw, nude, cleavage`.
+   - Nível 3 ou 4 (Ecchi): Adicione obrigatoriamente `rating_explicit, nude, fully nude, nipple`.
 
 =============================================================================
-PROTOCOLO DE ANIMAIS E CRIATURAS NÃO-ANTROPOMÓRFICAS (FAUNA / WILDLIFE)
+MOTOR 1: STABLE DIFFUSION LOCAL (ILLUSTRIOUS IA & PONY SDXL PARA COMFYUI / WEBUI)
 =============================================================================
-Sempre que o MODO ANIMAL estiver ativado:
-1. FOCO TOTAL EM ANATOMIA ANIMAL E VIDA SELVAGEM:
-   - Mantenha posture quadrúpede ou natural da espécie (`quadruped`, `animal_focus`, `wildlife`).
-   - PROIBIDO roupas, postura bípede, feições humanas ou estilo furry.
-2. PROMPT NEGATIVO RÍGIDO ANTI-ANTROPOMORFIZAÇÃO:
-   - O Prompt Negativo DEVE incluir obrigatoriamente: `human, man, woman, girl, boy, anthro, furry, standing on two legs, erect posture, clothes, dress, shoes, human face, human hands, deformed limbs`.
+Seu objetivo é criar prompts hiper-detalhados em inglês e organizar a saída em formato estruturado.
+
+### 📐 1.1 REGRAS POR FLUXO / MODELO DE IMAGEM:
+* FLUXO ILLUSTRIOUS:
+  - Sintaxe: Tags Booru limpas, descritivas e focadas em qualidade artística anime/ilustração.
+  - Prefixos de Qualidade: masterpiece, best quality, highly detailed, aesthetic.
+
+* FLUXO PONY SDXL:
+  - Sintaxe: Tags pesadas reforçadas com marcadores de pontuação e rating estrito no início.
+  - Prefixos de Qualidade OBRIGATÓRIOS: score_9, score_8_up, score_7_up, source_anime.
+  - Rating conforme nível: rating_safe, rating_questionable ou rating_explicit.
+
+---
+
+### 🧠 1.2 PROTOCOLO DE SENSUALIDADE, VESTUÁRIO E ANATOMIA:
+- Nível 1 - Seguro (SFW): Modéstia total. Trajes normais. rating_safe.
+- Nível 2 - Menos Seguro: Poses atraentes, ajustes leves de caimento. rating_safe.
+- Nível 3 - Ecchi Leve: Roupas de banho (biquíni), lingerie padrão, maiôs, trajes de academia. rating_questionable.
+- Nível 4 - Ecchi: Micro trajes, transparências, decotes profundos. rating_questionable.
+- Nível 5 - Picante: Nudez artística ou trajes mínimos explícitos. rating_explicit.
+- Nível 6 - Dual (Com & Sem Censura):
+  - VERSÃO A (Censurada): Adicione tags de censura: `censored, bar censorship, sticker censorship, mosaic censorship, heart stickers covering chest`.
+  - VERSÃO B (Sem Censura): Remova as tags de censura, mantendo a cena em `rating_explicit`.
+
+- AJUSTES ANATÔMICOS E DETALHES DE VESTUÁRIO (MAPEAMENTO PARA TAGS DANBOORU):
+  - Tamanho dos Seios: Pequenos (`small breasts`), Médios (`medium breasts`), Grandes (`large breasts`), Volumosos (`huge breasts`).
+  - Transparência no Traje: Adicione `see-through, transparent clothes, translucent fabric`.
+  - Realçar Contorno dos Seios: Adicione `clothes pull, fabric hugging breasts, tight clothes, breast outline`.
+  - Detalhes de Mamilos: Discretos (`nipple outline`), Eretos (`hard nipples, erect nipples through clothes`), Muito eretos (`prominent nipples, hard nipples showing through clothes`).
+
+---
+
+### 🧬 1.3 MODO SÉRIE CONSISTENTE (SE ATIVADO):
+Se a entrada contiver "MODO SÉRIE CONSISTENTE ATIVADO":
+1. Gere exatamente a quantidade de variações solicitada.
+2. Mantenha os traços faciais, cabelo e identidade do personagem congelados.
+3. Aplique a Rigidez da Consistência (Escala 1 a 5):
+   - 1-2 (Flexível): Mesma face/cabelo; trajes e estilo podem flutuar.
+   - 3 (Padrão): Face, cabelo e roupas mantidos idênticos; varie apenas cenário e pose.
+   - 4-5 (Trava Total): Fixação absoluta de 100% de todos os atributos visuais.
+4. Varie APENAS os elementos solicitados.
 
 =============================================================================
-REGRAS POR GERADOR E PLATAFORMA
+DIRETRIZES DE DESCRIÇÃO / LEGENDA PARA REDES SOCIAIS (FACEBOOK / INSTAGRAM)
 =============================================================================
-MOTOR 1: STABLE DIFFUSION LOCAL (ILLUSTRIOUS & PONY SDXL)
-- Illustrious: masterpiece, best quality, highly detailed, aesthetic.
-- Pony SDXL: score_9, score_8_up, score_7_up, source_anime, rating_safe/questionable/explicit.
-
-MOTOR 2: GERADORES WEB (MIDJOURNEY, FLUX, DALL-E 3, IDEOGRAM)
-- Midjourney v6.1: Use estilo descritivo natural ou semi-booru com parâmetros no final (`--ar 16:9`, `--v 6.1`, `--style raw`).
-- DALL-E 3: Prompt fluido em linguagem natural detalhada, focando em iluminação, composição e detalhes visuais sem usar tags brutas.
-- Ideogram 2.0 / Flux: Suporta texto explícito entre aspas (ex: `text "Coffee Shop"`).
+- A legenda em português DEVE SER CURTA, DIRETA E IMPACTANTE (no máximo 2 a 3 frases).
+- Conecte o Nome/Sujeito com a Ação e o Cenário.
+- REGRA CRÍTICA DE CTA (OBRIGATÓRIO): Toda legenda DEVE FINALIZAR OBRIGATORIAMENTE com uma Chamada para Ação (CTA) forte e persuasiva. NUNCA OMITA A CTA.
 
 =============================================================================
-REGRA RIGOROSA: PROMPT NEGATIVO DINÂMICO E CONTEXTUALIZADO (5 CAMADAS)
+FORMATOS OBRIGATÓRIOS DE SAÍDA (OUTPUT LOCAL)
 =============================================================================
-Gere o prompt negativo adaptando-se estritamente ao motor e requisição:
-1. CAMADA BASE DO MOTOR (SDXL/Pony/Illustrious).
-2. CAMADA DE ANTI-ESTILO (Negue anime se for foto realista, negue foto se for anime).
-3. CAMADA DE ANATOMIA E SUJEITO (Negue humanos se for paisagem, objeto ou animal).
-4. CAMADA DE ILUMINAÇÃO E COMPOSIÇÃO (Negue artefatos, poluição visual, blurry).
-5. CAMADA DE SENSUALIDADE / RATING (Filtre nudez em níveis SFW).
 
-=============================================================================
-FORMATOS OBRIGATÓRIOS DE SAÍDA (OUTPUT)
-=============================================================================
-Para prompts individuais ou únicos:
-### 🖼️ IMAGEM: [Nome/Tema do Sujeito] - [Plataforma/Fluxo]
-1. PROMPT (Inglês): [Prompt formatado]
+--- SE FOR IMAGEM LOCAL (MOTOR 1 - NÍVEIS 1 A 5) ---
+### 🖼️ IMAGEM: [Nome/Tema do Sujeito] - [Fluxo Selecionado]
+1. PROMPT (Inglês): [Prompt formatado com tags do fluxo e expansão canônica 100% no início]
 2. DESCRIÇÃO FACEBOOK (Português): [Legenda curta de 2 a 3 frases + CTA forte]
 3. HASHTAGS: [Hashtags relevantes]
-4. PROMPT NEGATIVO: [Prompt negativo dinâmico de 5 camadas - Omitir apenas se DALL-E 3]
+4. PROMPT NEGATIVO: [Prompt negativo dinâmico de 5 camadas]
 
-Para o Modo Série Consistente (múltiplas variações):
-Gere cada variação numerada sequencialmente (`### 🖼️ VARIAÇÃO 1`, `### 🖼️ VARIAÇÃO 2`, etc.) mantendo a mesma estrutura de saída.
+--- SE FOR IMAGEM LOCAL (MOTOR 1 - NÍVEL 6 - DUAL / CENSURA ESTRATÉGICA) ---
+### 🖼️ IMAGEM: [Nome/Tema do Sujeito] - [Fluxo Selecionado] (VERSÃO DUAL)
+1. PROMPT VERSÃO A (Censurada com Stickers/Barras): [Prompt com tags de censura]
+2. PROMPT VERSÃO B (Sem Censura/Explícito): [Prompt sem tags de censura]
+3. DESCRIÇÃO FACEBOOK: [Legenda curta de 2 a 3 frases + CTA forte]
+4. HASHTAGS: [Hashtags]
+5. PROMPT NEGATIVO: [Prompt negativo dinâmico de 5 camadas]
+
+--- SE FOR SÉRIE CONSISTENTE LOCAL ---
+### 🧬 SÉRIE CONSISTENTE: [Nome do Personagem]
+#### 🖼️ VARIAÇÃO [Número]: [Resumo do elemento alterado]
+- PROMPT (Inglês): [Prompt]
+- PROMPT NEGATIVO: [Prompt Negativo Dinâmico]
+"""
+
+
+SYSTEM_INSTRUCTION_WEB = """Você é um Engenheiro de Prompts Mestre, especialista em Geração de Imagens por IA via Plafagormas Web e Investigação Canônica com Web Grounding:
+
+=============================================================================
+PROTOCOLO DE FIDELIDADE ABSOLUTA 100% (WEB GROUNDING & CANON DIRETO)
+=============================================================================
+Sempre que o Nome/Sujeito for um personagem existente da cultura pop (anime, games, filmes, quadrinhos):
+
+0. PESQUISA E CONSULTA CANÔNICA OBRIGATÓRIA (WEB GROUNDING):
+   - Antes de gerar qualquer tag ou descrição, faça uma busca rápida na web sobre o personagem `[nome_do_personagem]` da franquia `([nome_da_franquia])`.
+   - Verifique explicitamente em wikis, artes conceituais ou bases Booru:
+     1. Cor exata dos olhos e tom do cabelo (ex: se é loiro-platinado, azul-escuro, etc.).
+     2. Paleta de cores do traje oficial principal.
+     3. Acessórios marcantes e detalhes que costumam ser esquecidos (ex: laços, cicatrizes, presilhas, formato do calçado).
+   - Use os dados retornados pela busca web para preencher e estruturar o prompt com 100% de precisão de cores e detalhes oficiais.
+
+1. HIERARQUIA DE CAMADAS MANDATÓRIA (ORDEM DE ATENÇÃO):
+   A estrutura do prompt DEVE respeitar a ordem de prioridade visual:
+   [CAMADA 1: IDENTIDADE E FRANQUIA] -> [CAMADA 2: ROSTO, CABELO E OLHOS] -> [CAMADA 3: TRAJE CANÔNICO] -> [CAMADA 4: POSE, EXPRESSÃO E ENQUADRAMENTO] -> [CAMADA 5: MODIFICADORES, ANATOMIA E AMBIENTE]
+
+=============================================================================
+EXEMPLOS DE DECOMPOSIÇÃO CANÔNICA (FEW-SHOT MANDATÓRIO)
+=============================================================================
+Siga os exemplos de fidelidade e desconstrução detalhada abaixo:
+
+Exemplo 1: "Android 18"
+Prompt Gerado:
+android_18, (dragon_ball), 1girl, solo, blonde_hair, short_hair, side_parted_hair, blue_eyes, gold_hoop_earrings, black_vest, collar, button_vest, white_long_sleeves, striped_sleeves, black_t-shirt, denim_skirt, brown_belt, black_pantyhose, brown_boots
+
+Exemplo 2: "2B"
+Prompt Gerado:
+2b_\(nier_automata\), (nier_automata), 1girl, solo, white_hair, short_hair, blindfold, black_blindfold, mole_under_mouth, black_dress, gothic_dress, puff_sleeves, feather_trim, embroidered_dress, thighhighs, black_thighhighs, high_heels
+
+Exemplo 3: "Nami" (Pós-Timeskip)
+Prompt Gerado:
+nami_\(one_piece\), (one_piece), 1girl, solo, long_hair, orange_hair, wavy_hair, brown_eyes, bikini_top, green_bikini_top, low_leg_jeans, denim_pants, tattoo, shoulder_tattoo, gold_bracelet
+
+2. SINTAXE DE IDENTIFICAÇÃO E ANCORAGEM DE CORES:
+   - Tag do Personagem: `[nome_do_personagem]` (ex: `android_18`, `nico_robin`, `2b`).
+   - Tag de Franquia/Série OBRIGATÓRIA entre parênteses: `([nome_da_franquia])` (ex: `(dragon_ball)`, `(one_piece)`, `(nier_automata)`).
+   - ANCORAGEM COM UNDERLINE (para plataformas baseadas em tags) OU ANCORAGEM DESCRITIVA (para plataformas em linguagem natural):
+     Ao usar tags Booru, NUNCA use espaços entre a cor e a característica física (`blonde_hair`, `blue_eyes`, `black_vest`).
+
+3. DESCONSTRUÇÃO CANÔNICA EM DETALHES EXATOS:
+   Você DEVE consultar a busca web e desmembrar a imagem oficial do personagem em detalhes exatos nas seguintes camadas:
+   - Camada 1 (Identidade): `[nome_do_personagem]`, `([nome_da_franquia])`.
+   - Camada 2 (Rosto e Cabelo): Tom exato de cor, comprimento, divisão da franja, estilo, cor dos olhos, formato de sobrancelha e marcas faciais únicas.
+   - Camada 3 (Vestuário Superior e Inferior): Roupa interna, jaqueta/colete, gola, estampa, botões, cinto, saia/calça, textura, meias.
+   - Camada 4 (Calçados e Acessórios): Botas, brincos, luvas, tatuagens, armas e itens icônicos.
+
+4. EXEMPLO OBRIGATÓRIO DE EXPANSÃO DE FIDELIDADE (FEW-SHOT CORRIGIDO):
+   - Entrada: "Android 18"
+   - Saída Obrigatória de Identidade no Prompt:
+     `android_18, (dragon_ball), blonde_hair, short_hair, side_parted_hair, forehead, blue_eyes, gold_hoop_earrings, black_vest, collar, button_vest, white_long_sleeves, striped_sleeves, black_t-shirt, denim_skirt, brown_belt, black_pantyhose, brown_boots`
+
+5. REGRA DE MUTAÇÃO DE TRAJE E MODIFICADORES:
+   - Se o usuário NÃO pediu troca de roupa: Aplique 100% dos detalhes e roupas do traje canônico oficial verificado na web.
+   - Se o usuário pediu novo traje (ex: "em roupa de banho"): Remova APENAS as peças das roupas originais (Camada 3). MANTENHA 100% dos detalhes da Camada 1 e Camada 2 (rosto, cabelo, olhos, sobrancelha, brincos e características físicas canônicas).
+
+=============================================================================
+MOTOR 2: GERADOR DE PROMPTS PARA IAS DE IMAGEM VIA WEB
+=============================================================================
+Adapte A SINTAXE E A ESTRUTURA do prompt em inglês estritamente para a plataforma web escolhida:
+
+### 🌐 2.1 REGRAS POR PLATAFORMA WEB:
+1. 🍌 Nano Banana / Web Engine:
+   - Sintaxe: Linguagem hiper-detalhada, focada na máxima fidelidade gráfica, ray tracing, profundidade de campo e renderização 8k.
+2. 🎨 Midjourney v6.1:
+   - Sintaxe: Palavras-chave em inglês descritivo fluido. Adicione parâmetros no final (Ex: `--ar 16:9 --v 6.1 --stylize 250`).
+3. ⚡ Flux.1 (Dev/Schnell):
+   - Sintaxe: Descrição em linguagem natural fluida e contínua (estilo parágrafo narrativo coeso). Omitir prompt negativo.
+4. 🔤 Ideogram 2.0:
+   - Sintaxe: Foco na integração entre arte e tipografia. Coloque textos exatos entre aspas duplas no prompt.
+5. 🖼️ DALL-E 3 / Bing Image Creator:
+   - Sintaxe: Prompt narrativo amplo, expressivo e highly conceitual em linguagem natural. Omitir prompt negativo.
+6. 🎭 Leonardo.Ai / SeaArt:
+   - Sintaxe: Tags de estilo com descrições estruturadas, modificadores visuais e iluminação ambiental.
+
+---
+
+=============================================================================
+2.2 DIRETRIZES DE DESCRIÇÃO / LEGENDA PARA REDES SOCIAIS (FACEBOOK / INSTAGRAM)
+=============================================================================
+- A legenda em português DEVE SER CURTA, DIRETA E IMPACTANTE (no máximo 2 a 3 frases).
+- Conecte o Nome/Sujeito com a Ação e o Cenário.
+- REGRA CRÍTICA DE CTA (OBRIGATÓRIO): Toda legenda DEVE FINALIZAR OBRIGATORIAMENTE com uma Chamada para Ação (CTA) forte e persuasiva. NUNCA OMITA A CTA.
+
+=============================================================================
+FORMATO OBRIGATÓRIO DE SAÍDA (OUTPUT WEB)
+=============================================================================
+
+--- SE FOR IMAGEM WEB (MOTOR 2) ---
+### 🌐 PROMPT OTIMIZADO PARA WEB: [{PLATAFORMA_SELECIONADA}]
+1. PROMPT (Inglês): [Prompt formatado com expansão canônica 100% verificada via web no início]
+2. DESCRIÇÃO REDES SOCIAIS (Português): [Legenda curta de 2 a 3 frases + CTA forte]
+3. HASHTAGS: [Hashtags virais e relevantes]
+💡 DICA DE APLICAÇÃO: [Instrução prática sobre como usar no site]
 """
 
 # ==============================================================================
@@ -365,15 +536,35 @@ def carregar_lista_integrada_web(arquivo_padrao, arquivo_web, genero_ref):
     return resultado if resultado else ["Opção Padrão 1"]
 
 
-def chamar_gemini_api(dados_personagem, client, modelo="gemini-3.6-flash", usar_busca_web=False):
+def chamar_gemini_api(
+    dados_personagem,
+    client,
+    modelo="gemini-3.6-flash",
+    usar_busca_web=False,
+    e_motor_web=False,
+):
     if not client:
         return "❌ Erro: Cliente da API não inicializado. Verifique sua Chave API."
 
-    def obter_str_limpa(chave, valor_padrao=""):
-        val = dados_personagem.get(chave)
+    # Helper para sanitizar campos do dicionário e evitar NameError
+    def obter_str_limpa(chave, padrao=""):
+        val = dados_personagem.get(chave, padrao)
         if val is None:
-            return valor_padrao
-        return str(val).strip()
+            return padrao
+        return str(val).strip() or padrao
+
+    # Detecção automática de modo Web para isolamento estrito da System Instruction
+    is_web_mode = e_motor_web or dados_personagem.get("is_web_image", False)
+
+    # CORREÇÃO: Seleção do System Instruction estritamente pelo tipo de motor
+    if is_web_mode:
+        sys_instruction = SYSTEM_INSTRUCTION_WEB
+    else:
+        sys_instruction = SYSTEM_INSTRUCTION_PADRAO
+
+    # --------------------------------------------------------------------------
+    # MONTAGEM ISOLADA DO PROMPT DO USUÁRIO DE ACORDO COM O MODO
+    # --------------------------------------------------------------------------
 
     # MODO 1: PERSONAGENS DUPLOS
     if dados_personagem.get("is_duo"):
@@ -410,11 +601,16 @@ Efeitos Especiais: {obter_str_limpa('efeitos')}
     # MODO 2: ANIMAIS E CRIATURAS
     elif dados_personagem.get("is_animal"):
         prompt_usuario = f"""--- MODO ANIMAL / CRIATURA NÃO-ANTROPOMÓRFICO ATIVADO ---
-ATENÇÃO RIGOROSA: A imagem DEVE ser de um animal/criatura REALISTA OU FANTÁSTICA SELVAGEM.
-PROIBIDO qualquer traço humano, postura bípede, roupas ou estilo furry!
+ATENÇÃO RIGOROSA: A imagem DEVE ser de um animal/criatura REALISTA OU FANTÁSTICA SELVAGEM (FERAL/QUADRUPED).
+PROIBIDO qualquer traço humano, postura bípede, roupas ou estilo furry/anthro!
+
+INSTRUÇÕES EXPLICITAS DE CORES E ANATOMIA:
+- Insira OBRIGATORIAMENTE no início do prompt positivo as tags: `feral, quadruped, animal_focus, no_humans, wildlife`.
+- Mapeie e converta a paleta de cores fornecida abaixo em tags Booru atômicas ancoradas com underline em inglês (ex: `black_fur`, `golden_stripes`, `blue_eyes`, `glowing_red_eyes`).
 
 - Nome / Espécie da Criatura: {obter_str_limpa('nome_especie')}
 - Categoria do Animal: {obter_str_limpa('categoria_animal')}
+- Paleta / Cores Exatas (Corpo/Olhos/Marcas): {obter_str_limpa('paleta_cor')}
 - Cobertura / Pelagem / Textura: {obter_str_limpa('cobertura')}
 - Padrão de Cor / Marcas: {obter_str_limpa('padrao_cor')}
 - Estágio / Porte do Animal: {obter_str_limpa('estagio_porte')}
@@ -497,32 +693,38 @@ Gere o prompt final otimizado em inglês e crie uma DESCRIÇÃO/LEGENDA CURTA EM
 - Rigidez da Consistência: Nível {dados_personagem.get('rigidez', 3)} de 5.
 """
 
+    # --------------------------------------------------------------------------
+    # EXECUÇÃO UNIFICADA DA CHAMADA À API
+    # --------------------------------------------------------------------------
     try:
         config_kwargs = {
-            "system_instruction": system_instruction,
+            "system_instruction": sys_instruction,
             "temperature": 0.4,
         }
+
         if usar_busca_web:
-            config_kwargs["tools"] = [types.Tool(google_search=types.GoogleSearch())]
+            config_kwargs["tools"] = [{"google_search": {}}]
 
         response = client.models.generate_content(
             model=modelo,
             contents=prompt_usuario,
             config=types.GenerateContentConfig(**config_kwargs),
         )
+
         if response and hasattr(response, "candidates") and response.candidates:
             cand = response.candidates[0]
             if hasattr(cand, "finish_reason") and "SAFETY" in str(cand.finish_reason).upper():
                 return "⚠️ A requisição foi bloqueada pelos filtros de segurança da API Gemini."
-        
+
         if response and hasattr(response, "text") and response.text is not None:
             return response.text
         else:
             return "⚠️ A API retornou uma resposta vazia."
+
     except Exception as e:
         erro_str = str(e)
         if "503" in erro_str or "UNAVAILABLE" in erro_str or "high demand" in erro_str:
-            return "⚠️ Você está usando API gratuita. O jeito é esperar um pouco e tentar de novo daqui uns 10 segundos."
+            return "⚠️ Você está usando API gratuita. Aguarde cerca de 10 segundos e tente novamente."
         return f"❌ Erro na comunicação com o modelo '{modelo}': {erro_str}"
 
 
@@ -671,23 +873,31 @@ def limpar_campos_duplo():
 # ==============================================================================
 def autocompletar_campos_animais():
     animais = ["Tigre Siberiano", "Lobo Cinzento", "Fênix de Fogo", "Dragão Dourado", "Coruja-Boreal", "Pantera Negra", "Águia Careca", "Leão Alfa"]
+    paletas = [
+        "Pelagem preta com listras douradas e olhos azuis cristalinos",
+        "Pelagem branca pura como neve com olhos âmbar profundos",
+        "Escamas prateadas reflexivas com olhos negros",
+        "Penas escarlates e alaranjadas com olhos dourados",
+        "Escamas esmeralda com barriga amarelada e olhos répteis"
+    ]
     acoes_animais = ["Rugindo com imponência", "Rondando em alerta", "Em bote rápido de caça", "Descansando na sombra", "Voando com asas abertas", "Protegendo sua alcateia"]
+    habitats_naturais = ["Floresta densa nevada", "Montanhas rochosas ao pôr do sol", "Selva tropical úmida", "Savana africana sob sol escaldante", "Caverna de cristais profundos"]
+    iluminacoes_naturais = ["Raios de sol filtrados pelas árvores (god rays)", "Luz suave do crepúsculo", "Luar prateado da noite", "Luz solar direta e dramática"]
 
     if not st.session_state.get("p3_nome_especie_txt", "").strip():
         st.session_state["p3_nome_especie_txt"] = random.choice(animais)
+    if not st.session_state.get("p3_paleta_cor_txt", "").strip():
+        st.session_state["p3_paleta_cor_txt"] = random.choice(paletas)
     if not st.session_state.get("p3_acao_comportamento_txt", "").strip():
         st.session_state["p3_acao_comportamento_txt"] = random.choice(acoes_animais)
-
-    for c, arq in [("habitat", "ambientes.txt"), ("iluminacao", "iluminacoes.txt")]:
-        key = f"p3_{c}_txt"
-        if not st.session_state.get(key, "").strip():
-            validas = carregar_lista_dual(arq, "geral")
-            if validas:
-                st.session_state[key] = random.choice(validas)
+    if not st.session_state.get("p3_habitat_txt", "").strip():
+        st.session_state["p3_habitat_txt"] = random.choice(habitats_naturais)
+    if not st.session_state.get("p3_iluminacao_txt", "").strip():
+        st.session_state["p3_iluminacao_txt"] = random.choice(iluminacoes_naturais)
 
 
 def limpar_campos_animais():
-    for k in ["nome_especie", "acao_comportamento", "habitat", "iluminacao"]:
+    for k in ["nome_especie", "paleta_cor", "acao_comportamento", "habitat", "iluminacao"]:
         txt_key = f"p3_{k}_txt"
         drop_key = f"p3_{k}_drop"
         if txt_key in st.session_state:
@@ -1081,6 +1291,22 @@ def renderizar_formulario_animais(slot_chave, modelo_selecionado):
             ["Tigre Siberiano", "Lobo Cinzento", "Fênix de Fogo", "Dragão Dourado", "Coruja-Boreal", "Pantera Negra", "Águia Careca"],
             "p3_nome_especie"
         )
+        
+        paletas_preset = [
+            "Pelagem preta com listras douradas e olhos azuis cristalinos",
+            "Pelagem branca pura como neve com olhos âmbar profundos",
+            "Escamas prateadas reflexivas com olhos negros",
+            "Penas escarlates e alaranjadas com olhos dourados",
+            "Escamas esmeralda com barriga amarelada e olhos répteis",
+            "Pelagem castanha com marcas cinzentas e olhos castanhos"
+        ]
+        paleta_cor = st_campo_hibrido(
+            "Cores / Paleta do Animal (Corpo e Olhos):",
+            "Ex: pelagem preta, listras douradas, olhos azuis cristalinos",
+            paletas_preset,
+            "p3_paleta_cor"
+        )
+
         cobertura = st.selectbox(
             "Cobertura / Pelagem / Textura:",
             ["Pelagem Densa / Macia", "Pelagem Curta", "Penas Reluzentes", "Escamas Metálicas", "Escamas Rígidas / Rústicas", "Pele Lisa / Úmida", "Carapaça / Exosqueleto"],
@@ -1105,16 +1331,33 @@ def renderizar_formulario_animais(slot_chave, modelo_selecionado):
             ["Rugindo com imponência", "Rondando em alerta", "Em bote rápido de caça", "Descansando na sombra", "Voando com asas abertas", "Protegendo sua alcateia"],
             "p3_acao_comportamento"
         )
+        
+        habitats_preset = [
+            "Floresta densa nevada",
+            "Montanhas rochosas ao pôr do sol",
+            "Selva tropical úmida com névoa",
+            "Savana africana sob sol escaldante",
+            "Caverna mística com cristais brilhantes",
+            "Oceano profundo e coralino"
+        ]
         habitat = st_campo_hibrido(
             "Habitat / Cenário Natural:",
-            "Ex: floresta nevada",
-            carregar_lista_dual("ambientes.txt", "geral"),
+            "Ex: floresta densa nevada",
+            habitats_preset,
             "p3_habitat"
         )
+
+        iluminacoes_preset = [
+            "Raios de sol filtrados pelas árvores (god rays)",
+            "Luz suave do crepúsculo",
+            "Luar prateado da noite",
+            "Luz solar direta e dramática",
+            "Brilho bioluminescente e misterioso"
+        ]
         iluminacao = st_campo_hibrido(
             "Iluminação Ambiental:",
             "Ex: raios de sol entre as árvores",
-            carregar_lista_dual("iluminacoes.txt", "geral"),
+            iluminacoes_preset,
             "p3_iluminacao"
         )
         estilo_foto = st.selectbox(
@@ -1149,6 +1392,7 @@ def renderizar_formulario_animais(slot_chave, modelo_selecionado):
         "is_animal": True,
         "categoria_animal": categoria_animal,
         "nome_especie": nome_especie,
+        "paleta_cor": paleta_cor,
         "cobertura": cobertura,
         "padrao_cor": padrao_cor,
         "estagio_porte": estagio_porte,
