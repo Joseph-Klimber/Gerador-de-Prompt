@@ -1591,7 +1591,7 @@ if not st.session_state.autenticado:
                 st.warning("Por favor, digite o seu e-mail.")
 
     with col2:
-    st.subheader("💳 Adquirir Acesso")
+        st.subheader("💳 Adquirir Acesso")
 
     # Plano 15 Dias
     st.link_button(
