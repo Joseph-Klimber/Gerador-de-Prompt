@@ -35,8 +35,14 @@ LINK_KIWIFY_15_DIAS = "https://pay.kiwify.com.br/MXVL98k"
 LINK_KIWIFY_30_DIAS = "https://pay.kiwify.com.br/dyfEGe5"
 LINK_KIWIFY_90_DIAS = "https://pay.kiwify.com.br/xo0m3rF"
 
-CONFIG_FILE = "config_prompts.json"
+PASTA_CONFIGS = "configs_usuarios"
 PASTA_RESULTADOS = "resultados"
+
+
+def _slug_usuario(email):
+    """Gera um identificador de arquivo seguro e único por usuário, a partir do e-mail."""
+    email_limpo = (email or "anonimo").strip().lower()
+    return re.sub(r'[^\w\-.]', '_', email_limpo) or "anonimo"
 PASTA_LISTAS = "listas"
 
 opcoes_tipo_sujeito = [
@@ -77,7 +83,7 @@ opcoes_mamilos = [
     "Muito eretos",
 ]
 
-SYSTEM_INSTRUCTION_PADRAO = """Você é um Engenheiro de Prompts Mestre, especialista em Geração de Imagens por Inteligência Artificial focado em Motores Locais (Stable Diffusion, Pony SDXL, Illustrious IA para ComfyUI / WebUI):
+SYSTEM_INSTRUCTION_PADRAO = r"""Você é um Engenheiro de Prompts Mestre, especialista em Geração de Imagens por Inteligência Artificial focado em Motores Locais (Stable Diffusion, Pony SDXL, Illustrious IA para ComfyUI / WebUI):
 
 =============================================================================
 PROTOCOLO DE FIDELIDADE ABSOLUTA 100% (CANON DIRETO & DANBOORU MAPPING)
@@ -87,6 +93,8 @@ Sempre que o Nome/Sujeito for um personagem existente da cultura pop (anime, gam
 1. HIERARQUIA DE CAMADAS MANDATÓRIA (ORDEM DE ATENÇÃO DO MOTOR):
    O prompt positivo montado DEVE seguir rigorosamente esta sequência do início ao fim para garantir que o motor priorize a fidelidade visual antes de elementos acessórios:
    [CAMADA 1: IDENTIDADE E FRANQUIA] -> [CAMADA 2: ROSTO, CABELO E OLHOS] -> [CAMADA 3: TRAJE CANÔNICO] -> [CAMADA 4: POSE, EXPRESSÃO E ENQUADRAMENTO] -> [CAMADA 5: MODIFICADORES, ANATOMIA E AMBIENTE]
+
+   * REGRA PARA DUPLAS DE PERSONAGENS: As tags canônicas do Personagem 1 e do Personagem 2 DEVEM ser posicionadas estritamente na CAMADA 1 e CAMADA 2 no INÍCIO do prompt gerado, garantindo prioridade máxima de atenção e fidelidade aos traços de ambos os sujeitos antes de incluir informações de cenário e estilo.
 
 =============================================================================
 EXEMPLOS DE DECOMPOSIÇÃO CANÔNICA (FEW-SHOT MANDATÓRIO)
@@ -154,6 +162,9 @@ Você NUNCA deve entregar um prompt negativo estático ou padronizado. O prompt 
 5. CAMADA DE RATING / SENSUALIDADE:
    - Nível 1 ou 2 (SFW): Adicione obrigatoriamente `rating_questionable, rating_explicit, nsfw, nude, cleavage`.
    - Nível 3 ou 4 (Ecchi): Adicione obrigatoriamente `rating_explicit, nude, fully nude, nipple`.
+   - Nível 5 (Picante): Adicione obrigatoriamente `rating_safe, rating_questionable, censored, mosaic_censorship, bar_censor`.
+   - Nível 6 (Dual) - VERSÃO A (Censurada): Adicione obrigatoriamente `rating_safe, uncensored`.
+   - Nível 6 (Dual) - VERSÃO B (Sem Censura): Adicione obrigatoriamente `rating_safe, rating_questionable, censored, mosaic_censorship, bar_censor`.
 
 =============================================================================
 MOTOR 1: STABLE DIFFUSION LOCAL (ILLUSTRIOUS IA & PONY SDXL PARA COMFYUI / WEBUI)
@@ -233,8 +244,7 @@ FORMATOS OBRIGATÓRIOS DE SAÍDA (OUTPUT LOCAL)
 - PROMPT NEGATIVO: [Prompt Negativo Dinâmico]
 """
 
-
-SYSTEM_INSTRUCTION_WEB = """Você é um Engenheiro de Prompts Mestre, especialista em Geração de Imagens por IA via Plafagormas Web e Investigação Canônica com Web Grounding:
+SYSTEM_INSTRUCTION_WEB = r"""Você é um Engenheiro de Prompts Mestre, especialista em Geração de Imagens por IA via Plafagormas Web e Investigação Canônica com Web Grounding:
 
 =============================================================================
 PROTOCOLO DE FIDELIDADE ABSOLUTA 100% (WEB GROUNDING & CANON DIRETO)
@@ -360,20 +370,26 @@ def verificar_acesso_sheets(email):
         return False, "", f"Erro ao conectar com a base de dados: {e}"
 
 
-def carregar_config():
+def carregar_config(email=None):
+    """Carrega a configuração (chaves de API, modelo padrão etc.) isolada por usuário."""
     config = {
         "chaves": {"Chave 1": "", "Chave 2": ""},
         "modelo_padrao": "gemini-3.6-flash",
         "usar_busca_web": False,
     }
-    if os.path.exists(CONFIG_FILE):
+
+    slug = _slug_usuario(email)
+    caminho_config = os.path.join(PASTA_CONFIGS, f"config_{slug}.json")
+
+    if os.path.exists(caminho_config):
         try:
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            with open(caminho_config, "r", encoding="utf-8") as f:
                 dados = json.load(f)
                 config.update(dados)
         except Exception:
             pass
 
+    # Fallback apenas para permitir migração de uma chave local antiga (uso pessoal / single-user).
     if not config["chaves"].get("Chave 1") and os.path.exists(".api_key.txt"):
         try:
             with open(".api_key.txt", "r", encoding="utf-8") as f:
@@ -386,24 +402,30 @@ def carregar_config():
     return config
 
 
-def salvar_config(chaves_dict, modelo_padrao, usar_busca_web=False):
+def salvar_config(chaves_dict, modelo_padrao, usar_busca_web=False, email=None):
+    """Salva a configuração em um arquivo isolado por usuário (evita que um usuário sobrescreva a chave de API de outro)."""
     dados = {
-        "chaves": chaves_dict, 
+        "chaves": chaves_dict,
         "modelo_padrao": modelo_padrao,
         "usar_busca_web": usar_busca_web,
     }
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+    os.makedirs(PASTA_CONFIGS, exist_ok=True)
+    slug = _slug_usuario(email)
+    caminho_config = os.path.join(PASTA_CONFIGS, f"config_{slug}.json")
+    with open(caminho_config, "w", encoding="utf-8") as f:
         json.dump(dados, f, indent=4, ensure_ascii=False)
 
 
-def salvar_resultado_manual(texto, nome_sujeito):
+def salvar_resultado_manual(texto, nome_sujeito, email=None):
     if not texto or not str(texto).strip():
         return "⚠️ Nenhum resultado para salvar."
-    os.makedirs(PASTA_RESULTADOS, exist_ok=True)
+    slug_usuario = _slug_usuario(email)
+    pasta_usuario = os.path.join(PASTA_RESULTADOS, slug_usuario)
+    os.makedirs(pasta_usuario, exist_ok=True)
     timestamp = time.strftime("%Y%m%d_%H%M%S")
     nome_sanitizado = re.sub(r'[^\w\-]', '_', str(nome_sujeito).strip()).lower() if nome_sujeito and str(nome_sujeito).strip() else "prompts"
     nome_arquivo = f"prompts_{nome_sanitizado}_{timestamp}.txt"
-    caminho_completo = os.path.join(PASTA_RESULTADOS, nome_arquivo)
+    caminho_completo = os.path.join(pasta_usuario, nome_arquivo)
     with open(caminho_completo, "w", encoding="utf-8") as f:
         f.write(texto)
     return f"💾 Cópia salva no servidor: `{caminho_completo}`"
@@ -425,33 +447,43 @@ def carregar_lista_dual(nome_arquivo, genero="feminino"):
                     for l in f.readlines()
                     if l.strip() and not l.startswith("#")
                 ]
-
-            bloco_atual = None
-            linhas_genero = []
-            linhas_gerais = []
-
-            for linha in linhas:
-                linha_lower = linha.lower()
-                if "[feminino]" in linha_lower:
-                    bloco_atual = "feminino"
-                    continue
-                elif "[masculino]" in linha_lower:
-                    bloco_atual = "masculino"
-                    continue
-                elif "[geral]" in linha_lower or "[ambos]" in linha_lower:
-                    bloco_atual = "geral"
-                    continue
-
-                if bloco_atual == genero:
-                    linhas_genero.append(linha)
-                elif bloco_atual == "geral" or bloco_atual is None:
-                    linhas_gerais.append(linha)
-
-            resultado = list(dict.fromkeys(linhas_genero + linhas_gerais))
-            if resultado:
-                return resultado
+        except UnicodeDecodeError:
+            try:
+                with open(caminho_arquivo, "r", encoding="latin-1") as f:
+                    linhas = [
+                        l.strip()
+                        for l in f.readlines()
+                        if l.strip() and not l.startswith("#")
+                    ]
+            except Exception:
+                linhas = []
         except Exception:
-            pass
+            linhas = []
+
+        bloco_atual = None
+        linhas_genero = []
+        linhas_gerais = []
+
+        for linha in linhas:
+            linha_lower = linha.lower()
+            if "[feminino]" in linha_lower:
+                bloco_atual = "feminino"
+                continue
+            elif "[masculino]" in linha_lower:
+                bloco_atual = "masculino"
+                continue
+            elif "[geral]" in linha_lower or "[ambos]" in linha_lower:
+                bloco_atual = "geral"
+                continue
+
+            if bloco_atual == genero:
+                linhas_genero.append(linha)
+            elif bloco_atual == "geral" or bloco_atual is None:
+                linhas_gerais.append(linha)
+
+        resultado = list(dict.fromkeys(linhas_genero + linhas_gerais))
+        if resultado:
+            return resultado
 
     return ["Opção Padrão 1", "Opção Padrão 2"]
 
@@ -474,17 +506,21 @@ def carregar_lista_nomes(genero="feminino"):
                 with open(caminho, "r", encoding="utf-8") as f:
                     linhas = list(
                         dict.fromkeys(
-                            [
-                                l.strip()
-                                for l in f
-                                if l.strip()
-                                and not l.startswith("#")
-                                and not l.startswith("[")
-                            ]
+                            [l.strip() for l in f if l.strip() and not l.startswith("#")]
                         )
                     )
-                if linhas:
-                    return linhas
+                    if linhas: return linhas
+            except UnicodeDecodeError:
+                try:
+                    with open(caminho, "r", encoding="latin-1") as f:
+                        linhas = list(
+                            dict.fromkeys(
+                                [l.strip() for l in f if l.strip() and not l.startswith("#")]
+                            )
+                        )
+                        if linhas: return linhas
+                except Exception:
+                    pass
             except Exception:
                 pass
 
@@ -528,7 +564,18 @@ def carregar_lista_integrada_web(arquivo_padrao, arquivo_web, genero_ref):
                     for l in f
                     if l.strip() and not l.startswith("#") and not l.startswith("[")
                 ]
+            opcoes.extend(linhas)
+        except UnicodeDecodeError:
+            try:
+                with open(caminho_web, "r", encoding="latin-1") as f:
+                    linhas = [
+                        l.strip()
+                        for l in f
+                        if l.strip() and not l.startswith("#") and not l.startswith("[")
+                    ]
                 opcoes.extend(linhas)
+            except Exception:
+                pass
         except Exception:
             pass
 
@@ -546,63 +593,59 @@ def chamar_gemini_api(
     if not client:
         return "❌ Erro: Cliente da API não inicializado. Verifique sua Chave API."
 
-    # Helper para sanitizar campos do dicionário e evitar NameError
     def obter_str_limpa(chave, padrao=""):
         val = dados_personagem.get(chave, padrao)
         if val is None:
             return padrao
         return str(val).strip() or padrao
 
-    # Detecção automática de modo Web para isolamento estrito da System Instruction
     is_web_mode = e_motor_web or dados_personagem.get("is_web_image", False)
 
-    # CORREÇÃO: Seleção do System Instruction estritamente pelo tipo de motor
     if is_web_mode:
         sys_instruction = SYSTEM_INSTRUCTION_WEB
     else:
         sys_instruction = SYSTEM_INSTRUCTION_PADRAO
 
-    # --------------------------------------------------------------------------
-    # MONTAGEM ISOLADA DO PROMPT DO USUÁRIO DE ACORDO COM O MODO
-    # --------------------------------------------------------------------------
-
     # MODO 1: PERSONAGENS DUPLOS
     if dados_personagem.get("is_duo"):
-        prompt_usuario = f"""--- MODO DUPLA DE PERSONAGENS ATIVADO ---
-Composição Solicitada da Dupla: {obter_str_limpa('composicao_dupla')}
-Fluxo Base: {obter_str_limpa('fluxo', 'Illustrious')}
-Categoria de Arte: {obter_str_limpa('categoria_arte')}
-Nível de Sensualidade: {obter_str_limpa('sensualidade')}
-Orientação (Ratio): {obter_str_limpa('orientacao')}
-Estilo Visual: {obter_str_limpa('estilo')}
-Cenário / Ambiente: {obter_str_limpa('cenario')}
-Iluminação: {obter_str_limpa('iluminacao')}
-Efeitos Especiais: {obter_str_limpa('efeitos')}
+        prompt_usuario = f"""--- MODO DUPLA DE PERSONAGENS ATIVADO (MÁXIMA FIDELIDADE CANÔNICA) ---
+[PRIORIDADE MÁXIMA DE ATENÇÃO: POSICIONE A DECOMPOSIÇÃO DOS PERSONAGENS NO INÍCIO DO PROMPT GERADO]
 
-- INTERAÇÃO / AÇÃO CONJUNTA NA CENA: {obter_str_limpa('interacao')}
-
-- PERSONAGEM 1:
-  * Nome / Sujeito: {obter_str_limpa('p1_nome')} (EXIGÊNCIA CANÔNICA: Desmembrar em tags Booru detalhadas de rosto, cabelo, olhos e traje oficial)
+- PERSONAGEM 1 (PRIORIDADE CRÍTICA DE IDENTIDADE):
+  * Nome / Sujeito: {obter_str_limpa('p1_nome')} (EXIGÊNCIA CANÔNICA MANDATÓRIA: Desmembrar no INÍCIO do prompt em tags Booru detalhadas de rosto, cabelo, olhos e traje oficial)
   * Tipo de Sujeito: {obter_str_limpa('p1_tipo')}
   * Enquadramento P1: {obter_str_limpa('p1_enquadramento')}
   * Expressão P1: {obter_str_limpa('p1_emocao')}
   * Pose / Ação Individual P1: {obter_str_limpa('p1_pose')}
   * Ajustes Anatômicos P1: Seios ({obter_str_limpa('p1_seios')}), Mamilos ({obter_str_limpa('p1_mamilos')}), Transparência ({obter_str_limpa('p1_transparencia')}), Contorno ({obter_str_limpa('p1_contorno')})
 
-- PERSONAGEM 2:
-  * Nome / Sujeito: {obter_str_limpa('p2_nome')} (EXIGÊNCIA CANÔNICA: Desmembrar em tags Booru detalhadas de rosto, cabelo, olhos e traje oficial)
+- PERSONAGEM 2 (PRIORIDADE CRÍTICA DE IDENTIDADE):
+  * Nome / Sujeito: {obter_str_limpa('p2_nome')} (EXIGÊNCIA CANÔNICA MANDATÓRIA: Desmembrar no INÍCIO do prompt em tags Booru detalhadas de rosto, cabelo, olhos e traje oficial)
   * Tipo de Sujeito: {obter_str_limpa('p2_tipo')}
   * Enquadramento P2: {obter_str_limpa('p2_enquadramento')}
   * Expressão P2: {obter_str_limpa('p2_emocao')}
   * Pose / Ação Individual P2: {obter_str_limpa('p2_pose')}
   * Ajustes Anatômicos P2: Seios ({obter_str_limpa('p2_seios')}), Mamilos ({obter_str_limpa('p2_mamilos')}), Transparência ({obter_str_limpa('p2_transparencia')}), Contorno ({obter_str_limpa('p2_contorno')})
+
+- INTERAÇÃO / AÇÃO CONJUNTA NA CENA: {obter_str_limpa('interacao')}
+
+- AMBIENTE, ESTILO E CONFIGURAÇÕES TÉCNICAS:
+  * Composição Solicitada da Dupla: {obter_str_limpa('composicao_dupla')}
+  * Fluxo Base: {obter_str_limpa('fluxo', 'Illustrious')}
+  * Categoria de Arte: {obter_str_limpa('categoria_arte')}
+  * Nível de Sensualidade: {obter_str_limpa('sensualidade')}
+  * Orientação (Ratio): {obter_str_limpa('orientacao')}
+  * Estilo Visual: {obter_str_limpa('estilo')}
+  * Cenário / Ambiente: {obter_str_limpa('cenario')}
+  * Iluminação: {obter_str_limpa('iluminacao')}
+  * Efeitos Especiais: {obter_str_limpa('efeitos')}
 """
 
     # MODO 2: ANIMAIS E CRIATURAS
     elif dados_personagem.get("is_animal"):
         prompt_usuario = f"""--- MODO ANIMAL / CRIATURA NÃO-ANTROPOMÓRFICO ATIVADO ---
 ATENÇÃO RIGOROSA: A imagem DEVE ser de um animal/criatura REALISTA OU FANTÁSTICA SELVAGEM (FERAL/QUADRUPED).
-PROIBIDO qualquer traço humano, postura bípede, roupas ou estilo furry/anthro!
+PROIBIDO qualquer traço humano, posture bípede, roupas ou estilo furry/anthro!
 
 INSTRUÇÕES EXPLICITAS DE CORES E ANATOMIA:
 - Insira OBRIGATORIAMENTE no início do prompt positivo as tags: `feral, quadruped, animal_focus, no_humans, wildlife`.
@@ -629,6 +672,11 @@ INSTRUÇÕES EXPLICITAS DE CORES E ANATOMIA:
         is_objeto_ou_paisagem = tipo_sujeito in ["Paisagem / Cenário", "Objeto / Item"]
         sensualidade = "Inativo" if is_objeto_ou_paisagem else obter_str_limpa("sensualidade", "2 - Menos Seguro")
 
+        seios = "Não especificar" if is_objeto_ou_paisagem else obter_str_limpa("seios", "Padrão do Personagem / Não especificar")
+        mamilos = "Não especificar" if is_objeto_ou_paisagem else obter_str_limpa("mamilos", "Não especificar")
+        transparencia = "Não" if is_objeto_ou_paisagem else ("Sim" if dados_personagem.get("transparencia") else "Não")
+        contorno = "Não" if is_objeto_ou_paisagem else ("Sim" if dados_personagem.get("contorno") else "Não")
+
         prompt_usuario = f"""--- MODO GENERATOR IMAGEM WEB ATIVADO ---
 Plataforma Alvo Solicitada: {obter_str_limpa('plataforma_web', 'Midjourney v6.1')}
 
@@ -637,6 +685,11 @@ Gere o prompt final otimizado em inglês e crie uma DESCRIÇÃO/LEGENDA CURTA EM
 - Tipo de Sujeito: {tipo_sujeito}
 - Categoria de Arte: {obter_str_limpa('categoria_arte', 'Anime / Manga / Ilustração')}
 - Nível de Sensualidade: {sensualidade}
+- Detalhes Anatômicos / Vestuário:
+  * Tamanho dos Seios: {seios}
+  * Transparência no Traje: {transparencia}
+  * Realçar Contorno dos Seios: {contorno}
+  * Estilo dos Mamilos: {mamilos}
 - Orientação (Ratio): {obter_str_limpa('orientacao')}
 - Enquadramento: {obter_str_limpa('enquadramento')}
 - Ação do Sujeito / Estado: {obter_str_limpa('acao')}
@@ -693,17 +746,15 @@ Gere o prompt final otimizado em inglês e crie uma DESCRIÇÃO/LEGENDA CURTA EM
 - Rigidez da Consistência: Nível {dados_personagem.get('rigidez', 3)} de 5.
 """
 
-    # --------------------------------------------------------------------------
-    # EXECUÇÃO UNIFICADA DA CHAMADA À API
-    # --------------------------------------------------------------------------
     try:
+        temp = 0.7 if dados_personagem.get("is_serie") else 0.5
         config_kwargs = {
             "system_instruction": sys_instruction,
-            "temperature": 0.4,
+            "temperature": temp,
         }
 
         if usar_busca_web:
-            config_kwargs["tools"] = [{"google_search": {}}]
+            config_kwargs["tools"] = [types.Tool(google_search=types.GoogleSearch())]
 
         response = client.models.generate_content(
             model=modelo,
@@ -856,14 +907,27 @@ def autocompletar_campos_duplo(g_ref1, g_ref2):
 
 
 def limpar_campos_duplo():
-    for k in ["p1_nome", "p1_emocao", "p1_pose", "p2_nome", "p2_emocao", "p2_pose", "interacao", "estilo", "cenario", "iluminacao", "efeitos"]:
+    campos = [
+        "p1_nome",
+        "p1_emocao",
+        "p1_pose",
+        "p2_nome",
+        "p2_emocao",
+        "p2_pose",
+        "interacao",
+        "estilo",
+        "cenario",
+        "iluminacao",
+        "efeitos",
+    ]
+    for k in campos:
         txt_key = f"p2_{k}_txt"
         drop_key = f"p2_{k}_drop"
         if txt_key in st.session_state:
             st.session_state[txt_key] = ""
         if drop_key in st.session_state:
             st.session_state[drop_key] = "Presets..."
-    
+
     if "p2_resultado" in st.session_state:
         st.session_state["p2_resultado"] = ""
 
@@ -912,7 +976,7 @@ def limpar_campos_animais():
 # ==============================================================================
 # 3.3 RENDERIZADORES DE FORMULÁRIO (PADRÃO, DUPLO, ANIMAL)
 # ==============================================================================
-def renderizar_formulario(prefixo, slot_chave, modelo_selecionado, is_web=False, is_serie=False):
+def renderizar_formulario(prefixo, slot_chave, modelo_selecionado, email=None, is_web=False, is_serie=False):
     col1, col2 = st.columns(2)
 
     with col1:
@@ -1071,6 +1135,10 @@ def renderizar_formulario(prefixo, slot_chave, modelo_selecionado, is_web=False,
     if gerar:
         chave_atual = st.session_state.get(f"input_key_{slot_chave}", "").strip()
         if not chave_atual:
+            config = carregar_config(email)
+            chave_atual = config.get("chaves", {}).get(f"Chave {slot_chave}", "") or config.get("chaves", {}).get("Chave 1", "")
+
+        if not chave_atual:
             st.error("❌ Por favor, insira sua Chave API do Gemini na barra lateral.")
         else:
             with st.spinner("⏳ Processando prompt via Gemini API..."):
@@ -1078,14 +1146,15 @@ def renderizar_formulario(prefixo, slot_chave, modelo_selecionado, is_web=False,
                     client = genai.Client(api_key=chave_atual)
                     resultado = chamar_gemini_api(
                         dados, client, modelo=modelo_selecionado,
-                        usar_busca_web=st.session_state.get("usar_busca_web", False)
+                        usar_busca_web=st.session_state.get("usar_busca_web", False),
+                        e_motor_web=is_web
                     )
                     st.session_state[f"{prefixo}_resultado"] = resultado
                 except Exception as e:
                     st.error(f"❌ Erro ao inicializar cliente: {str(e)}")
 
     if salvar:
-        msg = salvar_resultado_manual(st.session_state.get(f"{prefixo}_resultado", ""), nome)
+        msg = salvar_resultado_manual(st.session_state.get(f"{prefixo}_resultado", ""), nome, email=email)
         st.info(msg)
 
     if st.session_state.get(f"{prefixo}_resultado"):
@@ -1104,7 +1173,7 @@ def renderizar_formulario(prefixo, slot_chave, modelo_selecionado, is_web=False,
         )
 
 
-def renderizar_formulario_duplo(slot_chave, modelo_selecionado):
+def renderizar_formulario_duplo(slot_chave, modelo_selecionado, email=None):
     st.markdown("### 👥 Gerador de Cena com Personagens Duplos")
     st.caption("A cena só será gerada quando ambos os personagens forem informados. Os atributos visuais serão isolados para evitar contaminação.")
 
@@ -1137,7 +1206,6 @@ def renderizar_formulario_duplo(slot_chave, modelo_selecionado):
     st.markdown("---")
     col_p1, col_p2 = st.columns(2)
 
-    # PERSONAGEM 1
     with col_p1:
         st.subheader("👤 Personagem 1 (Principal/Esquerda)")
         p1_nome = st_campo_hibrido("Nome / Sujeito 1:", "Ex: Nami, Goku", carregar_lista_nomes(g_ref1), "p2_p1_nome")
@@ -1152,7 +1220,6 @@ def renderizar_formulario_duplo(slot_chave, modelo_selecionado):
             p1_transparencia = st.checkbox("Transparência P1", disabled=not p1_is_fem, key="p2_p1_transparencia")
             p1_contorno = st.checkbox("Contorno dos Seios P1", disabled=not p1_is_fem, key="p2_p1_contorno")
 
-    # PERSONAGEM 2
     with col_p2:
         st.subheader("👤 Personagem 2 (Secundário/Direita)")
         p2_nome = st_campo_hibrido("Nome / Sujeito 2:", "Ex: Nico Robin, Vegeta", carregar_lista_nomes(g_ref2), "p2_p2_nome")
@@ -1195,7 +1262,7 @@ def renderizar_formulario_duplo(slot_chave, modelo_selecionado):
 
     orientacao = st.selectbox(
         "Orientação (Ratio):",
-        ["Horizontal (Landscape 16:9)", "Vertical (Portrait 9:16)", "Quadrado (Square 1:1)"],
+        ["Vertical (Portrait 9:16)", "Horizontal (Landscape 16:9)", "Quadrado (Square 1:1)"],
         key="p2_orientacao"
     )
 
@@ -1234,26 +1301,27 @@ def renderizar_formulario_duplo(slot_chave, modelo_selecionado):
     }
 
     if gerar:
-        if not p1_nome.strip() or not p2_nome.strip():
-            st.warning("⚠️ Atenção: A geração de prompt duplo requer que ambos os personagens (P1 e P2) estejam preenchidos!")
+        chave_atual = st.session_state.get(f"input_key_{slot_chave}", "").strip()
+        if not chave_atual:
+            config = carregar_config(email)
+            chave_atual = config.get("chaves", {}).get(f"Chave {slot_chave}", "") or config.get("chaves", {}).get("Chave 1", "")
+
+        if not chave_atual:
+            st.error("❌ Por favor, insira sua Chave API do Gemini na barra lateral.")
         else:
-            chave_atual = st.session_state.get(f"input_key_{slot_chave}", "").strip()
-            if not chave_atual:
-                st.error("❌ Por favor, insira sua Chave API do Gemini na barra lateral.")
-            else:
-                with st.spinner("⏳ Processando prompt duplo via Gemini API..."):
-                    try:
-                        client = genai.Client(api_key=chave_atual)
-                        resultado = chamar_gemini_api(
-                            dados_duplo, client, modelo=modelo_selecionado,
-                            usar_busca_web=st.session_state.get("usar_busca_web", False)
-                        )
-                        st.session_state["p2_resultado"] = resultado
-                    except Exception as e:
-                        st.error(f"❌ Erro ao inicializar cliente: {str(e)}")
+            with st.spinner("⏳ Processando prompt duplo via Gemini API..."):
+                try:
+                    client = genai.Client(api_key=chave_atual)
+                    resultado = chamar_gemini_api(
+                        dados_duplo, client, modelo=modelo_selecionado,
+                        usar_busca_web=st.session_state.get("usar_busca_web", False)
+                    )
+                    st.session_state["p2_resultado"] = resultado
+                except Exception as e:
+                    st.error(f"❌ Erro ao inicializar cliente: {str(e)}")
 
     if salvar:
-        msg = salvar_resultado_manual(st.session_state.get("p2_resultado", ""), f"dupla_{p1_nome}_{p2_nome}")
+        msg = salvar_resultado_manual(st.session_state.get("p2_resultado", ""), f"dupla_{p1_nome}_{p2_nome}", email=email)
         st.info(msg)
 
     if st.session_state.get("p2_resultado"):
@@ -1273,7 +1341,7 @@ def renderizar_formulario_duplo(slot_chave, modelo_selecionado):
         )
 
 
-def renderizar_formulario_animais(slot_chave, modelo_selecionado):
+def renderizar_formulario_animais(slot_chave, modelo_selecionado, email=None):
     st.markdown("### 🐾 Gerador de Animais & Criaturas (Sem Antropomorfização)")
     st.caption("Crie animais reais ou fantásticos focados em vida selvagem e fotografia biológica, sem traços humanos ou roupas.")
 
@@ -1372,7 +1440,7 @@ def renderizar_formulario_animais(slot_chave, modelo_selecionado):
         )
         orientacao = st.selectbox(
             "Orientação (Ratio):",
-            ["Horizontal (Landscape 16:9)", "Vertical (Portrait 9:16)", "Quadrado (Square 1:1)"],
+            ["Vertical (Portrait 9:16)", "Horizontal (Landscape 16:9)", "Quadrado (Square 1:1)"],
             key="p3_orientacao"
         )
 
@@ -1408,6 +1476,10 @@ def renderizar_formulario_animais(slot_chave, modelo_selecionado):
     if gerar:
         chave_atual = st.session_state.get(f"input_key_{slot_chave}", "").strip()
         if not chave_atual:
+            config = carregar_config(email)
+            chave_atual = config.get("chaves", {}).get(f"Chave {slot_chave}", "") or config.get("chaves", {}).get("Chave 1", "")
+
+        if not chave_atual:
             st.error("❌ Por favor, insira sua Chave API do Gemini na barra lateral.")
         else:
             with st.spinner("⏳ Processando prompt de animal via Gemini API..."):
@@ -1422,7 +1494,7 @@ def renderizar_formulario_animais(slot_chave, modelo_selecionado):
                     st.error(f"❌ Erro ao inicializar cliente: {str(e)}")
 
     if salvar:
-        msg = salvar_resultado_manual(st.session_state.get("p3_resultado", ""), nome_especie)
+        msg = salvar_resultado_manual(st.session_state.get("p3_resultado", ""), nome_especie, email=email)
         st.info(msg)
 
     if st.session_state.get("p3_resultado"):
@@ -1430,7 +1502,9 @@ def renderizar_formulario_animais(slot_chave, modelo_selecionado):
         st.markdown("---")
         st.markdown("### 📝 Resultado Animal:")
         st.code(st.session_state["p3_resultado"], language="markdown")
-        nome_sanitizado = re.sub(r'[^\w\-]', '_', nome_especie.strip()).lower() if nome_especie and nome_especie.strip() else 'animal'
+        nome_bruto = nome_especie.strip() if nome_especie else ""
+        nome_limpo = re.sub(r'[^\w\-]', '_', nome_bruto).strip('_').lower()
+        nome_sanitizado = nome_limpo if nome_limpo else "gerado"
         st.download_button(
             label="📥 BAIXAR PROMPT ANIMAL (.TXT)",
             data=st.session_state["p3_resultado"],
@@ -1440,7 +1514,7 @@ def renderizar_formulario_animais(slot_chave, modelo_selecionado):
         )
 
 # ==============================================================================
-# 4. GERENCIAMENTO DA SESSÃO DO USUÁRIO
+# 4. GERENCIAMENTO DA SESSÃO DO USUÁRIO E TELA PRINCIPAL
 # ==============================================================================
 if "autenticado" not in st.session_state:
     st.session_state.autenticado = False
@@ -1449,9 +1523,7 @@ if "user_email" not in st.session_state:
 if "expiracao" not in st.session_state:
     st.session_state.expiracao = ""
 
-# ==============================================================================
-# TELA 1: LANDING PAGE + LOGIN (Exibida para quem AINDA NÃO SE AUTENTICOU)
-# ==============================================================================
+# TELA DE LOGIN / AUTENTICAÇÃO
 if not st.session_state.autenticado:
     st.markdown(
         "<h1 style='text-align: center;'>🚀 Gerador de Prompts Profissionais</h1>",
@@ -1464,170 +1536,100 @@ if not st.session_state.autenticado:
 
     st.divider()
 
-    st.markdown("### 🔑 Já é cliente? Acesse a ferramenta:")
-    col_login1, col_login2 = st.columns([3, 1])
-
-    with col_login1:
-        email_input = st.text_input(
-            "E-mail de compra:",
-            placeholder="seuemail@exemplo.com",
-            label_visibility="collapsed",
-        )
-
-    with col_login2:
-        if st.button("ENTRAR NA FERRAMENTA", type="primary", use_container_width=True):
+    col_l1, col_l2 = st.columns([1, 1])
+    with col_l1:
+        st.subheader("🔑 Acesso do Usuário")
+        email_input = st.text_input("Digite o e-mail cadastrado:", key="login_email")
+        if st.button("ENTRAR", key="btn_login", use_container_width=True):
             if email_input:
-                email_limpo = email_input.strip().lower()
-                
-                com_acesso, data_exp, msg_erro = verificar_acesso_sheets(email_limpo)
-                if com_acesso:
+                encontrado, expiracao, erro = verificar_acesso_sheets(email_input)
+                if encontrado:
                     st.session_state.autenticado = True
-                    st.session_state.user_email = email_limpo
-                    st.session_state.expiracao = data_exp
+                    st.session_state.user_email = email_input.strip().lower()
+                    st.session_state.expiracao = expiracao
+                    st.success("✅ Acesso liberado!")
                     st.rerun()
-                elif msg_erro:
-                    st.error(msg_erro)
+                elif erro:
+                    st.error(erro)
                 else:
-                    st.error("E-mail não encontrado ou acesso expirado.")
+                    st.error("❌ E-mail não encontrado ou assinatura expirada.")
             else:
-                st.warning("Por favor, digite o seu e-mail de compra.")
+                st.warning("Por favor, digite o seu e-mail.")
 
-    st.divider()
+    with col_l2:
+        st.subheader("💳 Adquirir Acesso")
+        st.markdown(f"- [Plano 15 Dias]({LINK_KIWIFY_15_DIAS})")
+        st.markdown(f"- [Plano 30 Dias]({LINK_KIWIFY_30_DIAS})")
+        st.markdown(f"- [Plano 90 Dias]({LINK_KIWIFY_90_DIAS})")
 
-    st.markdown(
-        "<h3 style='text-align: center;'>💳 Ainda não tem acesso? Escolha o plano ideal para você:</h3>",
-        unsafe_allow_html=True,
-    )
-    st.write("")
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.markdown("### 🥉 Plano 15 Dias")
-        st.markdown("## R$ 19,90")
-        st.caption("Ideal para testes rápidos")
-        st.write("✓ Acesso total à ferramenta")
-        st.write("✓ Prompts otimizados ilimitados")
-        st.write("✓ Validade: **15 dias**")
-        st.write("")
-        st.link_button("Garantir 15 Dias", LINK_KIWIFY_15_DIAS, use_container_width=True)
-
-    with col2:
-        st.markdown("### 🥈 Plano 30 Dias")
-        st.markdown("## R$ 29,90")
-        st.caption("Plano mensal padrão")
-        st.write("✓ Acesso total à ferramenta")
-        st.write("✓ Prompts otimizados ilimitados")
-        st.write("✓ Validade: **30 dias**")
-        st.write("")
-        st.link_button("Garantir 30 Dias", LINK_KIWIFY_30_DIAS, use_container_width=True)
-
-    with col3:
-        st.markdown("### 🥇 Plano 90 Dias 🔥")
-        st.markdown("## R$ 59,90")
-        st.caption("🌟 **Mais Popular** — Leve 3, Pague 2")
-        st.write("✓ Acesso total à ferramenta")
-        st.write("✓ Prompts otimizados ilimitados")
-        st.write("✓ Validade: **90 dias**")
-        st.write("✓ **Economize R$ 29,80**")
-        st.link_button(
-            "GARANTIR 90 DIAS (OFERTA)",
-            LINK_KIWIFY_90_DIAS,
-            type="primary",
-            use_container_width=True,
-        )
-
-# ==============================================================================
-# TELA 2: APLICATIVO PRINCIPAL (Exibida APENAS para quem está AUTENTICADO)
-# ==============================================================================
+# TELA PRINCIPAL DO APLICATIVO
 else:
-    config_salva = carregar_config()
-    if "chaves_api" not in st.session_state:
-        st.session_state.chaves_api = config_salva.get(
-            "chaves", {"Chave 1": "", "Chave 2": ""}
-        )
+    st.sidebar.title("⚙️ Configurações & API")
+    st.sidebar.caption(f"Usuário: `{st.session_state.user_email}`")
 
-    # Barra Lateral
-    with st.sidebar:
-        st.title("👤 Sua Conta")
-        st.write(f"**E-mail:** {st.session_state.user_email}")
-        st.write(f"**Validade:** {st.session_state.expiracao}")
-        st.divider()
+    if st.sidebar.button("🚪 Sair"):
+        st.session_state.autenticado = False
+        st.rerun()
 
-        st.header("🔑 Configurações da API")
-        slot_chave = st.selectbox(
-            "Selecione o Slot:", list(st.session_state.chaves_api.keys())
-        )
+    config = carregar_config(st.session_state.user_email)
 
-        chave_key = f"input_key_{slot_chave}"
-        if chave_key not in st.session_state:
-            st.session_state[chave_key] = st.session_state.chaves_api.get(
-                slot_chave, ""
-            )
+    st.sidebar.markdown("---")
+    slot_chave = st.sidebar.radio("Slot de Chave API:", [1, 2], index=0)
 
-        chave_input = st.text_input(
-            "Chave API Gemini:", type="password", key=chave_key
-        )
-
-        modelos_disponiveis = [
-            "gemini-3.6-flash",
-            "gemini-3.5-flash",
-        ]
-        modelo_salvo = config_salva.get("modelo_padrao", "gemini-3.6-flash")
-        modelo_selecionado = st.selectbox(
-            "Modelo Gemini:",
-            modelos_disponiveis,
-            index=(
-                modelos_disponiveis.index(modelo_salvo)
-                if modelo_salvo in modelos_disponiveis
-                else 0
-            ),
-        )
-        usar_busca_web = st.checkbox(
-            "🌐 Ativar Pesquisa Web em Tempo Real (Google Grounding)",
-            value=config_salva.get("usar_busca_web", False),
-            key="usar_busca_web",
-            help="⚠️ REQUER CHAVE DE API PAGA (Pay-as-you-go). Se estiver usando a cota gratuita do Google AI Studio, esta opção causará o erro 429 RESOURCE_EXHAUSTED."
-        )
-
-        if usar_busca_web:
-            st.caption("ℹ️ *Apenas para chaves com faturamento ativo. Melhora a precisão de cores e cânone.*")
-
-        if st.button("💾 Salvar Configurações"):
-            for slot in st.session_state.chaves_api.keys():
-                s_key = f"input_key_{slot}"
-                if s_key in st.session_state:
-                    st.session_state.chaves_api[slot] = st.session_state[s_key].strip()
-            salvar_config(st.session_state.chaves_api, modelo_selecionado, usar_busca_web)
-            st.success("Configurações salvas com sucesso!")
-
-        st.divider()
-        if st.button("Sair / Trocar Conta", use_container_width=True):
-            st.session_state.autenticado = False
-            st.session_state.user_email = ""
-            st.session_state.expiracao = ""
-            st.rerun()
-
-    st.title("🎨 Gerador Mestre de Prompts IA")
-
-    # Abas da Aplicação
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(
-        [
-            "👤 Personagem Único",
-            "👥 Personagens Duplos",
-            "🐾 Animais & Criaturas",
-            "🧬 Série Consistente",
-            "🌐 Imagem Web",
-        ]
+    chave_input = st.sidebar.text_input(
+        f"Chave API Gemini (Slot {slot_chave}):",
+        value=config.get("chaves", {}).get(f"Chave {slot_chave}", ""),
+        type="password",
+        key=f"input_key_{slot_chave}",
     )
 
-    with tab1:
-        renderizar_formulario("p1", slot_chave, modelo_selecionado)
-    with tab2:
-        renderizar_formulario_duplo(slot_chave, modelo_selecionado)
-    with tab3:
-        renderizar_formulario_animais(slot_chave, modelo_selecionado)
-    with tab4:
-        renderizar_formulario("serie", slot_chave, modelo_selecionado, is_serie=True)
-    with tab5:
-        renderizar_formulario("web", slot_chave, modelo_selecionado, is_web=True)
+    lista_modelos = ["gemini-3.5-flash", "gemini-3.6-flash"]
+    modelo_salvo = config.get("modelo_padrao", "gemini-3.6-flash")
+    indice_modelo_padrao = (
+        lista_modelos.index(modelo_salvo) if modelo_salvo in lista_modelos else 1
+    )
+    modelo_selecionado = st.sidebar.selectbox(
+        "Modelo Gemini:",
+        lista_modelos,
+        index=indice_modelo_padrao,
+        key="modelo_gemini_selecionado",
+    )
+
+    usar_busca_web = st.sidebar.checkbox(
+        "🌐 Ativar Busca Web (Google Search Grounding)",
+        value=config.get("usar_busca_web", False),
+        key="usar_busca_web",
+    )
+
+    if st.sidebar.button("💾 Salvar Configurações"):
+        novas_chaves = config.get("chaves", {})
+        novas_chaves[f"Chave {slot_chave}"] = chave_input.strip()
+        salvar_config(novas_chaves, modelo_selecionado, usar_busca_web, email=st.session_state.user_email)
+        st.sidebar.success("Configurações salvas com sucesso!")
+
+    st.title("🚀 Gerador de Prompts IA Profissional")
+
+    tab_individual, tab_dupla, tab_animal, tab_web, tab_serie = st.tabs([
+        "👤 Individual",
+        "👥 Dupla de Personagens",
+        "🐾 Animais & Criaturas",
+        "🌐 Gerador Web",
+        "🧬 Série Consistente",
+    ])
+
+    email_usuario = st.session_state.user_email
+
+    with tab_individual:
+        renderizar_formulario("p1", slot_chave, modelo_selecionado, email=email_usuario)
+
+    with tab_dupla:
+        renderizar_formulario_duplo(slot_chave, modelo_selecionado, email=email_usuario)
+
+    with tab_animal:
+        renderizar_formulario_animais(slot_chave, modelo_selecionado, email=email_usuario)
+
+    with tab_web:
+        renderizar_formulario("p_web", slot_chave, modelo_selecionado, email=email_usuario, is_web=True)
+
+    with tab_serie:
+        renderizar_formulario("p_serie", slot_chave, modelo_selecionado, email=email_usuario, is_serie=True)
