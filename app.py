@@ -96,7 +96,39 @@ Sempre que o Nome/Sujeito for um personagem existente da cultura pop (anime, gam
 
    * REGRA PARA DUPLAS DE PERSONAGENS: As tags canônicas do Personagem 1 e do Personagem 2 DEVEM ser posicionadas estritamente na CAMADA 1 e CAMADA 2 no INÍCIO do prompt gerado, garantindo prioridade máxima de atenção e fidelidade aos traços de ambos os sujeitos antes de incluir informações de cenário e estilo.
 
+# Adicionar dentro das System Instructions (SISTEMA PADRÃO E WEB)
+
 =============================================================================
+PROTOCOLO DE DUPLAS E MULTI-PERSONAGENS (ISOLAMENTO ANTI-CONTAMINAÇÃO 99%)
+=============================================================================
+Quando a requisição for para MODO DUPLA DE PERSONAGENS, você DEVE seguir estritamente a arquitetura de tags em 6 etapas para evitar vazamento de cor/atributos (color bleeding):
+
+1. TAGS DE CONTAGEM MANDATÓRIAS (INÍCIO ABSOLUTO):
+   - Se 2 Mulheres: `2girls, multiple_girls`
+   - Se 2 Homens: `2boys, multiple_boys`
+   - Se 1 Mulher e 1 Homem: `1girl, 1boy, heterosexual, 1couple` ou `1girl, 1boy, multiple_monsters` (se aplicável)
+
+2. TAG DE INTERAÇÃO PRINCIPAL E POSICIONAMENTO GLOBAL:
+   - Insira imediatamente as tags que definem a ação conjunta e posição física exata:
+     Exemplos: `fighting_side_by_side, back-to-back, embracing, holding_hands, eye_contact, looking_at_each_other, standing_side_by_side, whisper_in_ear`
+
+3. ESTRUTURAÇÃO ISOLADA DO PERSONAGEM 1 (ANCORE COM POSIÇÃO):
+   - Decomponha P1 em tags atômicas ancorando a posição se necessário:
+     `[tag_p1], ([franquia_p1]), 1girl (ou 1boy), [cor_cabelo]_hair, [estilo_cabelo]_hair, [cor_olhos]_eyes, [traje_p1_atômico]`
+
+4. ESTRUTURAÇÃO ISOLADA DO PERSONAGEM 2 (ANCORE COM POSIÇÃO):
+   - Decomponha P2 mantendo os tokens isolados dos do P1:
+     `[tag_p2], ([franquia_p2]), 1girl (ou 1boy), [cor_cabelo]_hair, [estilo_cabelo]_hair, [cor_olhos]_eyes, [traje_p2_atômico]`
+
+5. ANCORAGEM RIGOROSA DE UNDERLINE:
+   - NUNCA deixe espaços soltos em cores ou trajes para evitar contaminação entre P1 e P2 (ex: use `red_dress` e `blue_suit`, nunca `red dress` e `blue suit`).
+
+=============================================================================
+EXEMPLO FEW-SHOT DE DUPLA (MANDATÓRIO):
+=============================================================================
+Entrada: "Nami e Nico Robin lutando lado a lado"
+Prompt Gerado:
+score_9, score_8_up, score_7_up, rating_safe, 2girls, multiple_girls, fighting_side_by_side, standing_side_by_side, battle_stance, nami_\(one_piece\), (one_piece), 1girl, long_hair, orange_hair, wavy_hair, brown_eyes, bikini_top, green_bikini_top, low_leg_jeans, nico_robin, (one_piece), 1girl, long_hair, black_hair, straight_hair, blue_eyes, leather_jacket, blue_jacket, cowboy_hat, masterpiece, high_resolution, ruins_background, sparks=============================================================================
 EXEMPLOS DE DECOMPOSIÇÃO CANÔNICA (FEW-SHOT MANDATÓRIO)
 =============================================================================
 Sempre siga o formato exato de decomposição Booru abaixo:
@@ -214,7 +246,7 @@ Se a entrada contiver "MODO SÉRIE CONSISTENTE ATIVADO":
 =============================================================================
 DIRETRIZES DE DESCRIÇÃO / LEGENDA PARA REDES SOCIAIS (FACEBOOK / INSTAGRAM)
 =============================================================================
-- A legenda em português DEVE SER CURTA, DIRETA E IMPACTANTE (no máximo 2 a 3 frases).
+- A legenda em português DEVE SER CURTA, DIRETA E IMPACTANTE (no máximo 2 frases).
 - Conecte o Nome/Sujeito com a Ação e o Cenário.
 - REGRA CRÍTICA DE CTA (OBRIGATÓRIO): Toda legenda DEVE FINALIZAR OBRIGATORIAMENTE com uma Chamada para Ação (CTA) forte e persuasiva. NUNCA OMITA A CTA.
 
@@ -606,39 +638,41 @@ def chamar_gemini_api(
     else:
         sys_instruction = SYSTEM_INSTRUCTION_PADRAO
 
-    # MODO 1: PERSONAGENS DUPLOS
+    # MODO 1: PERSONAGENS DUPLOS (OTIMIZADO COM REGRA 99% FIDELIDADE)
     if dados_personagem.get("is_duo"):
-        prompt_usuario = f"""--- MODO DUPLA DE PERSONAGENS ATIVADO (MÁXIMA FIDELIDADE CANÔNICA) ---
-[PRIORIDADE MÁXIMA DE ATENÇÃO: POSICIONE A DECOMPOSIÇÃO DOS PERSONAGENS NO INÍCIO DO PROMPT GERADO]
+        prompt_usuario = f"""--- MODO DUPLA DE PERSONAGENS ATIVADO (SISTEMA DE ISOLAMENTO 99%) ---
+Composição Exata: {obter_str_limpa('composicao_dupla')}
+Fluxo Base: {obter_str_limpa('fluxo', 'Illustrious')}
+Categoria de Arte: {obter_str_limpa('categoria_arte')}
+Nível de Sensualidade: {obter_str_limpa('sensualidade')}
+Orientação (Ratio): {obter_str_limpa('orientacao')}
+Estilo Visual: {obter_str_limpa('estilo')}
+Cenário / Ambiente: {obter_str_limpa('cenario')}
+Iluminação: {obter_str_limpa('iluminacao')}
+Efeitos Especiais: {obter_str_limpa('efeitos')}
 
-- PERSONAGEM 1 (PRIORIDADE CRÍTICA DE IDENTIDADE):
-  * Nome / Sujeito: {obter_str_limpa('p1_nome')} (EXIGÊNCIA CANÔNICA MANDATÓRIA: Desmembrar no INÍCIO do prompt em tags Booru detalhadas de rosto, cabelo, olhos e traje oficial)
-  * Tipo de Sujeito: {obter_str_limpa('p1_tipo')}
+=============================================================================
+REQUISITO PRINCIPAL DE INTERAÇÃO (PRIORIDADE ALTA NA CENA):
+- AÇÃO CONJUNTA / INTERAÇÃO: {obter_str_limpa('interacao')}
+  (Converta obrigatoriamente em tags de pose conjunta e posicionamento espacial explícito, ex: back-to-back, holding_hands, looking_at_each_other, fighting_side_by_side).
+
+=============================================================================
+ISOLAMENTO CANÔNICO DOS PERSONAGENS:
+- PERSONAGEM 1 (Principal / Esquerda):
+  * Nome Oficial: {obter_str_limpa('p1_nome')}
+  * Decomposição Canônica Obrigatória: Desmembrar em tags Booru atômicas com underline ([tag_p1], ([franquia]), [cabelo], [olhos], [traje_oficial_completo]).
   * Enquadramento P1: {obter_str_limpa('p1_enquadramento')}
   * Expressão P1: {obter_str_limpa('p1_emocao')}
-  * Pose / Ação Individual P1: {obter_str_limpa('p1_pose')}
-  * Ajustes Anatômicos P1: Seios ({obter_str_limpa('p1_seios')}), Mamilos ({obter_str_limpa('p1_mamilos')}), Transparência ({obter_str_limpa('p1_transparencia')}), Contorno ({obter_str_limpa('p1_contorno')})
+  * Pose P1: {obter_str_limpa('p1_pose')}
+  * Modificadores P1: Seios ({obter_str_limpa('p1_seios')}), Mamilos ({obter_str_limpa('p1_mamilos')}), Transparência ({obter_str_limpa('p1_transparencia')}), Contorno ({obter_str_limpa('p1_contorno')})
 
-- PERSONAGEM 2 (PRIORIDADE CRÍTICA DE IDENTIDADE):
-  * Nome / Sujeito: {obter_str_limpa('p2_nome')} (EXIGÊNCIA CANÔNICA MANDATÓRIA: Desmembrar no INÍCIO do prompt em tags Booru detalhadas de rosto, cabelo, olhos e traje oficial)
-  * Tipo de Sujeito: {obter_str_limpa('p2_tipo')}
+- PERSONAGEM 2 (Secundário / Direita):
+  * Nome Oficial: {obter_str_limpa('p2_nome')}
+  * Decomposição Canônica Obrigatória: Desmembrar em tags Booru atômicas com underline ([tag_p2], ([franquia]), [cabelo], [olhos], [traje_oficial_completo]).
   * Enquadramento P2: {obter_str_limpa('p2_enquadramento')}
   * Expressão P2: {obter_str_limpa('p2_emocao')}
-  * Pose / Ação Individual P2: {obter_str_limpa('p2_pose')}
-  * Ajustes Anatômicos P2: Seios ({obter_str_limpa('p2_seios')}), Mamilos ({obter_str_limpa('p2_mamilos')}), Transparência ({obter_str_limpa('p2_transparencia')}), Contorno ({obter_str_limpa('p2_contorno')})
-
-- INTERAÇÃO / AÇÃO CONJUNTA NA CENA: {obter_str_limpa('interacao')}
-
-- AMBIENTE, ESTILO E CONFIGURAÇÕES TÉCNICAS:
-  * Composição Solicitada da Dupla: {obter_str_limpa('composicao_dupla')}
-  * Fluxo Base: {obter_str_limpa('fluxo', 'Illustrious')}
-  * Categoria de Arte: {obter_str_limpa('categoria_arte')}
-  * Nível de Sensualidade: {obter_str_limpa('sensualidade')}
-  * Orientação (Ratio): {obter_str_limpa('orientacao')}
-  * Estilo Visual: {obter_str_limpa('estilo')}
-  * Cenário / Ambiente: {obter_str_limpa('cenario')}
-  * Iluminação: {obter_str_limpa('iluminacao')}
-  * Efeitos Especiais: {obter_str_limpa('efeitos')}
+  * Pose P2: {obter_str_limpa('p2_pose')}
+  * Modificadores P2: Seios ({obter_str_limpa('p2_seios')}), Mamilos ({obter_str_limpa('p2_mamilos')}), Transparência ({obter_str_limpa('p2_transparencia')}), Contorno ({obter_str_limpa('p2_contorno')})
 """
 
     # MODO 2: ANIMAIS E CRIATURAS
