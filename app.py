@@ -1590,29 +1590,11 @@ if not st.session_state.autenticado:
             else:
                 st.warning("Por favor, digite o seu e-mail.")
 
-    with col2:
-    st.subheader("💳 Adquirir Acesso")
-
-    # Plano 15 Dias
-    st.link_button(
-        label="🚀 Plano 15 Dias — R$ 14,99",
-        url="https://pay.kiwify.com.br/MXVL98k",
-        use_container_width=True
-    )
-
-    # Plano 30 Dias
-    st.link_button(
-        label="⭐ Plano 30 Dias — R$ 29,99",
-        url="https://pay.kiwify.com.br/dyfEGe5",
-        use_container_width=True
-    )
-
-    # Plano 90 Dias
-    st.link_button(
-        label="🔥 Plano 90 Dias — R$ 59,99",
-        url="https://pay.kiwify.com.br/xo0m3rF",
-        use_container_width=True
-    )
+    with col_l2:
+        st.subheader("💳 Adquirir Acesso")
+        st.markdown(f"- [Plano 15 Dias]({LINK_KIWIFY_15_DIAS})")
+        st.markdown(f"- [Plano 30 Dias]({LINK_KIWIFY_30_DIAS})")
+        st.markdown(f"- [Plano 90 Dias]({LINK_KIWIFY_90_DIAS})")
 
 # TELA PRINCIPAL DO APLICATIVO
 else:
