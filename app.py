@@ -1591,7 +1591,7 @@ if not st.session_state.autenticado:
                 st.warning("Por favor, digite o seu e-mail.")
 
 with col2:
-st.subheader("💳 Adquirir Acesso")
+    st.subheader("💳 Adquirir Acesso")
 
     # Plano 15 Dias
     st.link_button(
@@ -1613,7 +1613,6 @@ st.subheader("💳 Adquirir Acesso")
         url="https://pay.kiwify.com.br/xo0m3rF",
         use_container_width=True
     )
-
 # TELA PRINCIPAL DO APLICATIVO
 else:
     st.sidebar.title("⚙️ Configurações & API")
