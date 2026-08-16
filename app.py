@@ -1592,7 +1592,6 @@ if not st.session_state.autenticado:
 
     with col2:
     st.subheader("💳 Adquirir Acesso")
-    st.caption("Escolha o plano ideal para suas necessidades:")
 
     # Plano 15 Dias
     st.link_button(
