@@ -19,28 +19,34 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    /* Regra existente para blocos de código */
+    /* Regra para blocos de código */
     code {
         white-space: pre-wrap !important;
         word-break: break-word !important;
     }
 
-    /* 1. Expande a largura da caixa flutuante do menu (dropdown) ao abrir */
-    div[data-baseweb="popover"] {
-        min-width: 280px !important;
-        width: auto !important;
+    /* 1. Força a caixa flutuante do menu e suas listas internas a expandirem */
+    div[data-baseweb="popover"],
+    div[data-baseweb="popover"] > div,
+    div[data-baseweb="popover"] ul,
+    div[data-baseweb="popover"] [data-baseweb="menu"] {
+        min-width: 320px !important;
+        width: max-content !important;
     }
 
-    /* 2. Permite que o texto das opções do menu quebre linha se for longo */
-    div[data-baseweb="popover"] ul li {
+    /* 2. Remove o limite de texto e reticências de cada opção do menu */
+    div[data-baseweb="popover"] li,
+    div[data-baseweb="popover"] [role="option"],
+    div[data-baseweb="popover"] [role="option"] * {
         white-space: normal !important;
         word-break: break-word !important;
+        text-overflow: unset !important;
+        overflow: visible !important;
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
-
 # ==============================================================================
 # 2. CONSTANTES E LINKS DE CONFIGURAÇÃO
 # ==============================================================================
