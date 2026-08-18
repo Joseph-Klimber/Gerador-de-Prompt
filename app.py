@@ -19,29 +19,20 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    /* Regra para blocos de código */
-    code {
-        white-space: pre-wrap !important;
-        word-break: break-word !important;
-    }
-
-    /* 1. Força a caixa flutuante do menu e suas listas internas a expandirem */
+    /* Força a caixa flutuante e a lista interna a ignorarem a largura do botão pai */
     div[data-baseweb="popover"],
     div[data-baseweb="popover"] > div,
     div[data-baseweb="popover"] ul,
-    div[data-baseweb="popover"] [data-baseweb="menu"] {
-        min-width: 320px !important;
+    div[data-baseweb="popover"] [role="listbox"] {
+        min-width: 300px !important;
         width: max-content !important;
     }
 
-    /* 2. Remove o limite de texto e reticências de cada opção do menu */
-    div[data-baseweb="popover"] li,
-    div[data-baseweb="popover"] [role="option"],
-    div[data-baseweb="popover"] [role="option"] * {
-        white-space: normal !important;
-        word-break: break-word !important;
-        text-overflow: unset !important;
+    /* Impede que o texto dentro dos itens do menu seja cortado */
+    div[data-baseweb="popover"] li * {
+        white-space: nowrap !important;
         overflow: visible !important;
+        text-overflow: clip !important;
     }
     </style>
     """,
