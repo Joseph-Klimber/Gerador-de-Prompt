@@ -894,9 +894,6 @@ Gere o prompt final otimizado em inglês e crie uma DESCRIÇÃO/LEGENDA CURTA EM
 
 
 def st_campo_hibrido(label, placeholder, opcoes, key_prefix, disabled=False):
-    # Alterado de [0.65, 0.35] para [0.45, 0.55] para expandir o box de Presets
-    col_txt, col_drop = st.columns([0.45, 0.55], vertical_alignment="bottom")
-
     def ao_selecionar_preset():
         sel = st.session_state.get(f"{key_prefix}_drop")
         if sel and sel not in ["Presets...", "Digite manualmente..."]:
@@ -913,22 +910,23 @@ def st_campo_hibrido(label, placeholder, opcoes, key_prefix, disabled=False):
         )
     )
 
-    with col_txt:
-        val = st.text_input(
-            label,
-            placeholder=placeholder,
-            key=f"{key_prefix}_txt",
-            disabled=disabled,
-        )
-    with col_drop:
-        st.selectbox(
-            "Presets",
-            ["Presets..."] + validas,
-            key=f"{key_prefix}_drop",
-            on_change=ao_selecionar_preset,
-            disabled=disabled,
-            label_visibility="collapsed",
-        )
+    # Selectbox de presets em largura total
+    st.selectbox(
+        f"Selecione um Preset ({label})",
+        ["Presets..."] + validas,
+        key=f"{key_prefix}_drop",
+        on_change=ao_selecionar_preset,
+        disabled=disabled,
+    )
+
+    # Campo de texto em largura total logo abaixo
+    val = st.text_input(
+        label,
+        placeholder=placeholder,
+        key=f"{key_prefix}_txt",
+        disabled=disabled,
+    )
+
     return val
 
 
