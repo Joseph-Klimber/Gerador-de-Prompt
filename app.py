@@ -19,20 +19,9 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    /* Força a caixa flutuante e a lista interna a ignorarem a largura do botão pai */
-    div[data-baseweb="popover"],
-    div[data-baseweb="popover"] > div,
-    div[data-baseweb="popover"] ul,
-    div[data-baseweb="popover"] [role="listbox"] {
-        min-width: 300px !important;
-        width: max-content !important;
-    }
-
-    /* Impede que o texto dentro dos itens do menu seja cortado */
-    div[data-baseweb="popover"] li * {
-        white-space: nowrap !important;
-        overflow: visible !important;
-        text-overflow: clip !important;
+    code {
+        white-space: pre-wrap !important;
+        word-break: break-word !important;
     }
     </style>
     """,
