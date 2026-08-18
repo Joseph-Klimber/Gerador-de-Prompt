@@ -19,8 +19,21 @@ st.set_page_config(
 st.markdown(
     """
     <style>
+    /* Quebra de linha automática do prompt gerado (mantido conforme solicitado) */
     code {
         white-space: pre-wrap !important;
+        word-break: break-word !important;
+    }
+
+    /* CORREÇÃO IMAGEM 1: Ajuste do menu suspenso dos Presets/Selectbox */
+    /* Permite que o menu expanda a largura para exibir os nomes completos */
+    div[data-baseweb="popover"] {
+        min-width: max-content !important;
+    }
+
+    /* Permite que o texto das opções do menu dobre de linha se necessário */
+    div[data-baseweb="popover"] li {
+        white-space: normal !important;
         word-break: break-word !important;
     }
     </style>
