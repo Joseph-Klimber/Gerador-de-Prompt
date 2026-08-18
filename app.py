@@ -19,21 +19,14 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    /* Quebra de linha automática do prompt gerado (mantido conforme solicitado) */
     code {
         white-space: pre-wrap !important;
         word-break: break-word !important;
     }
-
-    /* CORREÇÃO IMAGEM 1: Ajuste do menu suspenso dos Presets/Selectbox */
-    /* Permite que o menu expanda a largura para exibir os nomes completos */
-    div[data-baseweb="popover"] {
-        min-width: max-content !important;
-    }
-
-    /* Permite que o texto das opções do menu dobre de linha se necessário */
-    div[data-baseweb="popover"] li {
+    /* Evita que o texto dentro do selectbox seja cortado com reticências */
+    div[data-baseweb="select"] * {
         white-space: normal !important;
+        text-overflow: clip !important;
         word-break: break-word !important;
     }
     </style>
@@ -901,7 +894,8 @@ Gere o prompt final otimizado em inglês e crie uma DESCRIÇÃO/LEGENDA CURTA EM
 
 
 def st_campo_hibrido(label, placeholder, opcoes, key_prefix, disabled=False):
-    col_txt, col_drop = st.columns([0.65, 0.35], vertical_alignment="bottom")
+    # Alterado de [0.65, 0.35] para [0.45, 0.55] para expandir o box de Presets
+    col_txt, col_drop = st.columns([0.45, 0.55], vertical_alignment="bottom")
 
     def ao_selecionar_preset():
         sel = st.session_state.get(f"{key_prefix}_drop")
