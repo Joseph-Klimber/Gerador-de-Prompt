@@ -19,8 +19,21 @@ st.set_page_config(
 st.markdown(
     """
     <style>
+    /* Regra existente para blocos de código */
     code {
         white-space: pre-wrap !important;
+        word-break: break-word !important;
+    }
+
+    /* 1. Expande a largura da caixa flutuante do menu (dropdown) ao abrir */
+    div[data-baseweb="popover"] {
+        min-width: 280px !important;
+        width: auto !important;
+    }
+
+    /* 2. Permite que o texto das opções do menu quebre linha se for longo */
+    div[data-baseweb="popover"] ul li {
+        white-space: normal !important;
         word-break: break-word !important;
     }
     </style>
