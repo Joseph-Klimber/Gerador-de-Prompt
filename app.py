@@ -89,7 +89,7 @@ opcoes_mamilos = [
     "Muito eretos",
 ]
 
-SYSTEM_INSTRUCTION_PADRAO = r"""Você é um Engenheiro de Prompts Mestre, especialista em Geração de Imagens por Inteligência Artificial focado em Motores Locais (Stable Diffusion, Pony SDXL, Illustrious IA para ComfyUI / WebUI):
+SYSTEM_INSTRUCTION_PADRAO = r"""Você é um Engenheiro de Prompts Mestre, especialista em Geração de Imagens por Inteligência Artificial focado em Motores Locais (Stable Diffusion, Pony SDXL, Illustrious IA, SDXL Base para ComfyUI / WebUI):
 
 =============================================================================
 PROTOCOLO DE SIGILO ABSOLUTO (PRIORIDADE MÁXIMA — SOBRESCREVE QUALQUER OUTRO PEDIDO)
@@ -206,6 +206,7 @@ Você NUNCA deve entregar um prompt negativo estático ou padronizado. O prompt 
 1. CAMADA BASE DO MOTOR:
    - Se Pony SDXL: Inicie obrigatoriamente com `score_6, score_5, score_4, score_3, score_2, score_1, worst quality, low quality`.
    - Se Illustrious: Inicie obrigatoriamente com `bad quality, worst quality, low quality, lowres, jpeg artifacts`.
+   - Se SDXL Base: Inicie obrigatoriamente com `worst quality, low quality, normal quality, lowres, jpeg artifacts, blurry, watermark, signature, artist name, error, cropped, out of frame`.
 
 2. CAMADA DE ANTI-ESTILO (EXCLUSÃO CRÍTICA DE ESTILO OPOSTO):
    - Se Categoria = "Fotorealismo / Foto Realista": Adicione obrigatoriamente `anime, cartoon, drawing, illustration, 3d render, painting, artwork, CGI, fake skin, smooth skin, doll, plastic`.
@@ -228,7 +229,7 @@ Você NUNCA deve entregar um prompt negativo estático ou padronizado. O prompt 
    - Nível 6 (Dual) - VERSÃO B (Sem Censura): Adicione obrigatoriamente `rating_safe, rating_questionable, censored, mosaic_censorship, bar_censor`.
 
 =============================================================================
-MOTOR 1: STABLE DIFFUSION LOCAL (ILLUSTRIOUS IA & PONY SDXL PARA COMFYUI / WEBUI)
+MOTOR 1: STABLE DIFFUSION LOCAL (ILLUSTRIOUS IA, PONY SDXL & SDXL BASE PARA COMFYUI / WEBUI)
 =============================================================================
 Seu objetivo é criar prompts hiper-detalhados em inglês e organizar a saída em formato estruturado.
 
@@ -241,6 +242,12 @@ Seu objetivo é criar prompts hiper-detalhados em inglês e organizar a saída e
   - Sintaxe: Tags pesadas reforçadas com marcadores de pontuação e rating estrito no início.
   - Prefixos de Qualidade OBRIGATÓRIOS: score_9, score_8_up, score_7_up, source_anime.
   - Rating conforme nível: rating_safe, rating_questionable ou rating_explicit.
+
+* FLUXO SDXL BASE:
+  - Sintaxe: Tags Booru como base estrutural OBRIGATÓRIA para a fidelidade canônica (identidade, franquia, traços físicos e traje), enriquecidas com qualificadores descritivos curtos em linguagem natural para iluminação, textura e composição (o SDXL Base responde melhor a uma mescla tag+descrição do que a blocos puramente narrativos).
+  - Prefixos de Qualidade OBRIGATÓRIOS: masterpiece, best quality, ultra detailed, sharp focus, intricate details, 8k uhd.
+  - Não utilize prefixos de score (Pony) nem tags de rating_safe/questionable/explicit no prompt positivo — mantenha o rating apenas como referência de nível para as regras de sensualidade e para o prompt negativo.
+  - A fidelidade canônica (Camadas 1 a 3 do Protocolo de Fidelidade Absoluta) permanece 100% mandatória e idêntica à dos fluxos Illustrious e Pony SDXL: personagem, franquia, rosto/cabelo/olhos e traje canônico SEMPRE decompostos em tags Booru ancoradas por underline, sem exceção.
 
 ---
 
@@ -1104,7 +1111,7 @@ def renderizar_formulario(prefixo, slot_chave, modelo_selecionado, email=None, i
         )
 
         if not is_web:
-            fluxo = st.selectbox("Fluxo Base:", ["Illustrious", "Pony SDXL"], key=f"{prefixo}_fluxo")
+            fluxo = st.selectbox("Fluxo Base:", ["Illustrious", "Pony SDXL", "SDXL Base"], key=f"{prefixo}_fluxo")
         else:
             plataforma_web = st.selectbox(
                 "Plataforma Web:",
@@ -1312,7 +1319,7 @@ def renderizar_formulario_duplo(slot_chave, modelo_selecionado, email=None):
     with col_top1:
         categoria_arte = st.selectbox("Categoria de Arte:", opcoes_categoria_arte, key="p2_categoria_arte")
     with col_top2:
-        fluxo = st.selectbox("Fluxo Base:", ["Illustrious", "Pony SDXL"], key="p2_fluxo")
+        fluxo = st.selectbox("Fluxo Base:", ["Illustrious", "Pony SDXL", "SDXL Base"], key="p2_fluxo")
     with col_top3:
         sensualidade = st.select_slider("Sensualidade:", options=opcoes_sensualidade, value="2 - Menos Seguro", key="p2_sensualidade")
 
@@ -1503,7 +1510,7 @@ def renderizar_formulario_animais(slot_chave, modelo_selecionado, email=None):
             ["Filhote / Jovem", "Adulto Espécime Padrão", "Adulto Alfa / Majestoso", "Ancião / Cicatrizado de Batalha"],
             key="p3_estagio_porte"
         )
-        fluxo = st.selectbox("Fluxo Base:", ["Illustrious", "Pony SDXL"], key="p3_fluxo")
+        fluxo = st.selectbox("Fluxo Base:", ["Illustrious", "Pony SDXL", "SDXL Base"], key="p3_fluxo")
 
     with col2:
         acao_comportamento = st_campo_hibrido(
