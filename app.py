@@ -206,7 +206,7 @@ Você NUNCA deve entregar um prompt negativo estático ou padronizado. O prompt 
 1. CAMADA BASE DO MOTOR:
    - Se Pony SDXL: Inicie obrigatoriamente com `score_6, score_5, score_4, score_3, score_2, score_1, worst quality, low quality`.
    - Se Illustrious: Inicie obrigatoriamente com `bad quality, worst quality, low quality, lowres, jpeg artifacts`.
-   - Se SDXL Base: Inicie obrigatoriamente com `worst quality, low quality, normal quality, lowres, jpeg artifacts, blurry, watermark, signature, artist name, error, cropped, out of frame`.
+   - Se SDXL Base ou SDXL Base (Natural): Inicie obrigatoriamente com `worst quality, low quality, normal quality, lowres, jpeg artifacts, blurry, watermark, signature, artist name, error, cropped, out of frame`.
 
 2. CAMADA DE ANTI-ESTILO (EXCLUSÃO CRÍTICA DE ESTILO OPOSTO):
    - Se Categoria = "Fotorealismo / Foto Realista": Adicione obrigatoriamente `anime, cartoon, drawing, illustration, 3d render, painting, artwork, CGI, fake skin, smooth skin, doll, plastic`.
@@ -229,7 +229,7 @@ Você NUNCA deve entregar um prompt negativo estático ou padronizado. O prompt 
    - Nível 6 (Dual) - VERSÃO B (Sem Censura): Adicione obrigatoriamente `rating_safe, rating_questionable, censored, mosaic_censorship, bar_censor`.
 
 =============================================================================
-MOTOR 1: STABLE DIFFUSION LOCAL (ILLUSTRIOUS IA, PONY SDXL & SDXL BASE PARA COMFYUI / WEBUI)
+MOTOR 1: STABLE DIFFUSION LOCAL (ILLUSTRIOUS IA, PONY SDXL, SDXL BASE & SDXL BASE NATURAL PARA COMFYUI / WEBUI)
 =============================================================================
 Seu objetivo é criar prompts hiper-detalhados em inglês e organizar a saída em formato estruturado.
 
@@ -248,6 +248,15 @@ Seu objetivo é criar prompts hiper-detalhados em inglês e organizar a saída e
   - Prefixos de Qualidade OBRIGATÓRIOS: masterpiece, best quality, ultra detailed, sharp focus, intricate details, 8k uhd.
   - Não utilize prefixos de score (Pony) nem tags de rating_safe/questionable/explicit no prompt positivo — mantenha o rating apenas como referência de nível para as regras de sensualidade e para o prompt negativo.
   - A fidelidade canônica (Camadas 1 a 3 do Protocolo de Fidelidade Absoluta) permanece 100% mandatória e idêntica à dos fluxos Illustrious e Pony SDXL: personagem, franquia, rosto/cabelo/olhos e traje canônico SEMPRE decompostos em tags Booru ancoradas por underline, sem exceção.
+  - USO RECOMENDADO: checkpoints SDXL com fine-tuning anime/booru (ex: variantes treinadas em dados Danbooru), onde o modelo já reconhece tags e nomes de personagens.
+
+* FLUXO SDXL BASE (NATURAL):
+  - Sintaxe: Prioriza DESCRIÇÃO EM LINGUAGEM NATURAL fluida e coesa (frases/orações descritivas em inglês), já que o checkpoint SDXL Base vanilla foi treinado majoritariamente com legendas naturais (estilo LAION) e não reconhece bem tag-soup booru nem nomes de personagens em formato de tag.
+  - FIDELIDADE CANÔNICA ADAPTADA: as Camadas 1 a 3 do Protocolo de Fidelidade Absoluta continuam OBRIGATÓRIAS em conteúdo (identidade, franquia, rosto/cabelo/olhos, traje canônico 100% fiel), mas a FORMA muda — em vez de decompor em tags atômicas com underline, descreva os mesmos atributos canônicos em frases naturais claras e específicas (ex: em vez de `nami_\(one_piece\), orange_hair, wavy_hair, brown_eyes, green_bikini_top`, escreva "Nami from One Piece, with long wavy orange hair and brown eyes, wearing her signature green bikini top"). Apenas o nome do personagem e da franquia podem ser mantidos como âncora curta entre parênteses ao final da frase de identidade, ex: `(Nami, One Piece)`, para reforçar o reconhecimento sem depender de tags booru que o modelo não entende.
+  - Prefixos de Qualidade OBRIGATÓRIOS (inseridos como frase inicial, não como lista de tags soltas): "masterpiece, best quality, ultra-detailed digital illustration, sharp focus, cinematic lighting, 8k".
+  - Não utilize prefixos de score (Pony), tags de rating, nem tags booru técnicas (ex: `1girl`, `solo`, `_hair`, `_eyes` com underline) no prompt positivo — substitua sempre por sua forma descritiva equivalente em inglês natural.
+  - O PROMPT NEGATIVO continua no formato de tags/termos curtos (padrão da Camada Base do Motor), pois prompts negativos funcionam bem como lista mesmo em checkpoints naturais.
+  - USO RECOMENDADO: checkpoint SDXL Base 1.0 vanilla ou variantes sem fine-tuning específico em dados anime/booru.
 
 ---
 
@@ -1111,7 +1120,7 @@ def renderizar_formulario(prefixo, slot_chave, modelo_selecionado, email=None, i
         )
 
         if not is_web:
-            fluxo = st.selectbox("Fluxo Base:", ["Illustrious", "Pony SDXL", "SDXL Base"], key=f"{prefixo}_fluxo")
+            fluxo = st.selectbox("Fluxo Base:", ["Illustrious", "Pony SDXL", "SDXL Base", "SDXL Base (Natural)"], key=f"{prefixo}_fluxo")
         else:
             plataforma_web = st.selectbox(
                 "Plataforma Web:",
@@ -1319,7 +1328,7 @@ def renderizar_formulario_duplo(slot_chave, modelo_selecionado, email=None):
     with col_top1:
         categoria_arte = st.selectbox("Categoria de Arte:", opcoes_categoria_arte, key="p2_categoria_arte")
     with col_top2:
-        fluxo = st.selectbox("Fluxo Base:", ["Illustrious", "Pony SDXL", "SDXL Base"], key="p2_fluxo")
+        fluxo = st.selectbox("Fluxo Base:", ["Illustrious", "Pony SDXL", "SDXL Base", "SDXL Base (Natural)"], key="p2_fluxo")
     with col_top3:
         sensualidade = st.select_slider("Sensualidade:", options=opcoes_sensualidade, value="2 - Menos Seguro", key="p2_sensualidade")
 
@@ -1510,7 +1519,7 @@ def renderizar_formulario_animais(slot_chave, modelo_selecionado, email=None):
             ["Filhote / Jovem", "Adulto Espécime Padrão", "Adulto Alfa / Majestoso", "Ancião / Cicatrizado de Batalha"],
             key="p3_estagio_porte"
         )
-        fluxo = st.selectbox("Fluxo Base:", ["Illustrious", "Pony SDXL", "SDXL Base"], key="p3_fluxo")
+        fluxo = st.selectbox("Fluxo Base:", ["Illustrious", "Pony SDXL", "SDXL Base", "SDXL Base (Natural)"], key="p3_fluxo")
 
     with col2:
         acao_comportamento = st_campo_hibrido(
