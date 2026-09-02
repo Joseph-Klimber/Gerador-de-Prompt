@@ -1363,109 +1363,71 @@ def limpar_campos_animais():
 # 3.3 RENDERIZADORES DE FORMULÁRIO (PADRÃO, DUPLO, ANIMAL)
 # ==============================================================================
 def renderizar_formulario(prefixo, slot_chave, modelo_selecionado, email=None, is_web=False, is_serie=False):
-    col1, col2 = st.columns(2)
-
-    with col1:
-        tipo_sujeito = st.selectbox("Tipo de Sujeito:", opcoes_tipo_sujeito, key=f"{prefixo}_tipo_sujeito")
-        g_ref = "masculino" if tipo_sujeito == "Masculino" else "feminino"
-
-        nome = st_campo_hibrido(
-            "Nome / Sujeito:",
-            "Ex: Android 18, Katana Antiga",
-            carregar_lista_nomes(g_ref),
-            f"{prefixo}_nome",
-        )
-
-        if not is_web:
-            fluxo = st.selectbox("Fluxo Base:", ["Illustrious", "Pony SDXL", "SDXL Base", "SDXL Base (Natural)"], key=f"{prefixo}_fluxo")
-        else:
-            plataforma_web = st.selectbox(
-                "Plataforma Web:",
-                [
-                    "🍌 Nano Banana / Web Engine",
-                    "🎨 Midjourney v6.1",
-                    "⚡ Flux.1 (Dev/Schnell)",
-                    "🔤 Ideogram 2.0",
-                    "🖼️ DALL-E 3 / Bing",
-                    "🎭 Leonardo.Ai / SeaArt",
-                ],
-                key=f"{prefixo}_plataforma_web",
+    # Ordem visual: identidade -> direção -> vestuário -> composição -> atmosfera.
+    with st.container(border=True):
+        st.markdown("#### 1. Identidade e direção visual")
+        col_id1, col_id2 = st.columns(2)
+        with col_id1:
+            tipo_sujeito = st.selectbox("Tipo de Sujeito:", opcoes_tipo_sujeito, key=f"{prefixo}_tipo_sujeito")
+            g_ref = "masculino" if tipo_sujeito == "Masculino" else "feminino"
+            nome = st_campo_hibrido(
+                "Nome / Sujeito:",
+                "Ex: Android 18, Katana Antiga",
+                carregar_lista_nomes(g_ref),
+                f"{prefixo}_nome",
             )
+        with col_id2:
+            if not is_web:
+                fluxo = st.selectbox("Fluxo Base:", ["Illustrious", "Pony SDXL", "SDXL Base", "SDXL Base (Natural)"], key=f"{prefixo}_fluxo")
+            else:
+                plataforma_web = st.selectbox(
+                    "Plataforma Web:",
+                    ["🍌 Nano Banana / Web Engine", "🎨 Midjourney v6.1", "⚡ Flux.1 (Dev/Schnell)", "🔤 Ideogram 2.0", "🖼️ DALL-E 3 / Bing", "🎭 Leonardo.Ai / SeaArt"],
+                    key=f"{prefixo}_plataforma_web",
+                )
+            categoria_arte = st.selectbox("Categoria de Arte:", opcoes_categoria_arte, key=f"{prefixo}_categoria_arte")
 
-        categoria_arte = st.selectbox("Categoria de Arte:", opcoes_categoria_arte, key=f"{prefixo}_categoria_arte")
-        is_obj_or_land = tipo_sujeito in ["Paisagem / Cenário", "Objeto / Item"]
+    is_obj_or_land = tipo_sujeito in ["Paisagem / Cenário", "Objeto / Item"]
+    fn_carregar = carregar_lista_integrada_web if is_web else carregar_lista_dual
 
-        sensualidade = st.select_slider(
-            "Sensualidade:",
-            options=opcoes_sensualidade,
-            value="2 - Menos Seguro",
-            disabled=is_obj_or_land,
-            key=f"{prefixo}_sensualidade",
-        )
+    with st.container(border=True):
+        st.markdown("#### 2. Aparência, expressão e vestuário")
+        col_app1, col_app2 = st.columns(2)
+        with col_app1:
+            sensualidade = st.select_slider("Sensualidade:", options=opcoes_sensualidade, value="2 - Menos Seguro", disabled=is_obj_or_land, key=f"{prefixo}_sensualidade")
+            estilo = st_campo_hibrido("Estilo Visual:", "Ex: estilo Makoto Shinkai", fn_carregar("estilos.txt", "estilos_web.txt", g_ref) if is_web else fn_carregar("estilos.txt", g_ref), f"{prefixo}_estilo")
+            emocao = st_campo_hibrido("Expressão:", "Ex: olhar frio", fn_carregar("expressoes.txt", "expressoes_web.txt", g_ref) if is_web else fn_carregar("expressoes.txt", g_ref), f"{prefixo}_emocao", disabled=is_obj_or_land)
+        with col_app2:
+            with st.expander("👙 Vestuário e anatomia", expanded=not is_obj_or_land):
+                seios = st.selectbox("Tamanho dos Seios:", opcoes_seios, disabled=is_obj_or_land, key=f"{prefixo}_seios")
+                mamilos = st.selectbox("Detalhes dos Mamilos:", opcoes_mamilos, disabled=is_obj_or_land, key=f"{prefixo}_mamilos")
+                col_v1, col_v2 = st.columns(2)
+                with col_v1:
+                    transparencia = st.checkbox("Transparência no Traje", disabled=is_obj_or_land, key=f"{prefixo}_transparencia")
+                with col_v2:
+                    contorno = st.checkbox("Realçar Contorno", disabled=is_obj_or_land, key=f"{prefixo}_contorno")
 
-        with st.expander("👙 Ajustes de Vestuário e Anatomia", expanded=not is_obj_or_land):
-            seios = st.selectbox("Tamanho dos Seios:", opcoes_seios, disabled=is_obj_or_land, key=f"{prefixo}_seios")
-            mamilos = st.selectbox("Detalhes dos Mamilos:", opcoes_mamilos, disabled=is_obj_or_land, key=f"{prefixo}_mamilos")
-            col_v1, col_v2 = st.columns(2)
-            with col_v1:
-                transparencia = st.checkbox("Transparência no Traje", disabled=is_obj_or_land, key=f"{prefixo}_transparencia")
-            with col_v2:
-                contorno = st.checkbox("Realçar Contorno dos Seios", disabled=is_obj_or_land, key=f"{prefixo}_contorno")
+    with st.container(border=True):
+        st.markdown("#### 3. Pose e enquadramento")
+        col_pose1, col_pose2 = st.columns(2)
+        with col_pose1:
+            acao = st_campo_hibrido("Ação / Estado:", "Ex: em pose de combate", fn_carregar("acoes.txt", "acoes_web.txt", g_ref) if is_web else fn_carregar("acoes.txt", g_ref), f"{prefixo}_acao")
+            pose = st_campo_hibrido("Pose / Posição:", "Ex: flutuando no ar", fn_carregar("poses.txt", "poses_web.txt", g_ref) if is_web else fn_carregar("poses.txt", g_ref), f"{prefixo}_pose")
+        with col_pose2:
+            orientacao = st.selectbox("Orientação (Ratio):", ["Vertical (Portrait 9:16)", "Horizontal (Landscape 16:9)", "Quadrado (Square 1:1)"], key=f"{prefixo}_orientacao")
+            enquadramento = st.selectbox("Enquadramento:", ["Corpo todo (Full body)", "Meio corpo (Half body)", "Busto (Bust shot / Close-up)"], key=f"{prefixo}_enquadramento")
 
-        orientacao = st.selectbox(
-            "Orientação (Ratio):",
-            ["Vertical (Portrait 9:16)", "Horizontal (Landscape 16:9)", "Quadrado (Square 1:1)"],
-            key=f"{prefixo}_orientacao",
-        )
-        enquadramento = st.selectbox(
-            "Enquadramento:",
-            ["Corpo todo (Full body)", "Meio corpo (Half body)", "Busto (Bust shot / Close-up)"],
-            key=f"{prefixo}_enquadramento",
-        )
-
-    with col2:
-        fn_carregar = carregar_lista_integrada_web if is_web else carregar_lista_dual
-
-        acao = st_campo_hibrido(
-            "Ação / Estado:", "Ex: em pose de combate",
-            fn_carregar("acoes.txt", "acoes_web.txt", g_ref) if is_web else fn_carregar("acoes.txt", g_ref),
-            f"{prefixo}_acao",
-        )
-        estilo = st_campo_hibrido(
-            "Estilo Visual:", "Ex: estilo Makoto Shinkai",
-            fn_carregar("estilos.txt", "estilos_web.txt", g_ref) if is_web else fn_carregar("estilos.txt", g_ref),
-            f"{prefixo}_estilo",
-        )
-        emocao = st_campo_hibrido(
-            "Expressão:", "Ex: olhar frio",
-            fn_carregar("expressoes.txt", "expressoes_web.txt", g_ref) if is_web else fn_carregar("expressoes.txt", g_ref),
-            f"{prefixo}_emocao",
-            disabled=is_obj_or_land,
-        )
-        pose = st_campo_hibrido(
-            "Pose / Posição:", "Ex: flutuando no ar",
-            fn_carregar("poses.txt", "poses_web.txt", g_ref) if is_web else fn_carregar("poses.txt", g_ref),
-            f"{prefixo}_pose",
-        )
-        cenario = st_campo_hibrido(
-            "Ambiente / Cenário:", "Ex: laboratório futurista",
-            fn_carregar("ambientes.txt", "ambientes_web.txt", g_ref) if is_web else fn_carregar("ambientes.txt", g_ref),
-            f"{prefixo}_cenario",
-        )
-        iluminacao = st_campo_hibrido(
-            "Iluminação:", "Ex: neon brilhante",
-            fn_carregar("iluminacoes.txt", "iluminacoes_web.txt", g_ref) if is_web else fn_carregar("iluminacoes.txt", g_ref),
-            f"{prefixo}_iluminacao",
-        )
-        efeitos = st_campo_hibrido(
-            "Efeitos Especiais:", "Ex: faíscas elétricas",
-            fn_carregar("efeitos.txt", "efeitos_web.txt", g_ref) if is_web else fn_carregar("efeitos.txt", g_ref),
-            f"{prefixo}_efeitos",
-        )
-
-        texto_web = ""
-        if is_web:
-            texto_web = st.text_input("Texto na Imagem (Opcional):", placeholder="Ex: 'Coffee Shop'", key=f"{prefixo}_texto_txt")
+    with st.container(border=True):
+        st.markdown("#### 4. Cenário, iluminação e efeitos")
+        col_scene1, col_scene2 = st.columns(2)
+        with col_scene1:
+            cenario = st_campo_hibrido("Ambiente / Cenário:", "Ex: laboratório futurista", fn_carregar("ambientes.txt", "ambientes_web.txt", g_ref) if is_web else fn_carregar("ambientes.txt", g_ref), f"{prefixo}_cenario")
+            iluminacao = st_campo_hibrido("Iluminação:", "Ex: neon brilhante", fn_carregar("iluminacoes.txt", "iluminacoes_web.txt", g_ref) if is_web else fn_carregar("iluminacoes.txt", g_ref), f"{prefixo}_iluminacao")
+        with col_scene2:
+            efeitos = st_campo_hibrido("Efeitos Especiais:", "Ex: faíscas elétricas", fn_carregar("efeitos.txt", "efeitos_web.txt", g_ref) if is_web else fn_carregar("efeitos.txt", g_ref), f"{prefixo}_efeitos")
+            texto_web = ""
+            if is_web:
+                texto_web = st.text_input("Texto na Imagem (Opcional):", placeholder="Ex: 'Coffee Shop'", key=f"{prefixo}_texto_txt")
 
     variaveis_alvo_str, total_variacoes, rigidez = "", 5, 3
     if is_serie:
@@ -1551,6 +1513,7 @@ def renderizar_formulario_duplo(slot_chave, modelo_selecionado, email=None):
     st.markdown("### 👥 Gerador de Cena com Personagens Duplos")
     st.caption("A cena só será gerada quando ambos os personagens forem informados. Os atributos visuais serão isolados para evitar contaminação.")
 
+    st.markdown("#### 1. Composição e direção visual")
     composicao = st.selectbox(
         "Selecione a Composição da Dupla (Obrigatório):",
         ["👩‍🦰 👩‍🦰 Mulher + Mulher", "👨 👨 Homem + Homem", "👩‍🦰 👨 Mulher + Homem", "🤖 👾 Outro / Personalizado"],
@@ -1577,7 +1540,7 @@ def renderizar_formulario_duplo(slot_chave, modelo_selecionado, email=None):
     with col_top3:
         sensualidade = st.select_slider("Sensualidade:", options=opcoes_sensualidade, value="2 - Menos Seguro", key="p2_sensualidade")
 
-    st.markdown("---")
+    st.markdown("#### 2. Identidade e atributos individuais")
     col_p1, col_p2 = st.columns(2)
 
     with col_p1:
@@ -1608,8 +1571,8 @@ def renderizar_formulario_duplo(slot_chave, modelo_selecionado, email=None):
             p2_transparencia = st.checkbox("Transparência P2", disabled=not p2_is_fem, key="p2_p2_transparencia")
             p2_contorno = st.checkbox("Contorno dos Seios P2", disabled=not p2_is_fem, key="p2_p2_contorno")
 
-    st.markdown("---")
-    st.subheader("⚔️ Interação & Ambiente da Cena")
+    st.markdown("#### 3. Interação conjunta")
+    st.subheader("⚔️ Ação entre os personagens")
 
     interacoes_preset = [
         "Lutando lado a lado contra inimigos",
@@ -1624,14 +1587,13 @@ def renderizar_formulario_duplo(slot_chave, modelo_selecionado, email=None):
     ]
     interacao = st_campo_hibrido("Ação / Interação Conjunta entre Eles:", "Ex: lutando costas com costas", interacoes_preset, "p2_interacao")
 
-    col_env1, col_env2, col_env3, col_env4 = st.columns(4)
+    st.markdown("#### 4. Ambiente e acabamento visual")
+    col_env1, col_env2 = st.columns(2)
     with col_env1:
         estilo = st_campo_hibrido("Estilo Visual:", "Ex: Makoto Shinkai", carregar_lista_dual("estilos.txt", "geral"), "p2_estilo")
-    with col_env2:
         cenario = st_campo_hibrido("Cenário:", "Ex: ruínas antigas", carregar_lista_dual("ambientes.txt", "geral"), "p2_cenario")
-    with col_env3:
+    with col_env2:
         iluminacao = st_campo_hibrido("Iluminação:", "Ex: pôr do sol", carregar_lista_dual("iluminacoes.txt", "geral"), "p2_iluminacao")
-    with col_env4:
         efeitos = st_campo_hibrido("Efeitos:", "Ex: aura de energia", carregar_lista_dual("efeitos.txt", "geral"), "p2_efeitos")
 
     orientacao = st.selectbox(
@@ -1708,104 +1670,43 @@ def renderizar_formulario_animais(slot_chave, modelo_selecionado, email=None):
     st.markdown("### 🐾 Gerador de Animais & Criaturas (Sem Antropomorfização)")
     st.caption("Crie animais reais ou fantásticos focados em vida selvagem e fotografia biológica, sem traços humanos ou roupas.")
 
-    col1, col2 = st.columns(2)
+    with st.container(border=True):
+        st.markdown("#### 1. Identidade da criatura")
+        col_id1, col_id2 = st.columns(2)
+        with col_id1:
+            categoria_animal = st.selectbox("Categoria da Criatura:", ["Mamífero", "Ave", "Réptil / Anfíbio", "Criatura Mítica / Fantástica", "Inseto / Aracnídeo", "Vida Marinha / Peixe"], key="p3_categoria_animal")
+        with col_id2:
+            fluxo = st.selectbox("Fluxo Base:", ["Illustrious", "Pony SDXL", "SDXL Base", "SDXL Base (Natural)"], key="p3_fluxo")
+        nome_especie = st_campo_hibrido("Nome / Espécie:", "Ex: Tigre Siberiano, Fênix", ["Tigre Siberiano", "Lobo Cinzento", "Fênix de Fogo", "Dragão Dourado", "Coruja-Boreal", "Pantera Negra", "Águia Careca"], "p3_nome_especie")
 
-    with col1:
-        categoria_animal = st.selectbox(
-            "Categoria da Criatura:",
-            ["Mamífero", "Ave", "Réptil / Anfíbio", "Criatura Mítica / Fantástica", "Inseto / Aracnídeo", "Vida Marinha / Peixe"],
-            key="p3_categoria_animal"
-        )
-        nome_especie = st_campo_hibrido(
-            "Nome / Espécie:",
-            "Ex: Tigre Siberiano, Fênix",
-            ["Tigre Siberiano", "Lobo Cinzento", "Fênix de Fogo", "Dragão Dourado", "Coruja-Boreal", "Pantera Negra", "Águia Careca"],
-            "p3_nome_especie"
-        )
-        
-        paletas_preset = [
-            "Pelagem preta com listras douradas e olhos azuis cristalinos",
-            "Pelagem branca pura como neve com olhos âmbar profundos",
-            "Escamas prateadas reflexivas com olhos negros",
-            "Penas escarlates e alaranjadas com olhos dourados",
-            "Escamas esmeralda com barriga amarelada e olhos répteis",
-            "Pelagem castanha com marcas cinzentas e olhos castanhos"
-        ]
-        paleta_cor = st_campo_hibrido(
-            "Cores / Paleta do Animal (Corpo e Olhos):",
-            "Ex: pelagem preta, listras douradas, olhos azuis cristalinos",
-            paletas_preset,
-            "p3_paleta_cor"
-        )
+    with st.container(border=True):
+        st.markdown("#### 2. Aparência, cor e textura")
+        paletas_preset = ["Pelagem preta com listras douradas e olhos azuis cristalinos", "Pelagem branca pura como neve com olhos âmbar profundos", "Escamas prateadas reflexivas com olhos negros", "Penas escarlates e alaranjadas com olhos dourados", "Escamas esmeralda com barriga amarelada e olhos répteis", "Pelagem castanha com marcas cinzentas e olhos castanhos"]
+        paleta_cor = st_campo_hibrido("Cores / Paleta do Animal (Corpo e Olhos):", "Ex: pelagem preta, listras douradas, olhos azuis cristalinos", paletas_preset, "p3_paleta_cor")
+        col_visual1, col_visual2, col_visual3 = st.columns(3)
+        with col_visual1:
+            cobertura = st.selectbox("Cobertura / Pelagem / Textura:", ["Pelagem Densa / Macia", "Pelagem Curta", "Penas Reluzentes", "Escamas Metálicas", "Escamas Rígidas / Rústicas", "Pele Lisa / Úmida", "Carapaça / Exosqueleto"], key="p3_cobertura")
+        with col_visual2:
+            padrao_cor = st.selectbox("Padrão de Cor / Marcas:", ["Listrado", "Manchado / Sardento", "Albino / Branco Puro", "Melanístico / Negro", "Dourado / Radiante", "Camuflado / Natural", "Bioluminescente"], key="p3_padrao_cor")
+        with col_visual3:
+            estagio_porte = st.selectbox("Estágio / Porte:", ["Filhote / Jovem", "Adulto Espécime Padrão", "Adulto Alfa / Majestoso", "Ancião / Cicatrizado de Batalha"], key="p3_estagio_porte")
 
-        cobertura = st.selectbox(
-            "Cobertura / Pelagem / Textura:",
-            ["Pelagem Densa / Macia", "Pelagem Curta", "Penas Reluzentes", "Escamas Metálicas", "Escamas Rígidas / Rústicas", "Pele Lisa / Úmida", "Carapaça / Exosqueleto"],
-            key="p3_cobertura"
-        )
-        padrao_cor = st.selectbox(
-            "Padrão de Cor / Marcas:",
-            ["Listrado", "Manchado / Sardento", "Albino / Branco Puro", "Melanístico / Negro", "Dourado / Radiante", "Camuflado / Natural", "Bioluminescente"],
-            key="p3_padrao_cor"
-        )
-        estagio_porte = st.selectbox(
-            "Estágio / Porte:",
-            ["Filhote / Jovem", "Adulto Espécime Padrão", "Adulto Alfa / Majestoso", "Ancião / Cicatrizado de Batalha"],
-            key="p3_estagio_porte"
-        )
-        fluxo = st.selectbox("Fluxo Base:", ["Illustrious", "Pony SDXL", "SDXL Base", "SDXL Base (Natural)"], key="p3_fluxo")
+    with st.container(border=True):
+        st.markdown("#### 3. Comportamento e habitat")
+        acao_comportamento = st_campo_hibrido("Ação / Comportamento Animal:", "Ex: rugindo, rondando na mata", ["Rugindo com imponência", "Rondando em alerta", "Em bote rápido de caça", "Descansando na sombra", "Voando com asas abertas", "Protegendo sua alcateia"], "p3_acao_comportamento")
+        habitats_preset = ["Floresta densa nevada", "Montanhas rochosas ao pôr do sol", "Selva tropical úmida com névoa", "Savana africana sob sol escaldante", "Caverna mística com cristais brilhantes", "Oceano profundo e coralino"]
+        habitat = st_campo_hibrido("Habitat / Cenário Natural:", "Ex: floresta densa nevada", habitats_preset, "p3_habitat")
 
-    with col2:
-        acao_comportamento = st_campo_hibrido(
-            "Ação / Comportamento Animal:",
-            "Ex: rugindo, rondando na mata",
-            ["Rugindo com imponência", "Rondando em alerta", "Em bote rápido de caça", "Descansando na sombra", "Voando com asas abertas", "Protegendo sua alcateia"],
-            "p3_acao_comportamento"
-        )
-        
-        habitats_preset = [
-            "Floresta densa nevada",
-            "Montanhas rochosas ao pôr do sol",
-            "Selva tropical úmida com névoa",
-            "Savana africana sob sol escaldante",
-            "Caverna mística com cristais brilhantes",
-            "Oceano profundo e coralino"
-        ]
-        habitat = st_campo_hibrido(
-            "Habitat / Cenário Natural:",
-            "Ex: floresta densa nevada",
-            habitats_preset,
-            "p3_habitat"
-        )
-
-        iluminacoes_preset = [
-            "Raios de sol filtrados pelas árvores (god rays)",
-            "Luz suave do crepúsculo",
-            "Luar prateado da noite",
-            "Luz solar direta e dramática",
-            "Brilho bioluminescente e misterioso"
-        ]
-        iluminacao = st_campo_hibrido(
-            "Iluminação Ambiental:",
-            "Ex: raios de sol entre as árvores",
-            iluminacoes_preset,
-            "p3_iluminacao"
-        )
-        estilo_foto = st.selectbox(
-            "Estilo Fotográfico / Arte:",
-            ["Fotografia de Vida Selvagem (National Geographic)", "Pintura de Fantasia / Concept Art", "Render 3D Hiper-realista", "Ilustração Científica / Biológica", "Arte em Aquarela / Artística"],
-            key="p3_estilo_foto"
-        )
-        enquadramento = st.selectbox(
-            "Enquadramento / Lente:",
-            ["Plano Geral / Paisagem Aberta", "Plano Médio / Foco no Animal", "Macro / Close-up Facial", "Lente Teleobjetiva (Fundo Desfocado)"],
-            key="p3_enquadramento"
-        )
-        orientacao = st.selectbox(
-            "Orientação (Ratio):",
-            ["Vertical (Portrait 9:16)", "Horizontal (Landscape 16:9)", "Quadrado (Square 1:1)"],
-            key="p3_orientacao"
-        )
+    with st.container(border=True):
+        st.markdown("#### 4. Captura visual e atmosfera")
+        col_capture1, col_capture2 = st.columns(2)
+        with col_capture1:
+            iluminacoes_preset = ["Raios de sol filtrados pelas árvores (god rays)", "Luz suave do crepúsculo", "Luar prateado da noite", "Luz solar direta e dramática", "Brilho bioluminescente e misterioso"]
+            iluminacao = st_campo_hibrido("Iluminação Ambiental:", "Ex: raios de sol entre as árvores", iluminacoes_preset, "p3_iluminacao")
+            estilo_foto = st.selectbox("Estilo Fotográfico / Arte:", ["Fotografia de Vida Selvagem (National Geographic)", "Pintura de Fantasia / Concept Art", "Render 3D Hiper-realista", "Ilustração Científica / Biológica", "Arte em Aquarela / Artística"], key="p3_estilo_foto")
+        with col_capture2:
+            enquadramento = st.selectbox("Enquadramento / Lente:", ["Plano Geral / Paisagem Aberta", "Plano Médio / Foco no Animal", "Macro / Close-up Facial", "Lente Teleobjetiva (Fundo Desfocado)"], key="p3_enquadramento")
+            orientacao = st.selectbox("Orientação (Ratio):", ["Vertical (Portrait 9:16)", "Horizontal (Landscape 16:9)", "Quadrado (Square 1:1)"], key="p3_orientacao")
 
     st.markdown("---")
     btn1, btn2, btn3, btn4 = st.columns(4)
