@@ -1089,8 +1089,22 @@ def gerar_com_provedor(dados, modelo, email, slot_chave, is_web=False):
     )
 
 
+def _autocompletar_campo_individual(texto_key, combo_key, validas):
+    """Preenche um único campo com um preset e sincroniza o selectbox."""
+    if validas:
+        valor = random.choice(validas)
+        st.session_state[texto_key] = valor
+        st.session_state[combo_key] = valor
+
+
+def _limpar_campo_individual(texto_key, combo_key, manual_option):
+    """Limpa um único campo e retorna o seletor ao modo manual."""
+    st.session_state[texto_key] = ""
+    st.session_state[combo_key] = manual_option
+
+
 def st_campo_hibrido(label, placeholder, opcoes, key_prefix, disabled=False):
-    """Renderiza um único controle: preset diretamente no campo ou digitação manual."""
+    """Renderiza seletor, entrada manual e ações individuais em um grupo contextual."""
     validas = list(
         dict.fromkeys(
             [
@@ -1102,10 +1116,11 @@ def st_campo_hibrido(label, placeholder, opcoes, key_prefix, disabled=False):
     )
     combo_key = f"{key_prefix}_combo"
     texto_key = f"{key_prefix}_txt"
-    valor_atual = st.session_state.get(texto_key, "")
     manual_option = "✍️ Digitar manualmente..."
     opcoes_controle = [manual_option] + validas
+    valor_atual = st.session_state.get(texto_key, "")
     indice_atual = validas.index(valor_atual) + 1 if valor_atual in validas else 0
+    nome_campo = label.rstrip(":")
 
     def sincronizar_controle():
         selecionado = st.session_state.get(combo_key, manual_option)
@@ -1114,19 +1129,41 @@ def st_campo_hibrido(label, placeholder, opcoes, key_prefix, disabled=False):
         elif st.session_state.get(texto_key) in validas:
             st.session_state[texto_key] = ""
 
-    selecionado = st.selectbox(
-        label,
-        opcoes_controle,
-        index=indice_atual,
-        key=combo_key,
-        on_change=sincronizar_controle,
-        disabled=disabled,
-        help="Escolha um preset ou selecione a primeira opção para digitar manualmente.",
-    )
+    col_input, col_auto, col_clear = st.columns([8, 1, 1], vertical_alignment="bottom")
+    with col_input:
+        selecionado = st.selectbox(
+            label,
+            opcoes_controle,
+            index=indice_atual,
+            key=combo_key,
+            on_change=sincronizar_controle,
+            disabled=disabled,
+            help="Escolha um preset ou selecione a primeira opção para digitar manualmente.",
+        )
+    with col_auto:
+        st.button(
+            "↻",
+            key=f"{key_prefix}_auto",
+            help=f"Autocompletar {nome_campo}",
+            disabled=disabled or not validas,
+            on_click=_autocompletar_campo_individual,
+            args=(texto_key, combo_key, validas),
+            use_container_width=True,
+        )
+    with col_clear:
+        st.button(
+            "×",
+            key=f"{key_prefix}_clear",
+            help=f"Limpar {nome_campo}",
+            disabled=disabled,
+            on_click=_limpar_campo_individual,
+            args=(texto_key, combo_key, manual_option),
+            use_container_width=True,
+        )
 
     if selecionado == manual_option:
         return st.text_input(
-            "Entrada manual",
+            f"{nome_campo} personalizada",
             placeholder=placeholder,
             key=texto_key,
             disabled=disabled,
@@ -1134,6 +1171,16 @@ def st_campo_hibrido(label, placeholder, opcoes, key_prefix, disabled=False):
 
     st.session_state[texto_key] = selecionado
     return selecionado
+
+
+def _sincronizar_controles_preset(prefixo, campos):
+    """Mantém o selectbox visual alinhado ao valor preenchido por autocompletar."""
+    for campo in campos:
+        texto_key = f"{prefixo}_{campo}_txt"
+        combo_key = f"{prefixo}_{campo}_combo"
+        valor = st.session_state.get(texto_key, "")
+        if valor:
+            st.session_state[combo_key] = valor
 
 
 def autocompletar_campos(prefixo, is_web=False):
@@ -1171,6 +1218,11 @@ def autocompletar_campos(prefixo, is_web=False):
             if validas:
                 st.session_state[key] = random.choice(validas)
 
+    _sincronizar_controles_preset(
+        prefixo,
+        ["nome", "acao", "estilo", "emocao", "pose", "cenario", "iluminacao", "efeitos"],
+    )
+
 
 def limpar_campos(prefixo):
     campos = ["nome", "acao", "estilo", "emocao", "pose", "cenario", "iluminacao", "efeitos", "texto"]
@@ -1203,6 +1255,11 @@ def autocompletar_campos_duplo(g_ref1, g_ref2):
                 if validas:
                     st.session_state[key] = random.choice(validas)
 
+    _sincronizar_controles_preset(
+        "p2",
+        ["p1_nome", "p1_emocao", "p1_pose", "p2_nome", "p2_emocao", "p2_pose"],
+    )
+
     interacoes_preset = [
         "Lutando lado a lado contra inimigos",
         "Abraçando-se carinhosamente",
@@ -1223,6 +1280,11 @@ def autocompletar_campos_duplo(g_ref1, g_ref2):
             validas = carregar_lista_dual(arq, "geral")
             if validas:
                 st.session_state[key] = random.choice(validas)
+
+    _sincronizar_controles_preset(
+        "p2",
+        ["interacao", "estilo", "cenario", "iluminacao", "efeitos"],
+    )
 
 
 def limpar_campos_duplo():
@@ -1277,6 +1339,11 @@ def autocompletar_campos_animais():
         st.session_state["p3_habitat_txt"] = random.choice(habitats_naturais)
     if not st.session_state.get("p3_iluminacao_txt", "").strip():
         st.session_state["p3_iluminacao_txt"] = random.choice(iluminacoes_naturais)
+
+    _sincronizar_controles_preset(
+        "p3",
+        ["nome_especie", "paleta_cor", "acao_comportamento", "habitat", "iluminacao"],
+    )
 
 
 def limpar_campos_animais():
