@@ -761,6 +761,46 @@ def carregar_lista_integrada_web(arquivo_padrao, arquivo_web, genero_ref):
     return resultado if resultado else ["Opção Padrão 1"]
 
 
+def _extrair_texto_gemini(response):
+    """Extrai texto mesmo quando response.text não está disponível no SDK Gemini."""
+    try:
+        texto_direto = getattr(response, "text", None)
+        if isinstance(texto_direto, str) and texto_direto.strip():
+            return texto_direto.strip()
+    except Exception:
+        # Algumas versões do SDK lançam exceção quando não há parte textual.
+        pass
+
+    textos = []
+    candidatos = getattr(response, "candidates", None) or []
+    for candidato in candidatos:
+        conteudo = getattr(candidato, "content", None)
+        partes = getattr(conteudo, "parts", None) or []
+        for parte in partes:
+            texto = getattr(parte, "text", None)
+            if isinstance(texto, str) and texto.strip():
+                textos.append(texto.strip())
+    return "\n".join(textos).strip()
+
+
+def _diagnostico_resposta_vazia_gemini(response):
+    """Gera uma mensagem útil quando o Gemini finaliza sem texto."""
+    candidatos = getattr(response, "candidates", None) or []
+    motivos = []
+    for candidato in candidatos:
+        motivo = getattr(candidato, "finish_reason", None)
+        if motivo:
+            motivos.append(str(motivo))
+
+    feedback = getattr(response, "prompt_feedback", None)
+    bloqueio = getattr(feedback, "block_reason", None) if feedback else None
+    if bloqueio:
+        return f"⚠️ O Gemini não gerou texto. Motivo informado pela API: {bloqueio}."
+    if motivos:
+        return f"⚠️ O Gemini finalizou sem texto. Motivo informado pela API: {', '.join(motivos)}."
+    return "⚠️ O Gemini retornou uma resposta sem conteúdo textual. Tente novamente ou simplifique o pedido."
+
+
 def chamar_gemini_api(
     dados_personagem,
     client,
@@ -962,8 +1002,10 @@ Gere o prompt final otimizado em inglês e crie uma DESCRIÇÃO/LEGENDA CURTA EM
             if hasattr(cand, "finish_reason") and "SAFETY" in str(cand.finish_reason).upper():
                 return "⚠️ A requisição foi bloqueada pelos filtros de segurança da API Gemini."
 
-        if response and hasattr(response, "text") and response.text is not None:
-            texto_resposta = response.text
+        if response:
+            texto_resposta = _extrair_texto_gemini(response)
+            if not texto_resposta:
+                return _diagnostico_resposta_vazia_gemini(response)
 
             # --- DEFESA ANTI-VAZAMENTO: verificação de saída ---
             # 1) O canário desta chamada não pode aparecer na resposta.
@@ -986,7 +1028,7 @@ Gere o prompt final otimizado em inglês e crie uma DESCRIÇÃO/LEGENDA CURTA EM
 
             return texto_resposta
         else:
-            return "⚠️ A API retornou uma resposta vazia."
+            return "⚠️ A API Gemini não retornou um objeto de resposta válido."
 
     except Exception as e:
         erro_str = str(e)
