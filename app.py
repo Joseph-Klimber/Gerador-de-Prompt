@@ -65,6 +65,85 @@ opcoes_categoria_arte = [
     "Pintura Clássica / Artística",
 ]
 
+# A aba Web geral permanece livre para estilos artificiais, híbridos e estilizados.
+# Web/Realismo é um fluxo especializado em fidelidade do sujeito e coerência física.
+OPCOES_SUBGRUPO_WEB = ["Web Geral", "Web / Realismo"]
+OPCOES_DOMINIO_REALISMO = ["Humano", "Animal", "Objeto", "Paisagem"]
+OPCOES_INTENCAO_REALISMO = [
+    "Documental",
+    "Editorial",
+    "Científica",
+    "Fotografia de Produto",
+    "Cinematográfica",
+    "Artística Realista",
+]
+OPCOES_FORMATO_PROMPT_WEB = ["Compacta", "Equilibrada", "Completa"]
+
+INSTRUCAO_PRESERVACAO_INTEGRAL_WEB = r"""
+PRESERVAÇÃO INTEGRAL DO CONTEÚDO:
+- Preserve todos os atributos fornecidos pelo usuário: sujeito, identidade, quantidade,
+  vestimenta, anatomia, espécie, materiais, ação, pose, ambiente, relações espaciais,
+  câmera, enquadramento, iluminação, efeitos, categoria visual e texto na imagem.
+- Não resuma, encurte, simplifique, omita, combine, substitua ou reinterprete detalhes.
+- As versões Compacta, Equilibrada e Completa são apresentações equivalentes do mesmo
+  conteúdo. A versão Compacta é densa, mas não é um resumo.
+- Se o prompt for longo, mantenha-o longo. O modelo não está autorizado a remover dados
+  porque a plataforma ou o modelo de destino parece mais leve.
+- Pode alterar somente a organização, a formatação e a sintaxe exigida pela plataforma.
+- Não transforme estilo artificial em fotografia, nem fotografia em anime, pintura ou CGI.
+"""
+
+INSTRUCOES_REALISMO_WEB = {
+    "Humano": (
+        "Prioritize human identity, plausible anatomy, natural skin pores, subtle facial "
+        "asymmetry, individual hair strands, realistic eyes, coherent hands, natural body "
+        "posture, essential clothing, garment coverage, material, fit, folds, seams, "
+        "accessories, environment, camera and physically coherent light."
+    ),
+    "Animal": (
+        "Prioritize species-accurate anatomy, believable proportions, natural posture and "
+        "behavior, realistic fur, feathers, scales or skin, eyes, habitat, interaction "
+        "with the environment, camera perspective and physically coherent light. Do not "
+        "anthropomorphize unless explicitly requested."
+    ),
+    "Objeto": (
+        "Prioritize accurate geometry, scale, function, manufacturing details, material "
+        "behavior, surface microtexture, seams, joints, wear, weight, contact, reflections, "
+        "refraction and physically coherent interaction with light."
+    ),
+    "Paisagem": (
+        "Prioritize coherent spatial scale, perspective, terrain, geology, vegetation, "
+        "water, atmosphere, weather, climate, depth, natural light direction and physically "
+        "plausible relationships between foreground, middle ground and background."
+    ),
+}
+
+INSTRUCAO_MODO_REALISMO_WEB = r"""
+EXTREME REALISM / REPRESENTATIONAL FIDELITY MODE:
+Preserve the selected visual category and the requested artistic intention. Increase only
+physical, biological, material and spatial coherence. Do not replace the selected category
+with another style.
+Avoid accidental CGI appearance, plastic or waxy surfaces, doll-like symmetry, synthetic
+textures, impossible shadows, distorted anatomy, floating objects, inconsistent scale,
+incorrect perspective and materials that do not react plausibly to light.
+The result must remain faithful to the user's chosen subject, action, composition and style.
+"""
+
+INSTRUCAO_TRES_FORMATOS_WEB = r"""
+FORMATOS EQUIVALENTES DE APRESENTAÇÃO:
+Generate three equivalent prompt presentations from the same complete source attributes:
+1. PROMPT COMPACTO: one dense, coherent paragraph; remove only repetition and decorative
+   wording, never remove meaning or user-provided attributes.
+2. PROMPT EQUILIBRADO: organize the same complete content into short semantic blocks
+   such as subject, appearance, clothing/materials, action, composition, environment,
+   camera, lighting and finish.
+3. PROMPT COMPLETO: preserve every source attribute in a detailed, auditable structure.
+The three versions must contain the same semantic attributes. Do not generate one version
+by summarizing another. Do not omit a detail from the Compact version merely because it is
+shorter; compact means dense organization, not content reduction.
+After each version, include a short completeness line listing the preserved domains.
+"""
+
 opcoes_sensualidade = [
     "1 - Seguro (SFW)",
     "2 - Menos Seguro",
@@ -478,7 +557,16 @@ FORMATO OBRIGATÓRIO DE SAÍDA (OUTPUT WEB)
 2. DESCRIÇÃO REDES SOCIAIS (Português): [Legenda curta de 2 a 3 frases + CTA forte]
 3. HASHTAGS: [Hashtags virais e relevantes]
 💡 DICA DE APLICAÇÃO: [Instrução prática sobre como usar no site]
-"""
+
+--- SE SUBGRUPO WEB / REALISMO ESTIVER ATIVADO ---
+Além da estrutura acima, entregue:
+1. PROMPT COMPACTO: denso, coerente e integral, sem remoção de atributos.
+2. PROMPT EQUILIBRADO: os mesmos atributos em blocos semânticos.
+3. PROMPT COMPLETO: os mesmos atributos em formato detalhado e auditável.
+As três versões devem ser sempre entregues. A versão selecionada pelo usuário deve
+aparecer primeiro, seguida das outras duas. Elas devem ser semanticamente equivalentes e
+não podem ser produzidas por resumo progressivo.
+    """
 
 # ==============================================================================
 # 3. FUNÇÕES AUXILIARES E GERENCIAMENTO DE DADOS
@@ -727,7 +815,71 @@ def carregar_lista_integrada_web(arquivo_padrao, arquivo_web, genero_ref):
     return resultado if resultado else ["Opção Padrão 1"]
 
 
+def montar_instrucoes_web_realismo(dados):
+    """Monta as regras condicionais da área Web/Realismo sem remover conteúdo da Web Geral."""
+    if dados.get("subgrupo_web") != "Web / Realismo":
+        return ""
+
+    dominio = str(dados.get("dominio_realismo", "Humano")).strip() or "Humano"
+    intencao = str(dados.get("intencao_realismo", "Editorial")).strip() or "Editorial"
+    regra_dominio = INSTRUCOES_REALISMO_WEB.get(dominio, INSTRUCOES_REALISMO_WEB["Humano"])
+    return f"""
+WEB / REALISMO ATIVADO:
+Domínio de fidelidade: {dominio}
+Intenção de apresentação: {intencao}
+
+{INSTRUCAO_MODO_REALISMO_WEB}
+DOMAIN-SPECIFIC PRIORITY:
+{regra_dominio}
+
+USER-PROVIDED DOMAIN-CRITICAL ATTRIBUTES:
+{str(dados.get("detalhes_realismo", "")).strip() or "No additional domain-specific attributes provided."}
+Preserve this content literally in meaning. Do not summarize, replace or omit it.
+
+{INSTRUCAO_PRESERVACAO_INTEGRAL_WEB}
+"""
+
+
+def montar_instrucoes_formatos_web(dados):
+    """Define a apresentação escolhida sem transformar Compacta em resumo."""
+    if dados.get("subgrupo_web") != "Web / Realismo":
+        return ""
+    formato = str(dados.get("formato_prompt_web", "Equilibrada")).strip() or "Equilibrada"
+    return f"""
+FORMATO SELECIONADO PELO USUÁRIO: {formato}
+{INSTRUCOES_TRES_FORMATOS_WEB}
+Always return all three versions under clearly labeled sections. Place the selected format
+first, followed by the other two equivalent presentations. Never use the selected format as
+permission to remove source attributes.
+"""
+
+
+def validar_atributos_web(dados):
+    """Retorna os rótulos que devem aparecer no prompt para facilitar auditoria."""
+    campos = {
+        "nome": "subject identity",
+        "tipo_sujeito": "subject type",
+        "categoria_arte": "visual category",
+        "acao": "action/state",
+        "estilo": "visual style",
+        "pose": "pose/position",
+        "cenario": "environment",
+        "iluminacao": "lighting",
+        "efeitos": "effects",
+        "orientacao": "orientation",
+        "enquadramento": "framing",
+        "detalhes_realismo": "domain-critical attributes",
+    }
+    presentes = []
+    for chave, rotulo in campos.items():
+        valor = dados.get(chave)
+        if valor is not None and str(valor).strip():
+            presentes.append(rotulo)
+    return ", ".join(presentes)
+
+
 def chamar_gemini_api(
+
     dados_personagem,
     client,
     modelo="gemini-3.6-flash",
@@ -859,9 +1011,20 @@ Gere o prompt final otimizado em inglês e crie uma DESCRIÇÃO/LEGENDA CURTA EM
 - Iluminação: {obter_str_limpa('iluminacao')}
 - Efeitos Especiais: {obter_str_limpa('efeitos')}
 - Texto na Imagem: {obter_str_limpa('texto_web', 'Nenhum')}
+        """
+        if dados_personagem.get("subgrupo_web") == "Web / Realismo":
+            prompt_usuario += f"""
+
+--- ESPECIFICAÇÃO WEB / REALISMO ---
+{montar_instrucoes_web_realismo(dados_personagem)}
+{montar_instrucoes_formatos_web(dados_personagem)}
+
+ATRIBUTOS DE ORIGEM PRESENTES E OBRIGATÓRIOS: {validar_atributos_web(dados_personagem)}
+A saída não pode omitir nenhum desses atributos.
 """
 
     # MODO 4: PADRÃO / SÉRIE CONSISTENTE
+
     else:
         tipo_sujeito = obter_str_limpa("tipo_sujeito", "Feminino")
         is_objeto_ou_paisagem = tipo_sujeito in ["Paisagem / Cenário", "Objeto / Item"]
@@ -1377,6 +1540,11 @@ def limpar_campos_animais():
 # ==============================================================================
 def renderizar_formulario(prefixo, slot_chave, modelo_selecionado, email=None, is_web=False, is_serie=False):
     # Ordem visual: identidade -> direção -> vestuário -> composição -> atmosfera.
+    subgrupo_web = "Web Geral"
+    dominio_realismo = "Humano"
+    intencao_realismo = "Editorial"
+    formato_prompt_web = "Equilibrada"
+    detalhes_realismo = ""
     with st.container(border=True):
         st.markdown("#### 1. Identidade e direção visual")
         col_id1, col_id2 = st.columns(2)
@@ -1400,25 +1568,66 @@ def renderizar_formulario(prefixo, slot_chave, modelo_selecionado, email=None, i
                 )
             categoria_arte = st.selectbox("Categoria de Arte:", opcoes_categoria_arte, key=f"{prefixo}_categoria_arte")
 
+            if is_web:
+                subgrupo_web = st.radio(
+                    "Área de geração:",
+                    OPCOES_SUBGRUPO_WEB,
+                    horizontal=True,
+                    key=f"{prefixo}_subgrupo_web",
+                    help="Web Geral preserva todos os estilos atuais. Web / Realismo organiza a cena por domínio de fidelidade.",
+                )
+                if subgrupo_web == "Web / Realismo":
+                    dominio_realismo = st.selectbox(
+                        "Domínio de Realismo:",
+                        OPCOES_DOMINIO_REALISMO,
+                        key=f"{prefixo}_dominio_realismo",
+                    )
+                    intencao_realismo = st.selectbox(
+                        "Intenção de Apresentação:",
+                        OPCOES_INTENCAO_REALISMO,
+                        key=f"{prefixo}_intencao_realismo",
+                    )
+                    formato_prompt_web = st.selectbox(
+                        "Formato do Prompt:",
+                        OPCOES_FORMATO_PROMPT_WEB,
+                        index=1,
+                        key=f"{prefixo}_formato_prompt_web",
+                        help="As três versões preservam os mesmos atributos; muda apenas a organização do conteúdo.",
+                    )
+                    placeholders_realismo = {
+                        "Humano": "Ex: pessoa adulta, casaco de lã verde, cobertura integral, textura natural da pele, acessórios e contexto social.",
+                        "Animal": "Ex: lobo-guará adulto, pelagem natural, postura de alerta, comportamento não antropomórfico e habitat de cerrado.",
+                        "Objeto": "Ex: câmera analógica de metal, escala real, sinais leves de uso, lente de vidro e peças fabricadas com precisão.",
+                        "Paisagem": "Ex: vale montanhoso, escala ampla, vegetação nativa, neblina baixa, clima úmido e luz do fim da tarde.",
+                    }
+                    detalhes_realismo = st.text_area(
+                        "Atributos críticos do domínio:",
+                        placeholder=placeholders_realismo[dominio_realismo],
+                        key=f"{prefixo}_detalhes_realismo",
+                        help="Descreva os fatos que não podem ser omitidos. Este texto será preservado integralmente nas três versões.",
+                    )
+
     is_obj_or_land = tipo_sujeito in ["Paisagem / Cenário", "Objeto / Item"]
+    is_realismo_nao_humano = is_web and subgrupo_web == "Web / Realismo" and dominio_realismo != "Humano"
+    is_humano_contexto = not is_realismo_nao_humano and not is_obj_or_land
     fn_carregar = carregar_lista_integrada_web if is_web else carregar_lista_dual
 
     with st.container(border=True):
         st.markdown("#### 2. Aparência, expressão e vestuário")
         col_app1, col_app2 = st.columns(2)
         with col_app1:
-            sensualidade = st.select_slider("Sensualidade:", options=opcoes_sensualidade, value="2 - Menos Seguro", disabled=is_obj_or_land, key=f"{prefixo}_sensualidade")
+            sensualidade = st.select_slider("Sensualidade:", options=opcoes_sensualidade, value="2 - Menos Seguro", disabled=not is_humano_contexto, key=f"{prefixo}_sensualidade")
             estilo = st_campo_hibrido("Estilo Visual:", "Ex: estilo Makoto Shinkai", fn_carregar("estilos.txt", "estilos_web.txt", g_ref) if is_web else fn_carregar("estilos.txt", g_ref), f"{prefixo}_estilo")
-            emocao = st_campo_hibrido("Expressão:", "Ex: olhar frio", fn_carregar("expressoes.txt", "expressoes_web.txt", g_ref) if is_web else fn_carregar("expressoes.txt", g_ref), f"{prefixo}_emocao", disabled=is_obj_or_land)
+            emocao = st_campo_hibrido("Expressão:", "Ex: olhar frio", fn_carregar("expressoes.txt", "expressoes_web.txt", g_ref) if is_web else fn_carregar("expressoes.txt", g_ref), f"{prefixo}_emocao", disabled=not is_humano_contexto)
         with col_app2:
-            with st.expander("👙 Vestuário e anatomia", expanded=not is_obj_or_land):
-                seios = st.selectbox("Tamanho dos Seios:", opcoes_seios, disabled=is_obj_or_land, key=f"{prefixo}_seios")
-                mamilos = st.selectbox("Detalhes dos Mamilos:", opcoes_mamilos, disabled=is_obj_or_land, key=f"{prefixo}_mamilos")
+            with st.expander("👙 Vestuário e anatomia", expanded=is_humano_contexto):
+                seios = st.selectbox("Tamanho dos Seios:", opcoes_seios, disabled=not is_humano_contexto, key=f"{prefixo}_seios")
+                mamilos = st.selectbox("Detalhes dos Mamilos:", opcoes_mamilos, disabled=not is_humano_contexto, key=f"{prefixo}_mamilos")
                 col_v1, col_v2 = st.columns(2)
                 with col_v1:
-                    transparencia = st.checkbox("Transparência no Traje", disabled=is_obj_or_land, key=f"{prefixo}_transparencia")
+                    transparencia = st.checkbox("Transparência no Traje", disabled=not is_humano_contexto, key=f"{prefixo}_transparencia")
                 with col_v2:
-                    contorno = st.checkbox("Realçar Contorno", disabled=is_obj_or_land, key=f"{prefixo}_contorno")
+                    contorno = st.checkbox("Realçar Contorno", disabled=not is_humano_contexto, key=f"{prefixo}_contorno")
 
     with st.container(border=True):
         st.markdown("#### 3. Pose e enquadramento")
@@ -1484,12 +1693,23 @@ def renderizar_formulario(prefixo, slot_chave, modelo_selecionado, email=None, i
         "orientacao": orientacao, "enquadramento": enquadramento, "acao": acao, "estilo": estilo,
         "emocao": emocao, "pose": pose, "cenario": cenario, "iluminacao": iluminacao, "efeitos": efeitos,
         "is_web_image": is_web, "is_serie": is_serie, "variaveis_alvo_str": variaveis_alvo_str,
-        "total_variacoes": total_variacoes, "rigidez": rigidez,
+                "total_variacoes": total_variacoes, "rigidez": rigidez,
+        "subgrupo_web": subgrupo_web,
+        "dominio_realismo": dominio_realismo,
+        "intencao_realismo": intencao_realismo,
+        "formato_prompt_web": formato_prompt_web,
+        "detalhes_realismo": detalhes_realismo,
     }
 
     if is_web:
         dados["plataforma_web"] = plataforma_web
         dados["texto_web"] = texto_web
+        dados["subgrupo_web"] = subgrupo_web
+        dados["dominio_realismo"] = dominio_realismo
+        dados["intencao_realismo"] = intencao_realismo
+        dados["formato_prompt_web"] = formato_prompt_web
+        dados["detalhes_realismo"] = detalhes_realismo
+
     else:
         dados["fluxo"] = fluxo
 
