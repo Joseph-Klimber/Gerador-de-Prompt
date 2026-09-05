@@ -254,24 +254,6 @@ Todo prompt positivo deve ser composto, quando aplicável, pelos blocos abaixo, 
 - Regra de preservação: cada atributo fornecido deve aparecer no resultado como tag confiável ou descrição natural equivalente. É proibido resumir, omitir ou substituir detalhes por uma categoria genérica quando isso reduzir a fidelidade.
 - Regra de qualidade: antes da saída, confira internamente sujeito, aparência, rosto, vestuário, anatomia, pose, enquadramento, cenário, fundo, iluminação, efeitos e estilo. Não mostre essa conferência ao usuário.
 
-=============================================================================
-CONTRATO OBRIGATÓRIO DE SAÍDA POR SEÇÕES — MOTOR LOCAL
-=============================================================================
-Para Illustrious, Pony SDXL e SDXL Base, o PROMPT POSITIVO deve ser montado em três seções ordenadas, sem títulos, sem listas numeradas e sem explicar o processo:
-
-SEÇÃO A — ÂNCORAS E ATRIBUTOS: comece com qualidade, identidade, franquia, contagem, aparência, rosto, cabelo, olhos, traje, acessórios e anatomia. Use tags Booru somente quando forem confiáveis para o checkpoint.
-SEÇÃO B — CENA EM LINGUAGEM NATURAL: inclua obrigatoriamente uma ou duas frases em inglês contendo pose, ação, direção do olhar, enquadramento, relações espaciais, cenário composto, atmosfera e iluminação. Não converta esta seção em tags separadas.
-SEÇÃO C — ACABAMENTO: finalize com estilo, paleta, profundidade, foco, textura e efeitos visuais que sejam melhor representados como tags confiáveis ou como uma frase curta coerente.
-
-REGRAS INVIOLÁVEIS DO CONTRATO:
-1. Para Illustrious, Pony SDXL e SDXL Base, a SEÇÃO B é obrigatória, mesmo quando todos os elementos possuírem tags possíveis.
-2. A SEÇÃO B deve conter pelo menos uma frase natural completa; não é permitido entregar um prompt composto somente por vírgulas e tags.
-3. Pose, ação complexa, movimento, interação, direção do corpo, distância, perspectiva, atmosfera, cenário composto e iluminação devem permanecer na SEÇÃO B em linguagem natural.
-4. Não duplique a mesma informação em três tags equivalentes. Preserve o detalhe uma vez na forma mais clara e confiável.
-5. Não use rótulos como `SEÇÃO A`, `SEÇÃO B` ou `SEÇÃO C` na resposta final; use apenas pontuação e espaços para separar as partes e manter o prompt compatível com o ComfyUI.
-6. Para o SDXL Base (Natural), todo o prompt pode ser escrito em linguagem natural; ainda assim, mantenha internamente a ordem ÂNCORAS -> CENA -> ACABAMENTO.
-7. O prompt negativo permanece no formato exigido pelas regras do motor e não deve receber frases narrativas da SEÇÃO B.
-
 ### 📐 1.1 REGRAS POR FLUXO / MODELO DE IMAGEM:
 * FLUXO ILLUSTRIOUS:
   - Perfil HÍBRIDO TAG + LINGUAGEM NATURAL CONTROLADA.
@@ -344,15 +326,15 @@ FORMATOS OBRIGATÓRIOS DE SAÍDA (OUTPUT LOCAL)
 
 --- SE FOR IMAGEM LOCAL (MOTOR 1 - NÍVEIS 1 A 5) ---
 ### 🖼️ IMAGEM: [Nome/Tema do Sujeito] - [Fluxo Selecionado]
-1. PROMPT (Inglês): [Prompt no contrato A -> B -> C, com âncoras confiáveis, uma frase natural obrigatória para cena e acabamento final]
+1. PROMPT (Inglês): [Prompt organizado no molde estrutural de 12 blocos, mantendo a expansão canônica 100% no início quando o fluxo exigir]
 2. DESCRIÇÃO FACEBOOK (Português): [Legenda curta de 2 a 3 frases + CTA forte]
 3. HASHTAGS: [Hashtags relevantes]
 4. PROMPT NEGATIVO: [Prompt negativo dinâmico de 5 camadas]
 
 --- SE FOR IMAGEM LOCAL (MOTOR 1 - NÍVEL 6 - DUAL / CENSURA ESTRATÉGICA) ---
 ### 🖼️ IMAGEM: [Nome/Tema do Sujeito] - [Fluxo Selecionado] (VERSÃO DUAL)
-1. PROMPT VERSÃO A (Censurada com Stickers/Barras): [Contrato A -> B -> C com modificadores de censura na seção apropriada]
-2. PROMPT VERSÃO B (Sem Censura/Explícito): [Contrato A -> B -> C sem modificadores de censura]
+1. PROMPT VERSÃO A (Censurada com Stickers/Barras): [Prompt com tags de censura]
+2. PROMPT VERSÃO B (Sem Censura/Explícito): [Prompt sem tags de censura]
 3. DESCRIÇÃO FACEBOOK: [Legenda curta de 2 a 3 frases + CTA forte]
 4. HASHTAGS: [Hashtags]
 5. PROMPT NEGATIVO: [Prompt negativo dinâmico de 5 camadas]
@@ -461,22 +443,6 @@ Organize o prompt positivo, respeitando a sintaxe específica da plataforma, nos
 - Antes de responder, faça uma conferência interna dos blocos: sujeito, aparência, rosto, vestuário, anatomia, pose, enquadramento, cenário, fundo, iluminação, efeitos e estilo.
 - Inclua apenas os blocos aplicáveis à solicitação e adapte o bloco final aos parâmetros específicos da plataforma.
 
-=============================================================================
-CONTRATO OBRIGATÓRIO DE SAÍDA POR SEÇÕES — MOTOR WEB
-=============================================================================
-O prompt Web deve respeitar três partes ordenadas, sem exibir títulos de seção na resposta final:
-
-SEÇÃO A — IDENTIDADE E ATRIBUTOS: preserve personagem, franquia, aparência, rosto, cabelo, olhos, roupa, acessórios e demais atributos fornecidos. Use tags apenas quando a plataforma e o vocabulário realmente as suportarem.
-SEÇÃO B — CENA EM LINGUAGEM NATURAL: inclua obrigatoriamente frases completas para pose, ação, direção do olhar, enquadramento, relações espaciais, cenário, atmosfera e iluminação. Esta seção nunca deve ser reduzida a uma sequência de tags.
-SEÇÃO C — ACABAMENTO E PARÂMETROS: finalize com estilo, paleta, textura, profundidade, efeitos e parâmetros próprios da plataforma.
-
-REGRAS INVIOLÁVEIS DO CONTRATO WEB:
-1. Nano Banana, Flux, Ideogram e DALL-E/Bing devem usar linguagem natural nas três seções.
-2. Midjourney, Leonardo e SeaArt podem usar formato híbrido, mas a SEÇÃO B continua obrigatoriamente em linguagem natural.
-3. Não resuma nem omita atributos do usuário para tornar o prompt mais curto.
-4. Coloque parâmetros técnicos somente no final e não os misture à descrição da cena.
-5. O prompt negativo só deve ser incluído quando a plataforma aceitar ou se a regra específica solicitar.
-
 ### 🌐 2.1 REGRAS POR PLATAFORMA WEB:
 A lista abaixo define o perfil de saída e tem prioridade sobre os exemplos tag-only anteriores. Os exemplos canônicos de tags devem ser usados apenas como âncoras de identidade quando a plataforma aceitar esse formato.
 
@@ -508,7 +474,7 @@ FORMATO OBRIGATÓRIO DE SAÍDA (OUTPUT WEB)
 
 --- SE FOR IMAGEM WEB (MOTOR 2) ---
 ### 🌐 PROMPT OTIMIZADO PARA WEB: [{PLATAFORMA_SELECIONADA}]
-1. PROMPT (Inglês): [Prompt no contrato A -> B -> C, com a seção natural obrigatória para cena, pose, atmosfera e iluminação]
+1. PROMPT (Inglês): [Prompt organizado no molde estrutural de 12 blocos, com expansão canônica 100% verificada via web no início quando aplicável]
 2. DESCRIÇÃO REDES SOCIAIS (Português): [Legenda curta de 2 a 3 frases + CTA forte]
 3. HASHTAGS: [Hashtags virais e relevantes]
 💡 DICA DE APLICAÇÃO: [Instrução prática sobre como usar no site]
@@ -761,46 +727,6 @@ def carregar_lista_integrada_web(arquivo_padrao, arquivo_web, genero_ref):
     return resultado if resultado else ["Opção Padrão 1"]
 
 
-def _extrair_texto_gemini(response):
-    """Extrai texto mesmo quando response.text não está disponível no SDK Gemini."""
-    try:
-        texto_direto = getattr(response, "text", None)
-        if isinstance(texto_direto, str) and texto_direto.strip():
-            return texto_direto.strip()
-    except Exception:
-        # Algumas versões do SDK lançam exceção quando não há parte textual.
-        pass
-
-    textos = []
-    candidatos = getattr(response, "candidates", None) or []
-    for candidato in candidatos:
-        conteudo = getattr(candidato, "content", None)
-        partes = getattr(conteudo, "parts", None) or []
-        for parte in partes:
-            texto = getattr(parte, "text", None)
-            if isinstance(texto, str) and texto.strip():
-                textos.append(texto.strip())
-    return "\n".join(textos).strip()
-
-
-def _diagnostico_resposta_vazia_gemini(response):
-    """Gera uma mensagem útil quando o Gemini finaliza sem texto."""
-    candidatos = getattr(response, "candidates", None) or []
-    motivos = []
-    for candidato in candidatos:
-        motivo = getattr(candidato, "finish_reason", None)
-        if motivo:
-            motivos.append(str(motivo))
-
-    feedback = getattr(response, "prompt_feedback", None)
-    bloqueio = getattr(feedback, "block_reason", None) if feedback else None
-    if bloqueio:
-        return f"⚠️ O Gemini não gerou texto. Motivo informado pela API: {bloqueio}."
-    if motivos:
-        return f"⚠️ O Gemini finalizou sem texto. Motivo informado pela API: {', '.join(motivos)}."
-    return "⚠️ O Gemini retornou uma resposta sem conteúdo textual. Tente novamente ou simplifique o pedido."
-
-
 def chamar_gemini_api(
     dados_personagem,
     client,
@@ -1002,10 +928,8 @@ Gere o prompt final otimizado em inglês e crie uma DESCRIÇÃO/LEGENDA CURTA EM
             if hasattr(cand, "finish_reason") and "SAFETY" in str(cand.finish_reason).upper():
                 return "⚠️ A requisição foi bloqueada pelos filtros de segurança da API Gemini."
 
-        if response:
-            texto_resposta = _extrair_texto_gemini(response)
-            if not texto_resposta:
-                return _diagnostico_resposta_vazia_gemini(response)
+        if response and hasattr(response, "text") and response.text is not None:
+            texto_resposta = response.text
 
             # --- DEFESA ANTI-VAZAMENTO: verificação de saída ---
             # 1) O canário desta chamada não pode aparecer na resposta.
@@ -1028,7 +952,7 @@ Gere o prompt final otimizado em inglês e crie uma DESCRIÇÃO/LEGENDA CURTA EM
 
             return texto_resposta
         else:
-            return "⚠️ A API Gemini não retornou um objeto de resposta válido."
+            return "⚠️ A API retornou uma resposta vazia."
 
     except Exception as e:
         erro_str = str(e)
@@ -1205,6 +1129,10 @@ def st_campo_hibrido(label, placeholder, opcoes, key_prefix, disabled=False):
         elif st.session_state.get(texto_key) in validas:
             st.session_state[texto_key] = ""
 
+    def marcar_modo_manual():
+        """Mantém a edição manual como fonte de verdade após o usuário sair do campo."""
+        st.session_state[combo_key] = manual_option
+
     col_input, col_auto, col_clear = st.columns([8, 1, 1], vertical_alignment="bottom")
     with col_input:
         selecionado = st.selectbox(
@@ -1242,6 +1170,7 @@ def st_campo_hibrido(label, placeholder, opcoes, key_prefix, disabled=False):
             f"{nome_campo} personalizada",
             placeholder=placeholder,
             key=texto_key,
+            on_change=marcar_modo_manual,
             disabled=disabled,
         )
 
