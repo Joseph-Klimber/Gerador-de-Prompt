@@ -847,7 +847,7 @@ def montar_instrucoes_formatos_web(dados):
     formato = str(dados.get("formato_prompt_web", "Equilibrada")).strip() or "Equilibrada"
     return f"""
 FORMATO SELECIONADO PELO USUÁRIO: {formato}
-{INSTRUCOES_TRES_FORMATOS_WEB}
+{INSTRUCAO_TRES_FORMATOS_WEB}
 Always return all three versions under clearly labeled sections. Place the selected format
 first, followed by the other two equivalent presentations. Never use the selected format as
 permission to remove source attributes.
