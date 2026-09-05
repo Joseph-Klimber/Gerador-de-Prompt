@@ -1093,7 +1093,7 @@ def _autocompletar_campo_individual(texto_key, combo_key, validas):
     """Preenche um único campo com um preset e sincroniza o selectbox."""
     if validas:
         valor = random.choice(validas)
-        st.session_state[texto_key] = valor
+        st.session_state[texto_key] = ""
         st.session_state[combo_key] = valor
         manual_mode_key = texto_key[:-4] + "_manual_mode" if texto_key.endswith("_txt") else f"{texto_key}_manual_mode"
         manual_value_key = texto_key[:-4] + "_manual_value" if texto_key.endswith("_txt") else f"{texto_key}_manual_value"
@@ -1112,7 +1112,7 @@ def _limpar_campo_individual(texto_key, combo_key, manual_option):
 
 
 def st_campo_hibrido(label, placeholder, opcoes, key_prefix, disabled=False):
-    """Renderiza um preset opcional e um campo de texto livre independente da lista."""
+    """Renderiza um preset opcional e uma entrada livre sempre independente da lista."""
     validas = list(
         dict.fromkeys(
             o for o in opcoes
@@ -1121,54 +1121,31 @@ def st_campo_hibrido(label, placeholder, opcoes, key_prefix, disabled=False):
     )
     combo_key = f"{key_prefix}_combo"
     texto_key = f"{key_prefix}_txt"
-    manual_value_key = f"{key_prefix}_manual_value"
-    manual_mode_key = f"{key_prefix}_manual_mode"
     manual_option = "✍️ Digitar manualmente..."
     opcoes_controle = [manual_option] + validas
     nome_campo = label.rstrip(":")
 
-    # Migração: qualquer texto existente que não seja preset já é um valor manual válido.
-    valor_atual = st.session_state.get(texto_key, "")
-    if valor_atual and valor_atual not in validas and not st.session_state.get(manual_value_key):
-        st.session_state[manual_value_key] = valor_atual
-        st.session_state[manual_mode_key] = True
-    elif manual_mode_key not in st.session_state:
-        st.session_state[manual_mode_key] = bool(st.session_state.get(manual_value_key, ""))
+    # O selectbox é apenas um preset. Ele nunca valida nem substitui a entrada livre.
+    preset_atual = st.session_state.get(combo_key, manual_option)
+    indice_preset = opcoes_controle.index(preset_atual) if preset_atual in opcoes_controle else 0
 
-    def sincronizar_controle():
-        selecionado = st.session_state.get(combo_key, manual_option)
-        if selecionado == manual_option:
-            st.session_state[manual_mode_key] = True
-            st.session_state[texto_key] = st.session_state.get(manual_value_key, "")
-        else:
-            st.session_state[manual_mode_key] = False
-            st.session_state[manual_value_key] = ""
-            st.session_state[texto_key] = selecionado
-
-    def marcar_modo_manual():
-        # O texto livre é salvo em uma chave própria, sem qualquer validação contra a lista.
-        valor_manual = st.session_state.get(texto_key, "")
-        st.session_state[manual_value_key] = valor_manual
-        st.session_state[manual_mode_key] = True
-
-    if st.session_state.get(manual_mode_key, False):
-        st.session_state[combo_key] = manual_option
-        st.session_state[texto_key] = st.session_state.get(manual_value_key, "")
-        indice_atual = 0
-    else:
-        valor_preset = st.session_state.get(texto_key, "")
-        indice_atual = validas.index(valor_preset) + 1 if valor_preset in validas else 0
+    def selecionar_preset():
+        escolhido = st.session_state.get(combo_key, manual_option)
+        if escolhido != manual_option:
+            # Trocar explicitamente para um preset cancela somente a edição manual deste campo.
+            st.session_state[texto_key] = ""
+            st.session_state[f"{key_prefix}_manual_value"] = ""
 
     col_input, col_auto, col_clear = st.columns([8, 1, 1], vertical_alignment="bottom")
     with col_input:
-        selecionado = st.selectbox(
-            label,
+        st.selectbox(
+            f"{nome_campo} — preset opcional",
             opcoes_controle,
-            index=indice_atual,
+            index=indice_preset,
             key=combo_key,
-            on_change=sincronizar_controle,
+            on_change=selecionar_preset,
             disabled=disabled,
-            help="Escolha um preset ou selecione a primeira opção para inserir qualquer valor manual.",
+            help="Use a lista apenas como preset. Para inserir um valor que não existe nela, use o campo personalizado abaixo.",
         )
     with col_auto:
         st.button(
@@ -1191,18 +1168,19 @@ def st_campo_hibrido(label, placeholder, opcoes, key_prefix, disabled=False):
             use_container_width=True,
         )
 
-    if selecionado == manual_option or st.session_state.get(manual_mode_key, False):
-        st.session_state[manual_mode_key] = True
-        # O valor retornado é o texto livre, mesmo que coincida com ou não exista na lista.
-        return st.text_input(
-            f"{nome_campo} personalizada",
-            placeholder=placeholder,
-            key=texto_key,
-            on_change=marcar_modo_manual,
-            disabled=disabled,
-        )
+    valor_manual = st.text_input(
+        f"{nome_campo} — valor personalizado",
+        placeholder=placeholder,
+        key=texto_key,
+        disabled=disabled,
+        help="Campo livre: qualquer texto digitado aqui será usado no prompt, mesmo que não exista na lista.",
+    ).strip()
 
-    return st.session_state.get(texto_key, selecionado) or selecionado
+    # A entrada livre tem prioridade absoluta sobre o preset e é devolvida diretamente ao payload.
+    if valor_manual:
+        return valor_manual
+    selecionado = st.session_state.get(combo_key, manual_option)
+    return "" if selecionado == manual_option else selecionado
 
 
 def _sincronizar_controles_preset(prefixo, campos):
