@@ -1112,7 +1112,7 @@ def _limpar_campo_individual(texto_key, combo_key, manual_option):
 
 
 def st_campo_hibrido(label, placeholder, opcoes, key_prefix, disabled=False):
-    """Renderiza um preset opcional e uma entrada livre sempre independente da lista."""
+    """Campo livre principal; a lista serve somente para selecionar presets opcionais."""
     validas = list(
         dict.fromkeys(
             o for o in opcoes
@@ -1125,28 +1125,24 @@ def st_campo_hibrido(label, placeholder, opcoes, key_prefix, disabled=False):
     opcoes_controle = [manual_option] + validas
     nome_campo = label.rstrip(":")
 
-    # O selectbox é apenas um preset. Ele nunca valida nem substitui a entrada livre.
+    def aplicar_preset():
+        escolhido = st.session_state.get(combo_key, manual_option)
+        if escolhido != manual_option:
+            st.session_state[texto_key] = escolhido
+
     preset_atual = st.session_state.get(combo_key, manual_option)
     indice_preset = opcoes_controle.index(preset_atual) if preset_atual in opcoes_controle else 0
 
-    def selecionar_preset():
-        escolhido = st.session_state.get(combo_key, manual_option)
-        if escolhido != manual_option:
-            # Trocar explicitamente para um preset cancela somente a edição manual deste campo.
-            st.session_state[texto_key] = ""
-            st.session_state[f"{key_prefix}_manual_value"] = ""
-
     col_input, col_auto, col_clear = st.columns([8, 1, 1], vertical_alignment="bottom")
     with col_input:
-        st.selectbox(
-            f"{nome_campo} — preset opcional",
-            opcoes_controle,
-            index=indice_preset,
-            key=combo_key,
-            on_change=selecionar_preset,
+        # Este é o campo principal. Ele aceita qualquer texto e não possui opções de lista.
+        valor_manual = st.text_input(
+            label,
+            placeholder=placeholder,
+            key=texto_key,
             disabled=disabled,
-            help="Use a lista apenas como preset. Para inserir um valor que não existe nela, use o campo personalizado abaixo.",
-        )
+            help="Digite qualquer valor livre. O texto será enviado literalmente à IA; não é feita busca na lista.",
+        ).strip()
     with col_auto:
         st.button(
             "↻",
@@ -1168,15 +1164,18 @@ def st_campo_hibrido(label, placeholder, opcoes, key_prefix, disabled=False):
             use_container_width=True,
         )
 
-    valor_manual = st.text_input(
-        f"{nome_campo} — valor personalizado",
-        placeholder=placeholder,
-        key=texto_key,
+    # A lista é secundária e fica separada do campo que recebe texto.
+    st.selectbox(
+        f"{nome_campo} — escolher preset opcional",
+        opcoes_controle,
+        index=indice_preset,
+        key=combo_key,
+        on_change=aplicar_preset,
         disabled=disabled,
-        help="Campo livre: qualquer texto digitado aqui será usado no prompt, mesmo que não exista na lista.",
-    ).strip()
+        help="Use somente se quiser substituir o valor livre por um item gravado.",
+    )
 
-    # A entrada livre tem prioridade absoluta sobre o preset e é devolvida diretamente ao payload.
+    # Texto manual não vazio sempre prevalece e é devolvido sem comparação com a lista.
     if valor_manual:
         return valor_manual
     selecionado = st.session_state.get(combo_key, manual_option)
