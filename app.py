@@ -1095,43 +1095,69 @@ def _autocompletar_campo_individual(texto_key, combo_key, validas):
         valor = random.choice(validas)
         st.session_state[texto_key] = valor
         st.session_state[combo_key] = valor
+        manual_mode_key = texto_key[:-4] + "_manual_mode" if texto_key.endswith("_txt") else f"{texto_key}_manual_mode"
+        manual_value_key = texto_key[:-4] + "_manual_value" if texto_key.endswith("_txt") else f"{texto_key}_manual_value"
+        st.session_state[manual_mode_key] = False
+        st.session_state[manual_value_key] = ""
 
 
 def _limpar_campo_individual(texto_key, combo_key, manual_option):
     """Limpa um único campo e retorna o seletor ao modo manual."""
     st.session_state[texto_key] = ""
     st.session_state[combo_key] = manual_option
+    manual_mode_key = texto_key[:-4] + "_manual_mode" if texto_key.endswith("_txt") else f"{texto_key}_manual_mode"
+    manual_value_key = texto_key[:-4] + "_manual_value" if texto_key.endswith("_txt") else f"{texto_key}_manual_value"
+    st.session_state[manual_mode_key] = True
+    st.session_state[manual_value_key] = ""
 
 
 def st_campo_hibrido(label, placeholder, opcoes, key_prefix, disabled=False):
-    """Renderiza seletor, entrada manual e ações individuais em um grupo contextual."""
+    """Renderiza um preset opcional e um campo de texto livre independente da lista."""
     validas = list(
         dict.fromkeys(
-            [
-                o
-                for o in opcoes
-                if o not in ["Digite manualmente...", "Opção Padrão 1", "Opção Padrão 2"]
-            ]
+            o for o in opcoes
+            if o not in ["Digite manualmente...", "Opção Padrão 1", "Opção Padrão 2"]
         )
     )
     combo_key = f"{key_prefix}_combo"
     texto_key = f"{key_prefix}_txt"
+    manual_value_key = f"{key_prefix}_manual_value"
+    manual_mode_key = f"{key_prefix}_manual_mode"
     manual_option = "✍️ Digitar manualmente..."
     opcoes_controle = [manual_option] + validas
-    valor_atual = st.session_state.get(texto_key, "")
-    indice_atual = validas.index(valor_atual) + 1 if valor_atual in validas else 0
     nome_campo = label.rstrip(":")
+
+    # Migração: qualquer texto existente que não seja preset já é um valor manual válido.
+    valor_atual = st.session_state.get(texto_key, "")
+    if valor_atual and valor_atual not in validas and not st.session_state.get(manual_value_key):
+        st.session_state[manual_value_key] = valor_atual
+        st.session_state[manual_mode_key] = True
+    elif manual_mode_key not in st.session_state:
+        st.session_state[manual_mode_key] = bool(st.session_state.get(manual_value_key, ""))
 
     def sincronizar_controle():
         selecionado = st.session_state.get(combo_key, manual_option)
-        if selecionado != manual_option:
+        if selecionado == manual_option:
+            st.session_state[manual_mode_key] = True
+            st.session_state[texto_key] = st.session_state.get(manual_value_key, "")
+        else:
+            st.session_state[manual_mode_key] = False
+            st.session_state[manual_value_key] = ""
             st.session_state[texto_key] = selecionado
-        elif st.session_state.get(texto_key) in validas:
-            st.session_state[texto_key] = ""
 
     def marcar_modo_manual():
-        """Mantém a edição manual como fonte de verdade após o usuário sair do campo."""
+        # O texto livre é salvo em uma chave própria, sem qualquer validação contra a lista.
+        valor_manual = st.session_state.get(texto_key, "")
+        st.session_state[manual_value_key] = valor_manual
+        st.session_state[manual_mode_key] = True
+
+    if st.session_state.get(manual_mode_key, False):
         st.session_state[combo_key] = manual_option
+        st.session_state[texto_key] = st.session_state.get(manual_value_key, "")
+        indice_atual = 0
+    else:
+        valor_preset = st.session_state.get(texto_key, "")
+        indice_atual = validas.index(valor_preset) + 1 if valor_preset in validas else 0
 
     col_input, col_auto, col_clear = st.columns([8, 1, 1], vertical_alignment="bottom")
     with col_input:
@@ -1142,7 +1168,7 @@ def st_campo_hibrido(label, placeholder, opcoes, key_prefix, disabled=False):
             key=combo_key,
             on_change=sincronizar_controle,
             disabled=disabled,
-            help="Escolha um preset ou selecione a primeira opção para digitar manualmente.",
+            help="Escolha um preset ou selecione a primeira opção para inserir qualquer valor manual.",
         )
     with col_auto:
         st.button(
@@ -1165,7 +1191,9 @@ def st_campo_hibrido(label, placeholder, opcoes, key_prefix, disabled=False):
             use_container_width=True,
         )
 
-    if selecionado == manual_option:
+    if selecionado == manual_option or st.session_state.get(manual_mode_key, False):
+        st.session_state[manual_mode_key] = True
+        # O valor retornado é o texto livre, mesmo que coincida com ou não exista na lista.
         return st.text_input(
             f"{nome_campo} personalizada",
             placeholder=placeholder,
@@ -1174,8 +1202,7 @@ def st_campo_hibrido(label, placeholder, opcoes, key_prefix, disabled=False):
             disabled=disabled,
         )
 
-    st.session_state[texto_key] = selecionado
-    return selecionado
+    return st.session_state.get(texto_key, selecionado) or selecionado
 
 
 def _sincronizar_controles_preset(prefixo, campos):
@@ -1186,6 +1213,8 @@ def _sincronizar_controles_preset(prefixo, campos):
         valor = st.session_state.get(texto_key, "")
         if valor:
             st.session_state[combo_key] = valor
+            st.session_state[f"{prefixo}_{campo}_manual_mode"] = False
+            st.session_state[f"{prefixo}_{campo}_manual_value"] = ""
 
 
 def autocompletar_campos(prefixo, is_web=False):
@@ -1238,7 +1267,9 @@ def limpar_campos(prefixo):
             st.session_state[txt_key] = ""
         if drop_key in st.session_state:
             st.session_state[drop_key] = "✍️ Digitar manualmente..."
-    
+        st.session_state[f"{prefixo}_{c}_manual_mode"] = True
+        st.session_state[f"{prefixo}_{c}_manual_value"] = ""
+
     if f"{prefixo}_resultado" in st.session_state:
         st.session_state[f"{prefixo}_resultado"] = ""
 
