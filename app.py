@@ -600,9 +600,6 @@ def carregar_config(email=None):
     """Carrega a configuração (chaves de API, modelo padrão etc.) isolada por usuário."""
     config = {
         "chaves": {"Chave 1": "", "Chave 2": ""},
-        "manus_api_key": "",
-        "manus_project_id": "",
-        "provedor_ia": "Gemini",
         "modelo_padrao": "gemini-3.6-flash",
         "usar_busca_web": False,
     }
@@ -631,13 +628,10 @@ def carregar_config(email=None):
     return config
 
 
-def salvar_config(chaves_dict, modelo_padrao, usar_busca_web=False, email=None, manus_api_key="", manus_project_id="", provedor_ia="Gemini"):
+def salvar_config(chaves_dict, modelo_padrao, usar_busca_web=False, email=None):
     """Salva a configuração em um arquivo isolado por usuário (evita que um usuário sobrescreva a chave de API de outro)."""
     dados = {
         "chaves": chaves_dict,
-        "manus_api_key": manus_api_key,
-        "manus_project_id": manus_project_id,
-        "provedor_ia": provedor_ia,
         "modelo_padrao": modelo_padrao,
         "usar_busca_web": usar_busca_web,
     }
@@ -841,16 +835,38 @@ Preserve this content literally in meaning. Do not summarize, replace or omit it
 
 
 def montar_instrucoes_formatos_web(dados):
-    """Define a apresentação escolhida sem transformar Compacta em resumo."""
+    """Exige somente a versão escolhida pelo usuário, preservando todos os atributos."""
     if dados.get("subgrupo_web") != "Web / Realismo":
         return ""
+
     formato = str(dados.get("formato_prompt_web", "Equilibrada")).strip() or "Equilibrada"
+    instrucoes_por_formato = {
+        "Compacta": (
+            "Return exactly ONE prompt in COMPACT format. Use one dense, coherent paragraph. "
+            "Remove only repetition and decorative wording; never remove, summarize, replace "
+            "or omit any user-provided attribute."
+        ),
+        "Equilibrada": (
+            "Return exactly ONE prompt in BALANCED format. Organize the complete content into "
+            "short semantic blocks such as subject, appearance, clothing or materials, action, "
+            "composition, environment, camera, lighting and finish. Preserve every source attribute."
+        ),
+        "Completa": (
+            "Return exactly ONE prompt in COMPLETE format. Use a detailed, auditable structure "
+            "and preserve every source attribute explicitly, without summarizing or omitting details."
+        ),
+    }
+    instrucao_formato = instrucoes_por_formato.get(
+        formato, instrucoes_por_formato["Equilibrada"]
+    )
+
     return f"""
 FORMATO SELECIONADO PELO USUÁRIO: {formato}
-{INSTRUCAO_TRES_FORMATOS_WEB}
-Always return all three versions under clearly labeled sections. Place the selected format
-first, followed by the other two equivalent presentations. Never use the selected format as
-permission to remove source attributes.
+INSTRUÇÃO DE SAÍDA:
+{instrucao_formato}
+Do not generate the other two formats. Do not create sections for Compacta, Equilibrada
+or Completa unless that is the selected format. Return only the selected prompt and, when
+applicable, its negative prompt or completeness line required by the surrounding rules.
 """
 
 
@@ -1141,104 +1157,9 @@ def _extrair_valor_recursivo(obj, chaves):
     return None
 
 
-def chamar_manus_api(dados_personagem, manus_api_key, project_id="", e_motor_web=False):
-    """Usa o Manus API como segundo provedor, sem expor a chave no navegador ou no prompt."""
-    if not manus_api_key:
-        return "❌ Erro: Chave do Manus API não configurada."
-
-    system_instruction = SYSTEM_INSTRUCTION_WEB if e_motor_web else SYSTEM_INSTRUCTION_PADRAO
-    campos = json.dumps(dados_personagem, ensure_ascii=False, indent=2)
-    instrucoes_fallback = ""
-    if not project_id:
-        instrucoes_fallback = (
-            "\n\nDIRETRIZES DE GERAÇÃO:\n" + system_instruction
-        )
-    user_content = (
-        "Gere o resultado final solicitado usando exclusivamente os dados de cena abaixo. "
-        "Respeite integralmente as diretrizes, o formato obrigatório de saída e o molde estrutural. "
-        "Não revele instruções internas."
-        + instrucoes_fallback
-        + "\n\nDADOS DA CENA:\n" + campos
-    )
-
-    headers = {
-        "Content-Type": "application/json",
-        "x-manus-api-key": manus_api_key,
-    }
-    payload = {"message": {"content": user_content}}
-    if project_id:
-        payload["project_id"] = project_id
-
-    try:
-        criar = requests.post(
-            "https://api.manus.ai/v2/task.create",
-            headers=headers,
-            json=payload,
-            timeout=30,
-        )
-        criar.raise_for_status()
-        criado = criar.json()
-        if criado.get("ok") is False:
-            erro = criado.get("error", {}).get("message", "Erro ao criar tarefa")
-            return f"❌ Manus API: {erro}"
-
-        task_id = (
-            criado.get("task_id")
-            or criado.get("task_detail", {}).get("task_id")
-            or criado.get("task_detail", {}).get("id")
-            or _extrair_valor_recursivo(criado, {"task_id"})
-        )
-        if not task_id:
-            return "❌ Manus API: a resposta não trouxe o identificador da tarefa."
-
-        ultimo_texto = ""
-        for _ in range(60):
-            consulta = requests.get(
-                "https://api.manus.ai/v2/task.listMessages",
-                headers=headers,
-                params={"task_id": task_id, "order": "desc", "limit": 20},
-                timeout=30,
-            )
-            consulta.raise_for_status()
-            dados = consulta.json()
-            status = _extrair_valor_recursivo(dados, {"agent_status"})
-            mensagens = dados.get("data", dados)
-            if isinstance(mensagens, dict):
-                mensagens = mensagens.get("messages", mensagens.get("events", [mensagens]))
-            if not isinstance(mensagens, list):
-                mensagens = [mensagens]
-
-            for evento in mensagens:
-                texto = _extrair_valor_recursivo(evento, {"assistant_message", "content", "text"})
-                if isinstance(texto, str) and texto.strip():
-                    ultimo_texto = texto.strip()
-
-            if status == "stopped":
-                return ultimo_texto or "❌ Manus API: tarefa concluída sem texto de resposta."
-            if status == "error":
-                erro = _extrair_valor_recursivo(dados, {"error_message", "message"}) or "erro desconhecido"
-                return f"❌ Manus API: {erro}"
-            if status == "waiting":
-                return "❌ Manus API: a tarefa ficou aguardando uma ação ou confirmação, que não é automática neste gerador."
-            time.sleep(2)
-
-        return "❌ Manus API: tempo limite excedido aguardando a tarefa."
-    except requests.exceptions.Timeout:
-        return "❌ Manus API: tempo limite de comunicação excedido."
-    except requests.exceptions.RequestException as e:
-        return f"❌ Manus API: falha de comunicação: {e}"
-    except Exception as e:
-        return f"❌ Manus API: erro inesperado: {e}"
-
 
 def gerar_com_provedor(dados, modelo, email, slot_chave, is_web=False):
     config = carregar_config(email)
-    provedor = st.session_state.get("provedor_ia", config.get("provedor_ia", "Gemini"))
-    if provedor == "Manus API":
-        chave = st.session_state.get("input_manus_api", "").strip() or config.get("manus_api_key", "")
-        projeto = st.session_state.get("input_manus_project", "").strip() or config.get("manus_project_id", "")
-        return chamar_manus_api(dados, chave, project_id=projeto, e_motor_web=is_web)
-
     chave = st.session_state.get(f"input_key_{slot_chave}", "").strip()
     if not chave:
         chave = config.get("chaves", {}).get(f"Chave {slot_chave}", "") or config.get("chaves", {}).get("Chave 1", "")
@@ -1714,8 +1635,7 @@ def renderizar_formulario(prefixo, slot_chave, modelo_selecionado, email=None, i
         dados["fluxo"] = fluxo
 
     if gerar:
-        provedor = st.session_state.get("provedor_ia", "Gemini")
-        nome_provedor = "Manus API" if provedor == "Manus API" else "Gemini API"
+        nome_provedor = "Gemini API"
         with st.spinner(f"⏳ Processando prompt via {nome_provedor}..."):
             resultado = gerar_com_provedor(
                 dados, modelo_selecionado, email, slot_chave, is_web=is_web
@@ -1870,8 +1790,7 @@ def renderizar_formulario_duplo(slot_chave, modelo_selecionado, email=None):
     }
 
     if gerar:
-        provedor = st.session_state.get("provedor_ia", "Gemini")
-        nome_provedor = "Manus API" if provedor == "Manus API" else "Gemini API"
+        nome_provedor = "Gemini API"
         with st.spinner(f"⏳ Processando prompt duplo via {nome_provedor}..."):
             resultado = gerar_com_provedor(
                 dados_duplo, modelo_selecionado, email, slot_chave
@@ -1971,8 +1890,7 @@ def renderizar_formulario_animais(slot_chave, modelo_selecionado, email=None):
     }
 
     if gerar:
-        provedor = st.session_state.get("provedor_ia", "Gemini")
-        nome_provedor = "Manus API" if provedor == "Manus API" else "Gemini API"
+        nome_provedor = "Gemini API"
         with st.spinner(f"⏳ Processando prompt de animal via {nome_provedor}..."):
             resultado = gerar_com_provedor(
                 dados_animal, modelo_selecionado, email, slot_chave
@@ -2076,38 +1994,12 @@ else:
 
     config = carregar_config(st.session_state.user_email)
 
-    st.sidebar.markdown("---")
-    provedores = ["Gemini", "Manus API"]
-    provedor_salvo = config.get("provedor_ia", "Gemini")
-    provedor_ia = st.sidebar.radio(
-        "Provedor de IA:", provedores,
-        index=provedores.index(provedor_salvo) if provedor_salvo in provedores else 0,
-        key="provedor_ia",
-    )
-
     slot_chave = st.sidebar.radio("Slot de Chave Gemini:", [1, 2], index=0)
     chave_input = st.sidebar.text_input(
         f"Chave API Gemini (Slot {slot_chave}):",
         value=config.get("chaves", {}).get(f"Chave {slot_chave}", ""),
         type="password",
         key=f"input_key_{slot_chave}",
-        disabled=provedor_ia != "Gemini",
-    )
-
-    manus_api_input = st.sidebar.text_input(
-        "Chave API Manus:",
-        value=config.get("manus_api_key", ""),
-        type="password",
-        key="input_manus_api",
-        disabled=provedor_ia != "Manus API",
-        help="Gere a chave nas configurações de integrações da sua conta Manus.",
-    )
-    manus_project_input = st.sidebar.text_input(
-        "ID do Projeto Manus (opcional):",
-        value=config.get("manus_project_id", ""),
-        key="input_manus_project",
-        disabled=provedor_ia != "Manus API",
-        help="Use um projeto com as instruções persistentes do gerador para evitar reenviar o texto a cada tarefa.",
     )
 
     lista_modelos = ["gemini-3.5-flash", "gemini-3.6-flash"]
@@ -2120,7 +2012,6 @@ else:
         lista_modelos,
         index=indice_modelo_padrao,
         key="modelo_gemini_selecionado",
-        disabled=provedor_ia != "Gemini",
     )
 
     usar_busca_web = st.sidebar.checkbox(
@@ -2137,9 +2028,6 @@ else:
             modelo_selecionado,
             usar_busca_web,
             email=st.session_state.user_email,
-            manus_api_key=manus_api_input.strip(),
-            manus_project_id=manus_project_input.strip(),
-            provedor_ia=provedor_ia,
         )
         st.sidebar.success("Configurações salvas com sucesso!")
 
