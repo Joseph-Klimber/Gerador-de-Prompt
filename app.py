@@ -1189,16 +1189,23 @@ def chamar_api_compativel(provedor, dados_personagem, api_key, modelo, e_motor_w
         raise RuntimeError(f"HTTP {response.status_code}: {detalhe}")
     dados = response.json()
     choices = dados.get("choices") or []
-    if not choices:
-        raise RuntimeError("A API não retornou choices.")
-    mensagem = choices[0].get("message", {}) or {}
-    texto = _extrair_texto_resposta(mensagem.get("content"))
+    texto = ""
+    if choices:
+        mensagem = choices[0].get("message", {}) or {}
+        texto = _extrair_texto_resposta(mensagem.get("content"))
+        if not texto:
+            texto = _extrair_texto_resposta(choices[0].get("text"))
+        if not texto:
+            texto = _extrair_texto_resposta(choices[0].get("output_text"))
+
+    # Workers AI também documenta o formato direto com o texto em `response`;
+    # algumas respostas podem ainda aninhar esse campo em `result`.
     if not texto:
-        texto = _extrair_texto_resposta(choices[0].get("text"))
+        texto = _extrair_texto_resposta(dados.get("response"))
     if not texto:
-        texto = _extrair_texto_resposta(choices[0].get("output_text"))
+        texto = _extrair_texto_resposta(dados.get("result"))
     if not texto:
-        raise RuntimeError("A API retornou choices, mas nenhum texto utilizável.")
+        raise RuntimeError("A API retornou uma resposta sem texto utilizável.")
     return validar_saida_provedor(texto, canario)
 
 
