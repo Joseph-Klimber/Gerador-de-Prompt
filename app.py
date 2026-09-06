@@ -606,7 +606,7 @@ def carregar_config(email=None):
         "provedor_ia": "Gemini",
         "fallback_automatico": True,
         "modelo_groq": "openai/gpt-oss-120b",
-        "modelo_cloudflare": "@cf/meta/llama-3.1-8b-instruct",
+        "modelo_cloudflare": "@cf/openai/gpt-oss-120b",
         "modelo_padrao": "gemini-3.6-flash",
         "usar_busca_web": False,
     }
@@ -635,7 +635,7 @@ def carregar_config(email=None):
     return config
 
 
-def salvar_config(chaves_dict, modelo_padrao, usar_busca_web=False, email=None, groq_api_key="", cloudflare_account_id="", cloudflare_api_token="", provedor_ia="Gemini", fallback_automatico=True, modelo_groq="openai/gpt-oss-120b", modelo_cloudflare="@cf/meta/llama-3.1-8b-instruct"):
+def salvar_config(chaves_dict, modelo_padrao, usar_busca_web=False, email=None, groq_api_key="", cloudflare_account_id="", cloudflare_api_token="", provedor_ia="Gemini", fallback_automatico=True, modelo_groq="openai/gpt-oss-120b", modelo_cloudflare="@cf/openai/gpt-oss-120b"):
     """Salva a configuração em um arquivo isolado por usuário (evita que um usuário sobrescreva a chave de API de outro)."""
     dados = {
         "chaves": chaves_dict,
@@ -1196,6 +1196,14 @@ def chamar_api_compativel(provedor, dados_personagem, api_key, modelo, e_motor_w
     return validar_saida_provedor(texto, canario)
 
 
+def normalizar_modelo_cloudflare(nome):
+    """Substitui identificadores antigos por um modelo atual do catálogo Cloudflare."""
+    valor = str(nome or "").strip()
+    if not valor or "llama-3.1" in valor.lower() or "infire" in valor.lower():
+        return "@cf/openai/gpt-oss-120b"
+    return valor
+
+
 def erro_permite_fallback(erro):
     """Somente erros temporários acionam outro provedor."""
     texto = str(erro).lower()
@@ -1477,7 +1485,7 @@ def gerar_com_provedor(dados, modelo, email, slot_chave, is_web=False):
 
             chave = st.session_state.get("input_cloudflare_token", "").strip() or config.get("cloudflare_api_token", "")
             account_id = st.session_state.get("input_cloudflare_account", "").strip() or config.get("cloudflare_account_id", "")
-            modelo_cloudflare = st.session_state.get("modelo_cloudflare", config.get("modelo_cloudflare", "@cf/meta/llama-3.1-8b-instruct"))
+            modelo_cloudflare = normalizar_modelo_cloudflare(st.session_state.get("modelo_cloudflare", config.get("modelo_cloudflare", "@cf/openai/gpt-oss-120b")))
             return chamar_api_compativel("Cloudflare", dados, chave, modelo_cloudflare, e_motor_web=is_web, account_id=account_id)
 
         except Exception as exc:
@@ -2365,7 +2373,7 @@ else:
     )
     modelo_cloudflare = st.sidebar.text_input(
         "Modelo Cloudflare:",
-        value=config.get("modelo_cloudflare", "@cf/meta/llama-3.1-8b-instruct"),
+        value=normalizar_modelo_cloudflare(config.get("modelo_cloudflare", "@cf/openai/gpt-oss-120b")),
         key="modelo_cloudflare",
         help="Use um modelo elegível à quota gratuita do Workers AI.",
     )
