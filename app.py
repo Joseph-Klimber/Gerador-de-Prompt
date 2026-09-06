@@ -601,11 +601,12 @@ def carregar_config(email=None):
     config = {
         "chaves": {"Chave 1": "", "Chave 2": ""},
         "groq_api_key": "",
-        "cerebras_api_key": "",
+        "cloudflare_account_id": "",
+        "cloudflare_api_token": "",
         "provedor_ia": "Gemini",
         "fallback_automatico": True,
         "modelo_groq": "openai/gpt-oss-120b",
-        "modelo_cerebras": "gpt-oss-120b",
+        "modelo_cloudflare": "@cf/meta/llama-3.1-8b-instruct",
         "modelo_padrao": "gemini-3.6-flash",
         "usar_busca_web": False,
     }
@@ -634,16 +635,17 @@ def carregar_config(email=None):
     return config
 
 
-def salvar_config(chaves_dict, modelo_padrao, usar_busca_web=False, email=None, groq_api_key="", cerebras_api_key="", provedor_ia="Gemini", fallback_automatico=True, modelo_groq="openai/gpt-oss-120b", modelo_cerebras="gpt-oss-120b"):
+def salvar_config(chaves_dict, modelo_padrao, usar_busca_web=False, email=None, groq_api_key="", cloudflare_account_id="", cloudflare_api_token="", provedor_ia="Gemini", fallback_automatico=True, modelo_groq="openai/gpt-oss-120b", modelo_cloudflare="@cf/meta/llama-3.1-8b-instruct"):
     """Salva a configuração em um arquivo isolado por usuário (evita que um usuário sobrescreva a chave de API de outro)."""
     dados = {
         "chaves": chaves_dict,
         "groq_api_key": groq_api_key,
-        "cerebras_api_key": cerebras_api_key,
+        "cloudflare_account_id": cloudflare_account_id,
+        "cloudflare_api_token": cloudflare_api_token,
         "provedor_ia": provedor_ia,
         "fallback_automatico": fallback_automatico,
         "modelo_groq": modelo_groq,
-        "modelo_cerebras": modelo_cerebras,
+        "modelo_cloudflare": modelo_cloudflare,
         "modelo_padrao": modelo_padrao,
         "usar_busca_web": usar_busca_web,
     }
@@ -1153,19 +1155,22 @@ A saída não pode omitir nenhum desses atributos.
 
 
 
-def chamar_api_compativel(provedor, dados_personagem, api_key, modelo, e_motor_web=False):
-    """Chama Groq ou Cerebras usando o formato Chat Completions compatível com OpenAI."""
+def chamar_api_compativel(provedor, dados_personagem, api_key, modelo, e_motor_web=False, account_id=""):
+    """Chama Groq ou Cloudflare Workers AI usando formato compatível com OpenAI."""
     if not api_key:
         raise RuntimeError(f"Chave API {provedor} não configurada.")
 
     system_instruction, prompt_usuario, canario = montar_solicitacao_compativel(
         dados_personagem, e_motor_web=e_motor_web
     )
-    endpoints = {
-        "Groq": "https://api.groq.com/openai/v1/chat/completions",
-        "Cerebras": "https://api.cerebras.ai/v1/chat/completions",
-    }
-    endpoint = endpoints[provedor]
+    if provedor == "Groq":
+        endpoint = "https://api.groq.com/openai/v1/chat/completions"
+    elif provedor == "Cloudflare":
+        if not account_id:
+            raise RuntimeError("Cloudflare Account ID não configurado.")
+        endpoint = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/chat/completions"
+    else:
+        raise RuntimeError(f"Provedor compatível não suportado: {provedor}")
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}",
@@ -1195,9 +1200,10 @@ def erro_permite_fallback(erro):
     """Somente erros temporários acionam outro provedor."""
     texto = str(erro).lower()
     temporarios = (
-        "http 408", "http 409", "http 429", "http 500", "http 502",
+        "http 402", "http 408", "http 409", "http 429", "http 500", "http 502",
         "http 503", "http 504", "timeout", "timed out", "unavailable",
         "temporarily", "connection", "rate limit", "high demand",
+        "payment required", "quota", "billing",
     )
     return any(item in texto for item in temporarios)
 
@@ -1438,7 +1444,7 @@ def gerar_com_provedor(dados, modelo, email, slot_chave, is_web=False):
     fallback = st.session_state.get(
         "fallback_automatico", config.get("fallback_automatico", True)
     )
-    provedores = ["Gemini", "Groq", "Cerebras"]
+    provedores = ["Gemini", "Groq", "Cloudflare"]
     if provedor_principal not in provedores:
         provedor_principal = "Gemini"
     ordem = [provedor_principal] + [p for p in provedores if p != provedor_principal]
@@ -1469,9 +1475,10 @@ def gerar_com_provedor(dados, modelo, email, slot_chave, is_web=False):
                 modelo_groq = st.session_state.get("modelo_groq", config.get("modelo_groq", "openai/gpt-oss-120b"))
                 return chamar_api_compativel("Groq", dados, chave, modelo_groq, e_motor_web=is_web)
 
-            chave = st.session_state.get("input_cerebras_api", "").strip() or config.get("cerebras_api_key", "")
-            modelo_cerebras = st.session_state.get("modelo_cerebras", config.get("modelo_cerebras", "gpt-oss-120b"))
-            return chamar_api_compativel("Cerebras", dados, chave, modelo_cerebras, e_motor_web=is_web)
+            chave = st.session_state.get("input_cloudflare_token", "").strip() or config.get("cloudflare_api_token", "")
+            account_id = st.session_state.get("input_cloudflare_account", "").strip() or config.get("cloudflare_account_id", "")
+            modelo_cloudflare = st.session_state.get("modelo_cloudflare", config.get("modelo_cloudflare", "@cf/meta/llama-3.1-8b-instruct"))
+            return chamar_api_compativel("Cloudflare", dados, chave, modelo_cloudflare, e_motor_web=is_web, account_id=account_id)
 
         except Exception as exc:
             mensagem = f"{provedor}: {exc}"
@@ -2303,7 +2310,7 @@ else:
 
     config = carregar_config(st.session_state.user_email)
 
-    provedores = ["Gemini", "Groq", "Cerebras"]
+    provedores = ["Gemini", "Groq", "Cloudflare"]
     provedor_salvo = config.get("provedor_ia", "Gemini")
     provedor_ia = st.sidebar.radio(
         "Provedor de IA:",
@@ -2333,11 +2340,18 @@ else:
         type="password",
         key="input_groq_api",
     )
-    cerebras_api_input = st.sidebar.text_input(
-        "Chave API Cerebras:",
-        value=config.get("cerebras_api_key", ""),
+    cloudflare_account_input = st.sidebar.text_input(
+        "Cloudflare Account ID:",
+        value=config.get("cloudflare_account_id", ""),
+        key="input_cloudflare_account",
+        help="ID da conta Cloudflare exibido no painel da conta.",
+    )
+    cloudflare_token_input = st.sidebar.text_input(
+        "Cloudflare API Token:",
+        value=config.get("cloudflare_api_token", ""),
         type="password",
-        key="input_cerebras_api",
+        key="input_cloudflare_token",
+        help="Token com permissão mínima para Workers AI.",
     )
 
     lista_modelos = ["gemini-3.5-flash", "gemini-3.6-flash"]
@@ -2349,8 +2363,11 @@ else:
     modelo_groq = st.sidebar.text_input(
         "Modelo Groq:", value=config.get("modelo_groq", "openai/gpt-oss-120b"), key="modelo_groq"
     )
-    modelo_cerebras = st.sidebar.text_input(
-        "Modelo Cerebras:", value=config.get("modelo_cerebras", "gpt-oss-120b"), key="modelo_cerebras"
+    modelo_cloudflare = st.sidebar.text_input(
+        "Modelo Cloudflare:",
+        value=config.get("modelo_cloudflare", "@cf/meta/llama-3.1-8b-instruct"),
+        key="modelo_cloudflare",
+        help="Use um modelo elegível à quota gratuita do Workers AI.",
     )
 
     usar_busca_web = st.sidebar.checkbox(
@@ -2362,7 +2379,7 @@ else:
     )
 
     if provedor_ia != "Gemini":
-        st.sidebar.info("Busca Web do Google fica desativada para Groq e Cerebras.")
+        st.sidebar.info("Busca Web do Google fica desativada para Groq e Cloudflare.")
 
     if st.sidebar.button("💾 Salvar Configurações"):
         novas_chaves = config.get("chaves", {})
@@ -2371,11 +2388,12 @@ else:
             novas_chaves, modelo_selecionado, usar_busca_web,
             email=st.session_state.user_email,
             groq_api_key=groq_api_input.strip(),
-            cerebras_api_key=cerebras_api_input.strip(),
+            cloudflare_account_id=cloudflare_account_input.strip(),
+            cloudflare_api_token=cloudflare_token_input.strip(),
             provedor_ia=provedor_ia,
             fallback_automatico=fallback_automatico,
             modelo_groq=modelo_groq.strip(),
-            modelo_cerebras=modelo_cerebras.strip(),
+            modelo_cloudflare=modelo_cloudflare.strip(),
         )
         st.sidebar.success("Configurações salvas com sucesso!")
 
