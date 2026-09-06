@@ -1163,31 +1163,47 @@ def chamar_api_compativel(provedor, dados_personagem, api_key, modelo, e_motor_w
     system_instruction, prompt_usuario, canario = montar_solicitacao_compativel(
         dados_personagem, e_motor_web=e_motor_web
     )
-    if provedor == "Groq":
-        endpoint = "https://api.groq.com/openai/v1/chat/completions"
-    elif provedor == "Cloudflare":
-        if not account_id:
-            raise RuntimeError("Cloudflare Account ID não configurado.")
-        endpoint = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/chat/completions"
-    else:
-        raise RuntimeError(f"Provedor compatível não suportado: {provedor}")
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}",
     }
-    payload = {
-        "model": modelo,
-        "messages": [
-            {"role": "system", "content": system_instruction},
-            {"role": "user", "content": prompt_usuario},
-        ],
-        "temperature": 0.35 if dados_personagem.get("is_serie") else 0.2,
-    }
+    mensagens = [
+        {"role": "system", "content": system_instruction},
+        {"role": "user", "content": prompt_usuario},
+    ]
+    temperatura = 0.35 if dados_personagem.get("is_serie") else 0.2
+
+    if provedor == "Groq":
+        endpoint = "https://api.groq.com/openai/v1/chat/completions"
+        payload = {
+            "model": modelo,
+            "messages": mensagens,
+            "temperature": temperatura,
+        }
+    elif provedor == "Cloudflare":
+        if not account_id:
+            raise RuntimeError("Cloudflare Account ID não configurado.")
+        endpoint = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{modelo}"
+        payload = {
+            "messages": mensagens,
+            "temperature": temperatura,
+        }
+    else:
+        raise RuntimeError(f"Provedor compatível não suportado: {provedor}")
+
     response = requests.post(endpoint, headers=headers, json=payload, timeout=90)
     if response.status_code >= 400:
         detalhe = response.text[:500]
         raise RuntimeError(f"HTTP {response.status_code}: {detalhe}")
     dados = response.json()
+    if provedor == "Cloudflare":
+        texto = _extrair_texto_resposta(dados.get("response"))
+        if not texto:
+            texto = _extrair_texto_resposta(dados.get("result"))
+        if not texto:
+            raise RuntimeError("O endpoint nativo Cloudflare não retornou o campo response.")
+        return validar_saida_provedor(texto, canario)
+
     choices = dados.get("choices") or []
     texto = ""
     if choices:
