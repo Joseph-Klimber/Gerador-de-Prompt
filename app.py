@@ -1187,6 +1187,7 @@ def chamar_api_compativel(provedor, dados_personagem, api_key, modelo, e_motor_w
         payload = {
             "messages": mensagens,
             "temperature": temperatura,
+            "max_tokens": 8192 if dados_personagem.get("is_serie") else 4096,
         }
     else:
         raise RuntimeError(f"Provedor compatível não suportado: {provedor}")
@@ -1220,11 +1221,16 @@ def chamar_api_compativel(provedor, dados_personagem, api_key, modelo, e_motor_w
             chaves = ", ".join(sorted(str(chave) for chave in dados.keys()))
             chaves_result = ", ".join(sorted(str(chave) for chave in result.keys())) if isinstance(result, dict) else type(result).__name__
             chaves_choice = ""
+            chaves_message = ""
             if isinstance(result, dict):
                 choices = result.get("choices")
                 if isinstance(choices, list) and choices and isinstance(choices[0], dict):
-                    chaves_choice = ", ".join(sorted(str(chave) for chave in choices[0].keys()))
-            raise RuntimeError(f"Resposta Cloudflare sem texto; chaves={chaves}; result={chaves_result}; choice={chaves_choice}")
+                    primeiro_choice = choices[0]
+                    chaves_choice = ", ".join(sorted(str(chave) for chave in primeiro_choice.keys()))
+                    mensagem = primeiro_choice.get("message")
+                    if isinstance(mensagem, dict):
+                        chaves_message = ", ".join(sorted(str(chave) for chave in mensagem.keys()))
+            raise RuntimeError(f"Resposta Cloudflare sem texto; chaves={chaves}; result={chaves_result}; choice={chaves_choice}; message={chaves_message}")
         return validar_saida_provedor(texto, canario)
 
     choices = dados.get("choices") or []
