@@ -1191,8 +1191,14 @@ def chamar_api_compativel(provedor, dados_personagem, api_key, modelo, e_motor_w
     choices = dados.get("choices") or []
     if not choices:
         raise RuntimeError("A API não retornou choices.")
-    mensagem = choices[0].get("message", {})
-    texto = mensagem.get("content") or choices[0].get("text") or ""
+    mensagem = choices[0].get("message", {}) or {}
+    texto = _extrair_texto_resposta(mensagem.get("content"))
+    if not texto:
+        texto = _extrair_texto_resposta(choices[0].get("text"))
+    if not texto:
+        texto = _extrair_texto_resposta(choices[0].get("output_text"))
+    if not texto:
+        raise RuntimeError("A API retornou choices, mas nenhum texto utilizável.")
     return validar_saida_provedor(texto, canario)
 
 
@@ -1425,6 +1431,26 @@ def validar_saida_provedor(texto_resposta, canario):
     if any(marcador.lower() in resposta_lower for marcador in marcadores_vazamento):
         return "⚠️ Não foi possível gerar o resultado para esta solicitação. Ajuste os campos preenchidos e tente novamente."
     return texto_resposta.strip()
+
+def _extrair_texto_resposta(obj):
+    """Normaliza texto retornado como string, lista de blocos ou objeto de conteúdo."""
+    if isinstance(obj, str):
+        return obj.strip()
+    if isinstance(obj, list):
+        partes = []
+        for item in obj:
+            trecho = _extrair_texto_resposta(item)
+            if trecho:
+                partes.append(trecho)
+        return "\n".join(partes).strip()
+    if isinstance(obj, dict):
+        for chave in ("text", "content", "output_text", "value"):
+            if chave in obj:
+                trecho = _extrair_texto_resposta(obj.get(chave))
+                if trecho:
+                    return trecho
+    return ""
+
 
 def _extrair_valor_recursivo(obj, chaves):
     if isinstance(obj, dict):
