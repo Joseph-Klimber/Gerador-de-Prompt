@@ -1198,13 +1198,33 @@ def chamar_api_compativel(provedor, dados_personagem, api_key, modelo, e_motor_w
     dados = response.json()
     if provedor == "Cloudflare":
         texto = _extrair_texto_resposta(dados.get("response"))
+        result = dados.get("result")
+        if not texto and isinstance(result, dict):
+            choices = result.get("choices")
+            if isinstance(choices, dict):
+                choices = list(choices.values())
+            if isinstance(choices, list):
+                for choice in choices:
+                    if not isinstance(choice, dict):
+                        texto = _extrair_texto_resposta(choice)
+                    else:
+                        for campo in ("message", "delta", "content", "text", "output_text", "generated_text"):
+                            texto = _extrair_texto_resposta(choice.get(campo))
+                            if texto:
+                                break
+                    if texto:
+                        break
         if not texto:
-            texto = _extrair_texto_resposta(dados.get("result"))
+            texto = _extrair_texto_resposta(result)
         if not texto:
             chaves = ", ".join(sorted(str(chave) for chave in dados.keys()))
-            result = dados.get("result")
             chaves_result = ", ".join(sorted(str(chave) for chave in result.keys())) if isinstance(result, dict) else type(result).__name__
-            raise RuntimeError(f"Resposta Cloudflare sem texto; chaves={chaves}; result={chaves_result}")
+            chaves_choice = ""
+            if isinstance(result, dict):
+                choices = result.get("choices")
+                if isinstance(choices, list) and choices and isinstance(choices[0], dict):
+                    chaves_choice = ", ".join(sorted(str(chave) for chave in choices[0].keys()))
+            raise RuntimeError(f"Resposta Cloudflare sem texto; chaves={chaves}; result={chaves_result}; choice={chaves_choice}")
         return validar_saida_provedor(texto, canario)
 
     choices = dados.get("choices") or []
