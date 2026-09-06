@@ -85,8 +85,8 @@ PRESERVAÇÃO INTEGRAL DO CONTEÚDO:
   vestimenta, anatomia, espécie, materiais, ação, pose, ambiente, relações espaciais,
   câmera, enquadramento, iluminação, efeitos, categoria visual e texto na imagem.
 - Não resuma, encurte, simplifique, omita, combine, substitua ou reinterprete detalhes.
-- As versões Compacta, Equilibrada e Completa são apresentações equivalentes do mesmo
-  conteúdo. A versão Compacta é densa, mas não é um resumo.
+- O formato selecionado pelo usuário é uma apresentação completa dos mesmos atributos; Compacta
+  significa organização densa, não autorização para remover detalhes.
 - Se o prompt for longo, mantenha-o longo. O modelo não está autorizado a remover dados
   porque a plataforma ou o modelo de destino parece mais leve.
 - Pode alterar somente a organização, a formatação e a sintaxe exigida pela plataforma.
@@ -118,6 +118,25 @@ INSTRUCOES_REALISMO_WEB = {
     ),
 }
 
+INSTRUCAO_FIDELIDADE_REFORCADA = r"""
+PROTOCOLO DE FIDELIDADE REFORÇADA — PRIORIDADE OPERACIONAL:
+1. Trate identidade, franquia, espécie, idade, gênero, quantidade de sujeitos, cabelo, olhos,
+   marcas faciais, traje, acessórios, pose, ação, cenário e enquadramento como restrições visuais.
+2. Converta cada atributo fornecido em uma âncora explícita no prompt final. Nunca substitua um
+   detalhe específico por uma categoria genérica e nunca invente um detalhe canônico não confirmado.
+3. Resolva conflitos nesta ordem: pedido explícito do usuário, atributos estruturados do formulário,
+   informação canônica verificada, coerência visual e, por último, defaults estilísticos.
+4. Preserve a idade e a anatomia declaradas. Não transforme uma pessoa idosa em personagem jovem,
+   não transforme animal em humano, não troque gênero, espécie, quantidade ou identidade.
+5. Para personagens conhecidos, coloque primeiro a identidade e a franquia; depois rosto/cabelo/olhos,
+   traje e acessórios; somente depois pose, cenário, iluminação e qualidade.
+6. Para elementos raros ou importantes, descreva função, aparência, posição, escala e visibilidade.
+   Não dependa apenas de uma tag ambígua.
+7. Faça uma auditoria interna antes de responder: identidade, idade, quantidade, aparência, traje,
+   acessórios, ação, pose, câmera, enquadramento, cenário, iluminação, estilo e formato selecionado.
+8. O resultado deve conter somente o formato escolhido pelo usuário. Não produza versões alternativas.
+"""
+
 INSTRUCAO_MODO_REALISMO_WEB = r"""
 EXTREME REALISM / REPRESENTATIONAL FIDELITY MODE:
 Preserve the selected visual category and the requested artistic intention. Increase only
@@ -130,18 +149,10 @@ The result must remain faithful to the user's chosen subject, action, compositio
 """
 
 INSTRUCAO_TRES_FORMATOS_WEB = r"""
-FORMATOS EQUIVALENTES DE APRESENTAÇÃO:
-Generate three equivalent prompt presentations from the same complete source attributes:
-1. PROMPT COMPACTO: one dense, coherent paragraph; remove only repetition and decorative
-   wording, never remove meaning or user-provided attributes.
-2. PROMPT EQUILIBRADO: organize the same complete content into short semantic blocks
-   such as subject, appearance, clothing/materials, action, composition, environment,
-   camera, lighting and finish.
-3. PROMPT COMPLETO: preserve every source attribute in a detailed, auditable structure.
-The three versions must contain the same semantic attributes. Do not generate one version
-by summarizing another. Do not omit a detail from the Compact version merely because it is
-shorter; compact means dense organization, not content reduction.
-After each version, include a short completeness line listing the preserved domains.
+FORMATO DE PROMPT SELECIONADO:
+Generate exactly one prompt presentation using the format explicitly selected by the user.
+Compact means dense organization without removing attributes; Balanced means semantic blocks;
+Complete means detailed and auditable. Never generate the two unselected formats.
 """
 
 opcoes_sensualidade = [
@@ -442,13 +453,11 @@ PROTOCOLO DE FIDELIDADE ABSOLUTA 100% (WEB GROUNDING & CANON DIRETO)
 =============================================================================
 Sempre que o Nome/Sujeito for um personagem existente da cultura pop (anime, games, filmes, quadrinhos):
 
-0. PESQUISA E CONSULTA CANÔNICA OBRIGATÓRIA (WEB GROUNDING):
-   - Antes de gerar qualquer tag ou descrição, faça uma busca rápida na web sobre o personagem `[nome_do_personagem]` da franquia `([nome_da_franquia])`.
-   - Verifique explicitamente em wikis, artes conceituais ou bases Booru:
-     1. Cor exata dos olhos e tom do cabelo (ex: se é loiro-platinado, azul-escuro, etc.).
-     2. Paleta de cores do traje oficial principal.
-     3. Acessórios marcantes e detalhes que costumam ser esquecidos (ex: laços, cicatrizes, presilhas, formato do calçado).
-   - Use os dados retornados pela busca web para preencher e estruturar o prompt com 100% de precisão de cores e detalhes oficiais.
+0. PESQUISA CANÔNICA CONDICIONAL:
+   - Quando o provedor oferecer busca web ativa, consulte fontes confiáveis sobre o personagem `[nome_do_personagem]` da franquia `([nome_da_franquia])` antes de preencher detalhes canônicos.
+   - Verifique, quando houver busca disponível, cor dos olhos, tom do cabelo, traje oficial, acessórios marcantes e detalhes distintivos.
+   - Quando a busca web não estiver disponível, nunca afirme que pesquisou a internet e não invente fontes. Use os dados fornecidos pelo usuário e o conhecimento do modelo, sinalizando internamente qualquer detalhe canônico incerto.
+   - A busca não autoriza substituir atributos explícitos fornecidos pelo usuário.
 
 1. HIERARQUIA DE CAMADAS MANDATÓRIA (ORDEM DE ATENÇÃO):
    A estrutura do prompt DEVE respeitar a ordem de prioridade visual:
@@ -559,13 +568,9 @@ FORMATO OBRIGATÓRIO DE SAÍDA (OUTPUT WEB)
 💡 DICA DE APLICAÇÃO: [Instrução prática sobre como usar no site]
 
 --- SE SUBGRUPO WEB / REALISMO ESTIVER ATIVADO ---
-Além da estrutura acima, entregue:
-1. PROMPT COMPACTO: denso, coerente e integral, sem remoção de atributos.
-2. PROMPT EQUILIBRADO: os mesmos atributos em blocos semânticos.
-3. PROMPT COMPLETO: os mesmos atributos em formato detalhado e auditável.
-As três versões devem ser sempre entregues. A versão selecionada pelo usuário deve
-aparecer primeiro, seguida das outras duas. Elas devem ser semanticamente equivalentes e
-não podem ser produzidas por resumo progressivo.
+Além da estrutura acima, entregue exatamente uma versão: a versão selecionada pelo usuário.
+Compacta é densa e integral; Equilibrada usa blocos semânticos; Completa é detalhada e auditável.
+Não entregue as duas versões não selecionadas e não faça resumo progressivo.
     """
 
 # ==============================================================================
@@ -932,6 +937,8 @@ def chamar_gemini_api(
     else:
         sys_instruction = SYSTEM_INSTRUCTION_PADRAO
 
+    sys_instruction += "\n\n" + INSTRUCAO_FIDELIDADE_REFORCADA
+
     # --- DEFESA ANTI-VAZAMENTO: canário único por chamada ---
     # Um código aleatório é anexado (de forma discreta) ao final da instrução de
     # sistema. Se ele aparecer na resposta da IA, é sinal de que o modelo está
@@ -1288,6 +1295,8 @@ def montar_solicitacao_compativel(dados_personagem, e_motor_web=False):
         sys_instruction = SYSTEM_INSTRUCTION_WEB
     else:
         sys_instruction = SYSTEM_INSTRUCTION_PADRAO
+
+    sys_instruction += "\n\n" + INSTRUCAO_FIDELIDADE_REFORCADA
 
     if is_web_mode:
         sys_instruction += (
@@ -1915,7 +1924,7 @@ def renderizar_formulario(prefixo, slot_chave, modelo_selecionado, email=None, i
                         OPCOES_FORMATO_PROMPT_WEB,
                         index=1,
                         key=f"{prefixo}_formato_prompt_web",
-                        help="As três versões preservam os mesmos atributos; muda apenas a organização do conteúdo.",
+                        help="O formato escolhido preserva todos os atributos; muda apenas a organização do conteúdo.",
                     )
                     placeholders_realismo = {
                         "Humano": "Ex: pessoa adulta, casaco de lã verde, cobertura integral, textura natural da pele, acessórios e contexto social.",
