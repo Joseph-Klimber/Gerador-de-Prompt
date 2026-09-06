@@ -1470,7 +1470,7 @@ def _extrair_texto_resposta(obj):
                 partes.append(trecho)
         return "\n".join(partes).strip()
     if isinstance(obj, dict):
-        for chave in ("text", "content", "output_text", "value", "response", "generated_text", "output", "message", "data", "result"):
+        for chave in ("text", "content", "output_text", "value", "response", "generated_text", "output", "message", "data", "result", "choices"):
             if chave in obj:
                 trecho = _extrair_texto_resposta(obj.get(chave))
                 if trecho:
