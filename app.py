@@ -1201,7 +1201,10 @@ def chamar_api_compativel(provedor, dados_personagem, api_key, modelo, e_motor_w
         if not texto:
             texto = _extrair_texto_resposta(dados.get("result"))
         if not texto:
-            raise RuntimeError("O endpoint nativo Cloudflare não retornou o campo response.")
+            chaves = ", ".join(sorted(str(chave) for chave in dados.keys()))
+            result = dados.get("result")
+            chaves_result = ", ".join(sorted(str(chave) for chave in result.keys())) if isinstance(result, dict) else type(result).__name__
+            raise RuntimeError(f"Resposta Cloudflare sem texto; chaves={chaves}; result={chaves_result}")
         return validar_saida_provedor(texto, canario)
 
     choices = dados.get("choices") or []
@@ -1467,7 +1470,7 @@ def _extrair_texto_resposta(obj):
                 partes.append(trecho)
         return "\n".join(partes).strip()
     if isinstance(obj, dict):
-        for chave in ("text", "content", "output_text", "value"):
+        for chave in ("text", "content", "output_text", "value", "response", "generated_text", "output", "message", "data", "result"):
             if chave in obj:
                 trecho = _extrair_texto_resposta(obj.get(chave))
                 if trecho:
