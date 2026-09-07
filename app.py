@@ -134,7 +134,9 @@ PROTOCOLO DE FIDELIDADE REFORÇADA — PRIORIDADE OPERACIONAL:
    Não dependa apenas de uma tag ambígua.
 7. Faça uma auditoria interna antes de responder: identidade, idade, quantidade, aparência, traje,
    acessórios, ação, pose, câmera, enquadramento, cenário, iluminação, estilo e formato selecionado.
-8. O resultado deve conter somente o formato escolhido pelo usuário. Não produza versões alternativas.
+8. No fluxo local, siga o formato único exigido pelo modo local. No fluxo Web/Realismo,
+   entregue sempre as três apresentações equivalentes definidas em INSTRUCAO_TRES_FORMATOS_WEB.
+   Nunca use este protocolo para autorizar a remoção de atributos.
 """
 
 INSTRUCAO_MODO_REALISMO_WEB = r"""
@@ -149,10 +151,24 @@ The result must remain faithful to the user's chosen subject, action, compositio
 """
 
 INSTRUCAO_TRES_FORMATOS_WEB = r"""
-FORMATO DE PROMPT SELECIONADO:
-Generate exactly one prompt presentation using the format explicitly selected by the user.
+FORMATO DE PROMPT WEB/REALISMO:
+Generate all three equivalent prompt presentations from the same complete source attributes.
 Compact means dense organization without removing attributes; Balanced means semantic blocks;
-Complete means detailed and auditable. Never generate the two unselected formats.
+Complete means detailed and auditable. Put the format selected by the user first, then provide
+ the other two. Never create one version by summarizing another. The three versions must retain
+all subject, identity, clothing, anatomy, materials, action, pose, environment, camera,
+composition, lighting, effects, category and text attributes supplied by the user.
+"""
+
+INSTRUCAO_OVERRIDE_WEB_REALISMO = r"""
+WEB / REALISMO — SUBSTITUIÇÃO DE PRIORIDADE:
+When subgrupo_web is exactly "Web / Realismo", ignore tag-only few-shot examples and local
+Booru/Danbooru formatting as the dominant output style. Do not emit a list of isolated tags
+such as masterpiece, best_quality, 3d_render, ink_drawing or rating_questionable unless the
+user explicitly supplied those terms. Preserve the selected category and intention. Write
+coherent English prompts that preserve every user attribute, including identity, clothing,
+anatomy, materials, action, pose, environment, camera, composition, lighting and effects.
+Always return PROMPT COMPACTO, PROMPT EQUILIBRADO and PROMPT COMPLETO, with the selected format first.
 """
 
 opcoes_sensualidade = [
@@ -568,9 +584,11 @@ FORMATO OBRIGATÓRIO DE SAÍDA (OUTPUT WEB)
 💡 DICA DE APLICAÇÃO: [Instrução prática sobre como usar no site]
 
 --- SE SUBGRUPO WEB / REALISMO ESTIVER ATIVADO ---
-Além da estrutura acima, entregue exatamente uma versão: a versão selecionada pelo usuário.
-Compacta é densa e integral; Equilibrada usa blocos semânticos; Completa é detalhada e auditável.
-Não entregue as duas versões não selecionadas e não faça resumo progressivo.
+Além da estrutura acima, entregue sempre as três versões equivalentes:
+1. PROMPT COMPACTO: denso, coerente e integral; não é um resumo.
+2. PROMPT EQUILIBRADO: os mesmos atributos organizados em blocos semânticos.
+3. PROMPT COMPLETO: os mesmos atributos em estrutura detalhada e auditável.
+A versão selecionada pelo usuário aparece primeiro. Não faça resumo progressivo nem omita atributos.
     """
 
 # ==============================================================================
@@ -854,27 +872,29 @@ Preserve this content literally in meaning. Do not summarize, replace or omit it
 
 
 def montar_instrucoes_formatos_web(dados):
-    """Exige somente a versão escolhida pelo usuário, preservando todos os atributos."""
+    """Exige as três apresentações equivalentes, preservando todos os atributos."""
     if dados.get("subgrupo_web") != "Web / Realismo":
         return ""
 
     formato = str(dados.get("formato_prompt_web", "Equilibrada")).strip() or "Equilibrada"
     instrucoes_por_formato = {
         "Compacta": (
-            "Return exactly ONE prompt in COMPACT format. Use one dense, coherent paragraph. "
+            "Place the COMPACT presentation first as one dense, coherent paragraph. "
             "Remove only repetition and decorative wording; never remove, summarize, replace "
-            "or omit any user-provided attribute."
+            "or omit any user-provided attribute. Then provide equivalent Balanced and Complete versions."
         ),
         "Equilibrada": (
-            "Return exactly ONE prompt in BALANCED format. Organize the complete content into "
-            "short semantic blocks such as subject, appearance, clothing or materials, action, "
-            "composition, environment, camera, lighting and finish. Preserve every source attribute."
+            "Place the BALANCED presentation first using short semantic blocks such as subject, "
+            "appearance, clothing or materials, action, composition, environment, camera, lighting "
+            "and finish. Then provide equivalent Compact and Complete versions. Preserve every source attribute."
         ),
         "Completa": (
-            "Return exactly ONE prompt in COMPLETE format. Use a detailed, auditable structure "
-            "and preserve every source attribute explicitly, without summarizing or omitting details."
+            "Place the COMPLETE presentation first in a detailed, auditable structure. Then provide "
+            "equivalent Compact and Balanced versions. Preserve every source attribute explicitly, "
+            "without summarizing or omitting details."
         ),
     }
+
     instrucao_formato = instrucoes_por_formato.get(
         formato, instrucoes_por_formato["Equilibrada"]
     )
@@ -883,9 +903,10 @@ def montar_instrucoes_formatos_web(dados):
 FORMATO SELECIONADO PELO USUÁRIO: {formato}
 INSTRUÇÃO DE SAÍDA:
 {instrucao_formato}
-Do not generate the other two formats. Do not create sections for Compacta, Equilibrada
-or Completa unless that is the selected format. Return only the selected prompt and, when
-applicable, its negative prompt or completeness line required by the surrounding rules.
+    Always generate all three labeled formats. Put the selected format first, followed by the
+other two equivalent versions. The selected format controls order and presentation only; it never
+authorizes content removal. Preserve every source attribute in all three versions.
+
 """
 
 
@@ -938,6 +959,8 @@ def chamar_gemini_api(
         sys_instruction = SYSTEM_INSTRUCTION_PADRAO
 
     sys_instruction += "\n\n" + INSTRUCAO_FIDELIDADE_REFORCADA
+    if is_web_mode and dados_personagem.get("subgrupo_web") == "Web / Realismo":
+        sys_instruction += "\n\n" + INSTRUCAO_OVERRIDE_WEB_REALISMO
 
     # --- DEFESA ANTI-VAZAMENTO: canário único por chamada ---
     # Um código aleatório é anexado (de forma discreta) ao final da instrução de
@@ -1297,6 +1320,8 @@ def montar_solicitacao_compativel(dados_personagem, e_motor_web=False):
         sys_instruction = SYSTEM_INSTRUCTION_PADRAO
 
     sys_instruction += "\n\n" + INSTRUCAO_FIDELIDADE_REFORCADA
+    if is_web_mode and dados_personagem.get("subgrupo_web") == "Web / Realismo":
+        sys_instruction += "\n\n" + INSTRUCAO_OVERRIDE_WEB_REALISMO
 
     if is_web_mode:
         sys_instruction += (
