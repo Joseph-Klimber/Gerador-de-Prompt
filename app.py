@@ -2496,8 +2496,14 @@ def _ps_generate_final(original, preprompt, destino, mode="Web", extra=""):
     return result, provider
 
 
+def _ps_generate_direct(original, destino, mode="Web"):
+    system = """Você é o gerador de imagem direta do Prompt Studio. Converta a descrição do usuário em um prompt claro e funcional, preservando exatamente o sujeito, os objetos, a ação e os atributos fornecidos. Não invente cenário, ambiente, intenção, narrativa, atmosfera, propósito, câmera criativa, iluminação ou elementos de composição que o usuário não tenha solicitado. Não transforme uma descrição simples em uma cena elaborada. Não faça perguntas. Entregue somente o prompt pronto para copiar, em inglês natural quando o destino for uma plataforma Web. Para ComfyUI, separe PROMPT POSITIVO e PROMPT NEGATIVO; o negativo deve conter apenas falhas técnicas básicas e não deve adicionar conteúdo à cena."""
+    user = f"DESCRIÇÃO DIRETA DO USUÁRIO:\n{original}\n\nDESTINO: {destino}\nMODO: {mode}\nGere somente a instrução visual correspondente ao que foi descrito."
+    return _ps_call_provider(system, user, st.session_state.get("modelo_gemini_selecionado", "gemini-3.6-flash"), use_web=False)
+
+
 def _ps_reset_project():
-    for key in ["ps_original", "ps_preprompt", "ps_preprompt_raw", "ps_final", "ps_provider_pre", "ps_provider_final", "ps_edit_preprompt"]:
+    for key in ["ps_original", "ps_preprompt", "ps_preprompt_raw", "ps_final", "ps_provider_pre", "ps_provider_final", "ps_edit_preprompt", "ps_creation_type"]:
         st.session_state.pop(key, None)
 
 
@@ -2509,15 +2515,30 @@ def _ps_render_workspace(mode="Web"):
     st.markdown(f"<h1 class='ps-title'>{'Transforme uma ideia em direção visual' if mode == 'Web' else 'Crie uma direção visual especializada'}</h1>", unsafe_allow_html=True)
     st.markdown("<p class='ps-subtitle'>Escreva livremente. Você não precisa conhecer termos técnicos para começar.</p>", unsafe_allow_html=True)
 
+    original_key = f"ps_original_{_ps_norm(mode).replace(' ', '_')}"
+    creation_type = "Direção visual guiada"
+    if mode == "Web":
+        creation_type = st.radio(
+            "Como você quer criar?",
+            ["Direção visual guiada", "Imagem direta"],
+            horizontal=True,
+            key="ps_creation_type",
+            help="Imagem direta gera somente o que você descreveu, sem inventar cenário, intenção ou propósito.",
+        )
+        if creation_type == "Imagem direta":
+            st.info("Modo Imagem direta: descreva apenas o que deve aparecer. O sistema não acrescentará cenário, narrativa ou intenção que você não pediu.")
+
     if mode == "Web":
         with st.expander("Sugestões de personagens ou sujeitos — apenas inspiração", expanded=False):
             st.caption("Você pode ignorar esta área e escrever qualquer ideia no campo principal.")
             insp = st.selectbox("Escolha uma inspiração, se quiser", ["Nenhuma — escrever minha própria ideia", "Guerreira viajante", "Astronauta solitária", "Detetive em cidade chuvosa", "Animal selvagem em habitat natural", "Objeto antigo com valor simbólico"], key="ps_inspiracao")
             if insp != "Nenhuma — escrever minha própria ideia" and st.button("Usar como ponto de partida", key="ps_use_insp"):
                 st.session_state.ps_original = insp
+                st.session_state[original_key] = insp
+                st.session_state.pop("ps_preprompt", None)
+                st.session_state.pop("ps_final", None)
                 st.rerun()
 
-    original_key = f"ps_original_{_ps_norm(mode).replace(' ', '_')}"
     original = st.text_area("O que você quer criar?", value=st.session_state.get("ps_original", ""), key=original_key, height=160, placeholder="Descreva a ideia do jeito que ela existe na sua imaginação. Pode ser uma frase, uma cena, um personagem, uma emoção ou uma mistura de tudo isso.")
     extra = ""
     if mode == "Personagens":
@@ -2531,7 +2552,23 @@ def _ps_render_workspace(mode="Web"):
         variable = st.text_input("Elementos que podem variar", key="ps_series_variable", placeholder="Ex.: ação, cenário e pose")
         extra = f"Série com {variations} variações. Elementos fixos: {fixed or 'preservar identidade e estilo'}. Elementos variáveis: {variable or 'variar apenas quando fizer sentido'}."
 
-    if st.button("Desenvolver minha ideia", type="primary", use_container_width=True, key=f"ps_develop_{mode}"):
+    if creation_type == "Imagem direta":
+        destino_direto = st.selectbox("Destino do prompt", PS_DESTINOS, key="ps_destino_direto")
+        if st.button("Gerar imagem direta", type="primary", use_container_width=True, key="ps_direct_generate"):
+            if not original.strip():
+                st.warning("Descreva o que deve aparecer na imagem.")
+            else:
+                real_destino = "Flux" if destino_direto == "Recomendado automaticamente" else destino_direto
+                with st.spinner("Convertendo sua descrição sem acrescentar elementos..."):
+                    try:
+                        result, provider = _ps_generate_direct(original.strip(), real_destino, mode)
+                        st.session_state.ps_original = original.strip()
+                        st.session_state.ps_final = result
+                        st.session_state.ps_provider_final = provider
+                        st.session_state.pop("ps_preprompt", None)
+                    except Exception as exc:
+                        st.error(str(exc))
+    elif st.button("Desenvolver minha ideia", type="primary", use_container_width=True, key=f"ps_develop_{mode}"):
         if not original.strip():
             st.warning("Escreva uma ideia antes de desenvolver a cena.")
         else:
