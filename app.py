@@ -866,7 +866,7 @@ def renderizar_cockpit():
     # --------------------------------------------------------------------------
     # EXECUÇÃO DA SÍNTESE TÉCNICA
     # --------------------------------------------------------------------------
-    if btn_sintetizar or btn_executar:
+    if btn_executar:
         if not ideia_input.strip():
             st.warning("Por favor, descreva sua ideia no campo de texto.")
         else:
