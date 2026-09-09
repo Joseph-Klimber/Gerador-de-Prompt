@@ -87,6 +87,37 @@ st.markdown(
         margin: 2.5rem auto 1rem;
         text-align: center;
     }
+    /* Estilos do Pré-prompt com destaque de palavras */
+    .ps-preprompt {
+        background: #ffffff;
+        border: 1px solid var(--ps-line);
+        border-radius: 12px;
+        padding: 1.25rem 1.4rem;
+        line-height: 1.85;
+        font-size: 1.02rem;
+        color: var(--ps-ink);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        margin: 0.8rem 0 1.2rem;
+    }
+    .ps-user-word {
+        color: var(--ps-blue);
+        font-weight: 700;
+        background-color: var(--ps-blue-subtle);
+        padding: 2px 6px;
+        border-radius: 4px;
+    }
+    .ps-ai-word {
+        color: var(--ps-gold);
+        font-weight: 600;
+    }
+    .ps-legend {
+        display: flex;
+        gap: 1.5rem;
+        margin: .6rem 0 .9rem;
+        font-size: .88rem;
+        font-weight: 600;
+        align-items: center;
+    }
     /* Estilos do Compositômetro */
     .comp-container {
         background: #ffffff;
@@ -409,6 +440,54 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-2.5-fl
 
     raise RuntimeError("Falha em todos os provedores: " + " | ".join(erros))
 
+PS_STOPWORDS = {
+    "a", "o", "e", "de", "da", "do", "das", "dos", "um", "uma", "em", "no", "na",
+    "nos", "nas", "por", "para", "com", "sem", "que", "se", "ao", "aos", "as", "os",
+    "é", "ser", "sob", "sobre", "durante", "como", "mais", "uma", "um", "sua", "seu",
+    "dele", "dela", "esse", "esta", "isso", "este", "isto", "muito", "pouco", "já"
+}
+
+def _normalizar_palavra(w):
+    val = str(w or "").lower()
+    return "".join(c for c in unicodedata.normalize("NFD", val) if unicodedata.category(c) != "Mn")
+
+
+def _ps_markup_origin(preprompt_text, original_text):
+    clean_text = str(preprompt_text or "")
+    orig_words = re.findall(r"[\wÀ-ÿ'-]+", original_text or "")
+    norm_orig = {
+        _normalizar_palavra(w) for w in orig_words
+        if len(_normalizar_palavra(w)) > 2 and _normalizar_palavra(w) not in PS_STOPWORDS
+    }
+
+    pieces = []
+    for token in re.split(r"(\s+|[^\wÀ-ÿ'-]+)", clean_text):
+        if not token:
+            continue
+        if re.match(r"^[\wÀ-ÿ'-]+$", token):
+            if _normalizar_palavra(token) in norm_orig:
+                pieces.append(f'<span class="ps-user-word">{html.escape(token)}</span>')
+            else:
+                pieces.append(f'<span class="ps-ai-word">{html.escape(token)}</span>')
+        else:
+            pieces.append(html.escape(token))
+
+    return "".join(pieces)
+
+
+SYS_GERADOR_PREPROMPT = r"""Você é o Diretor de Arte Óptica e Composição Visual do Prompt Studio.
+Sua missão é gerar um PRÉ-PROMPT visual completo, cinematográfico e coeso em Português a partir da ideia do usuário.
+
+REGRAS MANDATÓRIAS:
+1. PRESERVAÇÃO INTEGRAL DA IDEIA (INVIOLABILIDADE):
+   - Preserve rigorosamente os nomes de personagens, franquias, gênero, cores, objetos e ações fornecidos pelo usuário. Não troque, não omita e não resuma.
+2. EXPANSÃO ÓPTICA E FÍSICA (ZERO FLUFF / ZERO POESIA):
+   - Adicione somente o que uma câmera ótica profissional captaria: fonte e ângulo da iluminação, sombras, texturas de materiais, disposição espacial de planos (primeiro plano, meio termo e fundo), enquadramento de câmera e atmosfera tangível.
+   - É ESTRITAMENTE PROIBIDO usar metáforas poéticas ou conceitos invisíveis (ex: NUNCA use 'sensação de nostalgia', 'vento sussurra segredos', 'aura de bravura', 'testamento ao heroísmo').
+3. SAÍDA EXCLUSIVA:
+   - Responda APENAS com a descrição visual coesa em Português (um texto fluido e denso).
+   - Não use títulos, introduções, saudações ou explicações."""
+
 # ==============================================================================
 # 5. ENGENHARIA DE PROMPT: COMPOSITÔMETRO E SYSTEM INSTRUCTION MESTRE
 # ==============================================================================
@@ -508,6 +587,15 @@ FORMATO DE SAÍDA EXATO:
 # ==============================================================================
 # 6. FUNÇÕES DE PROCESSAMENTO
 # ==============================================================================
+def gerar_preprompt_visual(texto_ideia, modelo_gemini):
+    """Gera a direção visual (pré-prompt) em português fundindo a ideia do usuário com expansão óptica."""
+    if not texto_ideia.strip():
+        return ""
+    user_prompt = f"DESENVOLVA O PRÉ-PROMPT VISUAL PARA ESTA IDEIA:\n{texto_ideia}"
+    texto_pre, prov = _chamar_provedor_ia(SYS_GERADOR_PREPROMPT, user_prompt, modelo_gemini, temperature=0.3)
+    return texto_pre.strip()
+
+
 def analisar_no_compositometro(texto_ideia, modelo_gemini):
     """Executa a leitura óptica e diagnóstico do Compositômetro."""
     if not texto_ideia.strip():
@@ -572,13 +660,14 @@ def renderizar_cockpit():
 
         col_b1, col_b2, col_b3 = st.columns([4, 4, 2])
         with col_b1:
-            btn_sintetizar = st.button("🚀 Sintetizar Prompt Completo", type="primary", use_container_width=True, key="btn_sintetizar")
+            btn_preprompt = st.button("👁️ Pré-prompt", type="primary", help="Gera a direção visual ajustada em português com distinção por cores", use_container_width=True, key="btn_preprompt")
         with col_b2:
-            btn_avaliar = st.button("🔍 Avaliar no Compositômetro", help="Verifica a integridade da sua ideia e propõe melhorias opcionais", use_container_width=True, key="btn_avaliar")
+            btn_avaliar = st.button("🔍 Avaliar no Compositômetro", help="Verifica a integridade dos pilares visuais da sua ideia", use_container_width=True, key="btn_avaliar")
         with col_b3:
             if st.button("🗑️ Limpar", use_container_width=True, key="btn_limpar_cockpit"):
                 st.session_state["ck_ideia"] = ""
                 st.session_state["ck_ideia_input"] = ""
+                st.session_state.pop("ck_preprompt", None)
                 st.session_state.pop("ck_diagnostico", None)
                 st.session_state.pop("ck_prompt_final", None)
                 for k in list(st.session_state.keys()):
@@ -587,8 +676,32 @@ def renderizar_cockpit():
                 st.rerun()
 
     # --------------------------------------------------------------------------
-    # TRATAMENTO DO BOTÃO DE AVALIAÇÃO / ANÁLISE PRÉVIA
+    # TRATAMENTO DOS BOTÕES: PRÉ-PROMPT E COMPOSITÔMETRO
     # --------------------------------------------------------------------------
+    if btn_preprompt:
+        if not ideia_input.strip():
+            st.warning("Escreva sua ideia antes de gerar o Pré-prompt.")
+        else:
+            with st.spinner("Construindo direção visual do Pré-prompt..."):
+                pre_texto = gerar_preprompt_visual(ideia_input.strip(), modelo_ia)
+                diag = analisar_no_compositometro(ideia_input.strip(), modelo_ia)
+                if pre_texto:
+                    st.session_state["ck_ideia"] = ideia_input.strip()
+                    st.session_state["ck_preprompt"] = pre_texto
+                    st.session_state["ck_diagnostico"] = diag
+                    # Limpa checkboxes de sugestões anteriores
+                    for k in list(st.session_state.keys()):
+                        if k.startswith("sug_chk_"):
+                            st.session_state.pop(k, None)
+                    # Pré-posiciona o slider se detectado pelo compositômetro
+                    if diag:
+                        sug_lvl = diag.get("nivel_sensualidade_sugerido", 1)
+                        if 1 <= sug_lvl <= 6:
+                            st.session_state["ck_sens_slider"] = OPCOES_SENSUALIDADE[sug_lvl - 1]
+                    st.rerun()
+                else:
+                    st.error("Não foi possível gerar o Pré-prompt no momento.")
+
     if btn_avaliar:
         if not ideia_input.strip():
             st.warning("Escreva sua ideia antes de rodar o Compositômetro.")
@@ -598,11 +711,9 @@ def renderizar_cockpit():
                 if diag:
                     st.session_state["ck_ideia"] = ideia_input.strip()
                     st.session_state["ck_diagnostico"] = diag
-                    # Limpa checkboxes de sugestões anteriores
                     for k in list(st.session_state.keys()):
                         if k.startswith("sug_chk_"):
                             st.session_state.pop(k, None)
-                    # Pré-posiciona o slider se detectado
                     sug_lvl = diag.get("nivel_sensualidade_sugerido", 1)
                     if 1 <= sug_lvl <= 6:
                         st.session_state["ck_sens_slider"] = OPCOES_SENSUALIDADE[sug_lvl - 1]
@@ -611,7 +722,42 @@ def renderizar_cockpit():
                     st.error("Não foi possível processar a avaliação no momento.")
 
     # --------------------------------------------------------------------------
-    # 2. O COMPOSITÔMETRO (FEEDBACK VISUAL PASSIVO + SUGESTÕES DE APOIO)
+    # 2. PRÉ-PROMPT VISUAL COM DESTAQUE DE CORES E LEGENDA
+    # --------------------------------------------------------------------------
+    if st.session_state.get("ck_preprompt"):
+        with st.container(border=True):
+            st.markdown("### 🎨 Pré-prompt (Direção Visual Ajustada)")
+            st.caption("Visualização da composição desenvolvida em português antes da tradução técnica para o motor de imagem.")
+            
+            # Legenda indicando quem escreveu o que
+            st.markdown(
+                "<div class='ps-legend'>"
+                "<span><span class='ps-user-word'>Sua Ideia</span> (Inserção do Usuário)</span>"
+                " &nbsp;&nbsp;•&nbsp;&nbsp; "
+                "<span><span class='ps-ai-word'>Desenvolvimento Óptico da IA</span> (Direção Visual)</span>"
+                "</div>",
+                unsafe_allow_html=True
+            )
+
+            # Texto com marcação colorida
+            markup = _ps_markup_origin(
+                st.session_state["ck_preprompt"],
+                st.session_state.get("ck_ideia", "")
+            )
+            st.markdown(f"<div class='ps-preprompt'>{markup}</div>", unsafe_allow_html=True)
+
+            # Campo editável para ajustes finos
+            preprompt_editado = st.text_area(
+                "Ajustar o Pré-prompt se desejar (o texto abaixo será a base da compilação técnica):",
+                value=st.session_state["ck_preprompt"],
+                height=130,
+                key="ck_preprompt_editado"
+            )
+            if preprompt_editado != st.session_state["ck_preprompt"]:
+                st.session_state["ck_preprompt"] = preprompt_editado
+
+    # --------------------------------------------------------------------------
+    # 3. O COMPOSITÔMETRO (FEEDBACK VISUAL PASSIVO + SUGESTÕES DE APOIO)
     # --------------------------------------------------------------------------
     diag_atual = st.session_state.get("ck_diagnostico")
     if diag_atual:
@@ -730,10 +876,11 @@ def renderizar_cockpit():
 
             sug_aceitas = st.session_state.get("ck_sugestoes_marcadas", [])
 
+            texto_base = st.session_state.get("ck_preprompt", ideia_input.strip())
             with st.spinner(f"Compilando prompt otimizado para {real_dest}..."):
                 try:
                     resultado, prov = sintetizar_prompt_final(
-                        ideia_input.strip(),
+                        texto_base,
                         sens_escolhida,
                         real_dest,
                         sug_aceitas,
