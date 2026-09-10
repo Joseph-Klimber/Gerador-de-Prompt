@@ -3,7 +3,8 @@
 Prompt Studio Cockpit — Interface Minimalista de Alta Precisão
 Atrito zero para o usuário: Entrada livre de ideias + Compositômetro inteligente +
 Slider de Sensualidade com alerta transparente de risco de censura +
-Motor técnico mestre que elimina fluff poético e formata nativamente por modelo.
+Motor técnico mestre que elimina fluff poético, rejeita negativos estáticos e
+formata nativamente com física óptica avançada por arquitetura de difusão.
 """
 
 import os
@@ -87,7 +88,6 @@ st.markdown(
         margin: 2.5rem auto 1rem;
         text-align: center;
     }
-    /* Estilos do Pré-prompt com destaque de palavras */
     .ps-preprompt {
         background: #ffffff;
         border: 1px solid var(--ps-line);
@@ -118,7 +118,6 @@ st.markdown(
         font-weight: 600;
         align-items: center;
     }
-    /* Estilos do Compositômetro */
     .comp-container {
         background: #ffffff;
         border: 1px solid var(--ps-line);
@@ -142,7 +141,6 @@ st.markdown(
     .comp-amber { background-color: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
     .comp-blue  { background-color: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
     
-    /* Banners de Risco NSFW */
     .risk-banner {
         border-radius: 8px;
         padding: 0.75rem 1rem;
@@ -231,7 +229,6 @@ def verificar_acesso_sheets(email):
                 if not encontrado:
                     return False, expiracao_str, "⚠️ E-mail não encontrado na base de clientes autorizados."
 
-                # Checagem de expiração se houver data
                 if expiracao_str:
                     for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d/%m/%Y %H:%M", "%Y-%m-%d %H:%M:%S"):
                         try:
@@ -280,7 +277,8 @@ def carregar_config(email=None):
         try:
             with open(".api_key.txt", "r", encoding="utf-8") as f:
                 k = f.read().strip()
-                if k: config["chaves"]["Chave 1"] = k
+                if k:
+                    config["chaves"]["Chave 1"] = k
         except Exception:
             pass
 
@@ -501,7 +499,7 @@ Analise a ideia escrita pelo usuário para geração de imagens e avalie a prese
 
 Além disso:
 - Detecte o nível sugerido de sensualidade (1 a 6) intrínseco na frase.
-- Sugira EXATAMENTE 2 a 3 melhorias de composição cirúrgicas e breves (máximo 1 frase cada) que o usuário pode opcionalmente aceitar para elevar a qualidade visual da cena.
+- Sugira EXATAMENTE 2 a 3 melhorias de composição cirúrgicas e breves (máximo 1 frase cada) priorizando lentes reais (24mm, 35mm, 50mm, 85mm) e esquemas de luz físicos (Chiaroscuro, rim light, flash direto, luz de tungstênio) que o usuário pode opcionalmente aceitar para elevar a qualidade da cena.
 
 Retorne EXCLUSIVAMENTE um JSON válido no seguinte formato:
 {
@@ -514,77 +512,133 @@ Retorne EXCLUSIVAMENTE um JSON válido no seguinte formato:
   "nivel_sensualidade_sugerido": 1,
   "diagnostico_texto": "1 a 2 frases curtas explicando o que a IA manterá e o que inferirá automaticamente",
   "sugestoes_cirurgicas": [
-    "sugestão de iluminação ou câmera opcional 1",
-    "sugestão de atmosfera ou ângulo opcional 2"
+    "sugestão de iluminação ou lente opcional 1",
+    "sugestão de perspectiva ou ângulo opcional 2"
   ]
 }
 Não use markdown extra nem blocos explicativos."""
 
-SYS_MESTRE_SINTETIZADOR = r"""Você é o Engenheiro Chefe de Prompts de Alta Fidelidade do Prompt Studio, especialista em modelos Diffusion (Pony SDXL, Illustrious, Flux, Midjourney).
-Sua missão é converter a Direção Visual (Pré-prompt) em prompts técnicos cirúrgicos, eliminando deformações anatômicas, contaminação de cores e poluição de tokens.
+SYS_MESTRE_SINTETIZADOR = r"""Você é o Engenheiro-Chefe de Prompts Ópticos e Diretor Técnico de Difusão do Prompt Studio.
+Sua missão é transformar a intenção do usuário no prompt final de mais alta fidelidade e profissionalismo, obedecendo às seguintes regras inegociáveis:
 
 =============================================================================
-1. PROTOCOLO DE DUPLAS E MULTI-PERSONAGENS (ANTI-CONTAMINAÇÃO / COLOR BLEEDING)
+1. PROTOCOLO ANTI-FLUFF E FÍSICA PURA (ZERO TOLERÂNCIA A AMADORISMO)
 =============================================================================
-Quando a cena contiver dois ou mais personagens (ex: Android 18 e Vegeta):
-- NUNCA misture atributos capilares ou de vestuário no mesmo bloco.
-- CONTAGEM OBRIGATÓRIA NO TOPO: Inicie logo após o rating com `2characters, 1girl, 1boy` (ou `2girls`, `2boys`, `hetero`).
-- ANCORAGEM DE FRANQUIA OBRIGATÓRIA: Use sempre o identificador canônico com franquia escapada: `android_18_\(dragon_ball\)` e `vegeta_\(dragon_ball\)`.
-- COMPARTIMENTAÇÃO ATÔMICA: Para cada personagem, agrupe estritamente seus traços e roupas imediatos antes de mencionar o próximo:
-  * P1: `android_18_\(dragon_ball\), blonde_hair, short_hair, blue_eyes, torn_clothes, cleavage, battle_damage`
-  * P2: `vegeta_\(dragon_ball\), black_hair, spiky_hair, saiyan_armor, battle_suit`
-- NUNCA use pseudo-tags literais como `intact_clothing_on_left` ou `visible_breasts_under_light`. Use tags Booru reais compactas.
+- PROIBIÇÃO DE RETÓRICA LITERÁRIA: É terminantemente proibido usar metáforas, floreios poéticos ou abstrações emocionais (ex: NUNCA use 'a sense of foreboding', 'whispers of the past', 'testament to courage', 'aura of destiny', 'capturing the essence', 'eternal soul').
+- ELIMINAÇÃO DE BUZZWORDS OBSOLETAS: Não use '8k', 'photorealistic', 'hyperrealistic', 'trending on artstation', 'masterpiece' ou 'octane render', a menos que a sintaxe nativa do motor exija expressamente (como score tags no Pony ou masterpiece no Illustrious).
+- DESCRITORES ÓPTICO-MATERIAIS PUROS: Text encoders processam física tangível: geometria, anatomia, espessura e caimento de tecidos, índice de refração, dureza/direção da luz, distância focal de lente real (mm), abertura (f-stop) e perfil de sensor/filme.
 
 =============================================================================
-2. PROTOCOLO DE INTEGRIDADE FACIAL E ENQUADRAMENTO (ANTI-ROSTO DEFORMADO)
+2. PRESERVAÇÃO CANÔNICA E ÂNCORAS RÍGIDAS (HARD ANCHORING)
 =============================================================================
-- RISCO DE "WIDE SHOT": Em planos gerais abertos (`wide_shot`), os rostos ocupam poucos pixels no latent space, gerando olhos esticados, vesgos ou derretidos.
-  * Para manter rostos nítidos e belos sem deformação, priorize `medium_shot` (plano médio) ou `cowboy_shot` (plano americano).
-  * Se a cena exigir corpo inteiro, adicione OBRIGATORIAMENTE tags de nitidez facial: `detailed_face, expressive_eyes, clean_face`.
-  * NUNCA combine `wide_shot` + `high_angle` + `dynamic_angle`, pois a rotação extrema do plano torce os olhos e as feições em diagonal.
-- PROIBIÇÃO DE TAGS FOTOGRÁFICAS EM ANIME: Em modelos anime (`source_anime`), NUNCA use tags de câmera real como `35mm_lens`, `f/2.8_aperture`, `iso_100`. Elas colidem com os pesos de anime e causam aberrações de renderização.
+- O NÚCLEO DO USUÁRIO É SAGRADO: Identidade de personagens conhecidos, franquia, gênero, etnia, idade e traços declarados devem ser preservados integralmente. Nunca mude um idoso para jovem, nunca transforme animais em humanos, nunca troque cores informadas.
+- INFERÊNCIA ÓPTICA COERENTE E SILENCIOSA: Deduza com física realista apenas os elementos não especificados (se pediu rua chuvosa à noite: deduza asfalto molhado com reflexos especulares, halos de vapor de sódio, gotas na lente e profundidade de campo; jamais invente naves espaciais ou néons desconexos).
 
 =============================================================================
-3. ORÇAMENTO DE TOKENS (TOKEN BUDGET — MÁXIMO 50 A 65 TAGS)
+3. REGRA DE SENSUALIDADE E MODÉSTIA (ACATAR NÍVEL ESCOLHIDO)
 =============================================================================
-- O CLIP text encoder do SDXL satura após 77 tokens. Prompts inflados diluem a atenção e causam caos anatômico.
-- Elimine sinônimos redundantes: use `cracked_ground, scorched_earth, ruins` em vez de empilhar 10 variações de pedras e fumaça.
+Ajuste os modificadores e tags de classificação estritamente conforme o NÍVEL INFORMADO:
+- Nível 1 - Seguro (SFW): rating_safe, modéstia visual total, sem decotes profundos ou poses provocativas.
+- Nível 2 - Menos Seguro: rating_safe, caimento atraente, pose estética, modéstia preservada.
+- Nível 3 - Ecchi Leve: rating_questionable, roupas de banho, biquíni, maiô, lingerie padrão.
+- Nível 4 - Ecchi: rating_questionable, micro trajes, tecidos translúcidos (see-through), decote acentuado.
+- Nível 5 - Picante: rating_explicit, nudez artística anatômica ou trajes mínimos sem censura.
+- Nível 6 - Dual: Estruture obrigatoriamente duas versões no corpo do prompt:
+  * VERSÃO A: Com censura tática (efeito de vapor, reflexo de lente, tarja estilizada).
+  * VERSÃO B: Sem censura / Explícita pura.
 
 =============================================================================
-4. ADAPTAÇÃO POR MOTOR DE DESTINO
+4. ADAPTAÇÃO GRAMATICAL NATIVA: COMFYUI DE ALTA PRECISÃO (ANTI-REPETIÇÃO)
 =============================================================================
 
-- SE DESTINO FOR COMFYUI / PONY SDXL:
-  * HIERARQUIA MANDATÓRIA:
-    1. Score/Rating: `score_9, score_8_up, score_7_up, source_anime, rating_questionable` (ou rating_safe/explicit conforme escolhido).
-    2. Contagem: `2characters, 1girl, 1boy`
-    3. Personagem 1 (Identidade + Cabelo + Olhos + Traje): `android_18_\(dragon_ball\), blonde_hair, short_hair, blue_eyes, torn_clothes...`
-    4. Personagem 2 (Identidade + Cabelo + Olhos + Traje): `vegeta_\(dragon_ball\), black_hair, spiky_hair, saiyan_armor...`
-    5. Ação e Dinâmica: `fighting_stance, battle, intense_expression`
-    6. Cenário e Luz: `sunset, dramatic_lighting, dust, smoke, cracked_ground, ruins`
-    7. Enquadramento e Acabamento: `medium_shot, depth_of_field, detailed_face`
-  * PROMPT NEGATIVO DO PONY SDXL (ESTRITAMENTE LIMPO DE EMBEDDINGS 1.5):
-    `score_6, score_5, score_4, worst quality, low quality, bad quality, bad anatomy, deformed face, bad eyes, crossed eyes, diagonal eyes, deformed pupils, bad hands, extra digits, missing fingers, fused fingers, extra limbs, missing limbs, mutated anatomy, 3d, realistic, photorealistic, cgi, monochrome, grayscale, text, watermark, signature`
+- COMFYUI / SDXL BASE NATURAL (Juggernaut XL, RealVisXL, CyberRealistic, Cinematic):
+  * PROIBIÇÃO ABSOLUTA: Tags com underscore, jargões Danbooru e listas desconexas.
+  * ESTRUTURAÇÃO POR ENGENHARIA ÓPTICA DINÂMICA (Parágrafo em prosa técnica contínua):
+    1. ARQUÉTIPO DE LENTE E ENQUADRAMENTO (Varie ativamente conforme a narrativa da cena):
+       - Se Ambiental/Contexto/Ação: "Ultra-wide 24mm f/5.6 dynamic shot, deep depth of field, sharp foreground-to-background focus, environmental storytelling..."
+       - Se Urbano/Documental/Candid: "Street photography shot on 35mm f/2.8 lens, natural perspective, eye-level unposed capture, momentary candid motion..."
+       - Se Retrato Dramático/Intimista: "Intimate close-up on 50mm f/1.8 prime lens, natural compression, shallow depth of field with organic optical roll-off..."
+       - Se Editorial de Moda/High Fashion: "Fashion editorial captured on 105mm f/2.0 telephoto lens, strong subject isolation, compressed background geometry..."
+    2. FÍSICA DA LUZ E RIG DE ILUMINAÇÃO (FUJA do clichê 'soft golden hour'):
+       - Escolha uma física de luz explícita para a cena:
+         * Chiaroscuro de Alto Contraste: "Hard directional side lighting, deep sculpted cast shadows, dramatic chiaroscuro contrast, specular highlight roll-off..."
+         * Luz Direta de Flash (Revista/Candid): "Raw on-camera direct bounce flash, harsh contrasty highlights, realistic hard shadows, vintage party snapshot texture..."
+         * Luz Prática Noturna: "Diffused tungsten ambient lighting balanced with cool cyan neon spill, chromatic reflections on moist surfaces..."
+         * Nublado Cru / Editorial: "Overcast daylight, completely diffused flat illumination, soft desaturated shadows, natural ambient occlusion..."
+    3. AUTENTICIDADE HUMANA E ANTI-PLÁSTICO (Elimine a 'modelo de cera'):
+       - Descreva assimetria, micro-expressões sinceras, linhas finas de expressão, textura cutânea fosca com micro-poros visíveis e sem brilho oleoso artificial.
+       - Inclua desordem tátil: fios de cabelo esvoaçantes rebeldes (wisps, flyaway hairs), vincos e dobras naturais nas roupas, postura corporal relaxada ou em movimento (nunca estátua posando).
+    4. CIÊNCIA DE COR E EMULSÃO DE FILME (Assinatura do Sensor):
+       - Declare a mídia de captura para guiar o espaço latente: "Shot on Kodak Portra 400 film, natural organic film grain, subdued warm tonal latitude, muted highlights" OU "Leica M11 digital sensor, pristine optical micro-contrast, zero chromatic aberration".
 
-- SE DESTINO FOR COMFYUI / ILLUSTRIOUS:
-  * Inicie com: `masterpiece, best quality, aesthetic, highly detailed`.
-  * Siga o mesmo isolamento de personagens e use negativo nativo limpo sem embeddings de SD 1.5.
+- COMFYUI / PONY SDXL (v6 / AutismMix / CyberPony / Incursio):
+  * REGRA DE CABEÇALHO (Âncora de Alinhamento):
+    - Se Estilo Anime/Ilustração:
+      `score_9, score_8_up, score_7_up, score_6_up, score_5_up, score_4_up, rating_[safe|questionable|explicit], source_anime,`
+    - Se Estilo Fotorrealista:
+      `score_9, score_8_up, score_7_up, score_6_up, score_5_up, score_4_up, rating_[safe|questionable|explicit], source_photo, raw photo, realistic, professional photograph,`
+  * QUEBRA ATIVA DO 'LOOK PADRÃO PONY':
+    - NUNCA termine o sujeito com 'looking at viewer, standing, smiling' a menos que explicitamente ordenado.
+    - FORCE dinâmica de câmera e perspectiva nas tags:
+      * Enquadramentos variados: `from_below, from_above, dynamic_angle, dutch_angle, cowboy_shot, profile, looking_away, back_lighting, foreshortening`.
+    - Isole cores e tecidos estritamente: para evitar sangramento entre itens, declare explicitamente `[cor]_[peça]` em blocos independentes (ex: `black_leather_jacket, white_crop_top, ripped_denim_jeans`).
+    - Finalize a descrição do ambiente com marcadores ópticos Danbooru: `volumetric_lighting, lens_flare, ray_tracing, atmospheric_perspective, chromatic_aberration, depth_of_field`.
 
-- SE DESTINO FOR FLUX.1:
-  * Parágrafo único contínuo e denso em inglês natural, especificando claramente a posição de cada personagem (ex: "On the left stands Android 18... while opposite her on the right stands Vegeta..."), descrevendo materiais e iluminação física sem tags isoladas e sem prompt negativo.
+- COMFYUI / ILLUSTRIOUS (XL / NoobAI / Illustrious Base):
+  * CABEÇALHO OBRIGATÓRIO:
+    `masterpiece, best quality, amazing quality, very aesthetic, newest,`
+  * ENGENHARIA DE TAGS ATÔMICAS MODERNAS:
+    - O Illustrious processa tags atômicas sem conectivos gramaticais longos.
+    - Composição Estética: Force tags de estética visual avançada para fugir de desenhos planos: `chiaroscuro, rim_light, cinematic_composition, dynamic_pose, dramatic_shadows, expressive_eyes, clean_lineart, detailed_background`.
 
-- SE DESTINO FOR MIDJOURNEY v6.1:
-  * Frases objetivas em inglês natural, separando os dois sujeitos para evitar contaminação, com parâmetros técnicos `--ar 16:9 --v 6.1`.
+=============================================================================
+5. DEMAIS MOTORES DE IMAGEM
+=============================================================================
+
+- FLUX.1 (DEV / SCHNELL):
+  * Parágrafo narrativo coeso e denso em inglês natural. Foque em microtextura de pele, volumetria, iluminação plausível e caimento tátil de tecidos.
+  * SEM tags booru soltas com underline e SEM prompt negativo ('Não aplicável para Flux.1').
+
+- MIDJOURNEY v6.1:
+  * Frases objetivas, ricas e diretas em inglês natural.
+  * Parâmetros técnicos no final da linha (ex: `--ar 16:9 --v 6.1 --stylize 150`).
+
+- IDEOGRAM 2.0:
+  * Foco em diagramação, equilíbrio de planos e tipografia nítida.
+  * Todo texto que deve aparecer grafado na imagem DEVE vir rigorosamente entre aspas duplas (ex: `"Coffee Shop"`).
+
+- DALL-E 3 / BING IMAGE CREATOR:
+  * Parágrafo descritivo contínuo e cinematográfico em inglês natural. Detalhe plano de câmera, tipo de lente, luz e atmosfera.
+  * Blindagem de Moderação: Para níveis de sensualidade 3 a 5, evite vocabulário anatômico literal que acione o filtro de segurança da OpenAI; descreva contornos, iluminação de silhueta, tecidos justos/translúcidos e linguagem corporal sutil.
+
+- LEONARDO.AI / SEAART:
+  * Sintaxe modular em inglês: descrição cinematográfica central combinada com modificadores estéticos ponderados: `(subsurface scattering:1.15), (rim lighting:1.2), (tactile fabric texture:1.1)`.
+
+=============================================================================
+6. DIRETRIZ CIRÚRGICA DE PROMPT NEGATIVO (ANTI-BOILERPLATE)
+=============================================================================
+NUNCA use paredes fixas ou listas universais pré-fabricadas. Determine o negativo deduzindo:
+1. Âncoras do Modelo:
+   - Pony SDXL: inicie OBRIGATORIAMENTE com `score_6, score_5, score_4,`.
+   - Illustrious: use apenas `bad quality, worst quality, lowres,`.
+   - Demais motores: NENHUMA âncora de score.
+2. Anatomia Conforme a Cena:
+   - Contém pessoas/mãos em destaque? Use: `bad anatomy, deformed fingers, extra limbs, fused hands`.
+   - NÃO contém humanos (paisagens, objetos, arquitetura, close nos olhos)? É ESTRITAMENTE PROIBIDO incluir termos anatômicos como 'bad hands', 'deformed fingers' ou 'extra limbs'.
+3. Meio Visual Antagônico:
+   - Se a cena for Foto Realista: negue apenas o meio sintético (`3d render, cgi, digital illustration, anime, waxy skin, airbrushed, smooth porcelain face`).
+   - Se a cena for Anime/Ilustração: negue apenas o fotorrealismo (`photograph, raw photo, realistic, 3d render`).
+4. Motores sem suporte a negativo (Flux.1, DALL-E 3, Bing): retorne estritamente: `Não aplicável para este motor`.
 
 =============================================================================
 FORMATO DE SAÍDA EXATO:
 =============================================================================
 ### 🖼️ PROMPT GERADO: [{MOTOR_DESTINO}]
-1. PROMPT (Inglês): [Prompt ultra-limpo com hierarquia rígida, sem token bloat]
-2. PROMPT NEGATIVO: [Negativo enxuto e nativo do motor, sem embeddings de 1.5]
-3. DESCRIÇÃO REDES SOCIAIS (Português): [Legenda concisa de 2 frases + CTA forte]
-4. HASHTAGS: [#tags]
-💡 DICA TÉCNICA: [Dica prática de sampler, steps e resolução]"""
+1. PROMPT (Inglês): [Prompt estruturado na sintaxe exata do motor]
+2. PROMPT NEGATIVO: [Prompt negativo dinâmico cirúrgico, ou 'Não aplicável para este motor']
+3. DESCRIÇÃO REDES SOCIAIS (Português): [Legenda curta e cativante de 2 a 3 frases conectando sujeito e cena + CTA (Chamada para Ação) persuasiva OBRIGATÓRIA no final]
+4. HASHTAGS: [#tags_especificas]
+💡 DICA TÉCNICA: [Dica prática de amostragem/steps/cfg ideal para o motor]"""
 
 # ==============================================================================
 # 6. FUNÇÕES DE PROCESSAMENTO
@@ -599,15 +653,16 @@ def gerar_preprompt_visual(texto_ideia, modelo_gemini):
 
 
 def analisar_no_compositometro(texto_ideia, modelo_gemini):
-    """Executa a leitura óptica e diagnóstico do Compositômetro."""
+    """Executa a leitura óptica e diagnóstico do Compositômetro com extração resiliente de JSON."""
     if not texto_ideia.strip():
         return None
     user_prompt = f"AVALIE ESTA IDEIA NO COMPOSITÔMETRO:\n{texto_ideia}"
-    texto_json, prov = _chamar_provedor_ia(SYS_COMPOSITOMETRO, user_prompt, modelo_gemini, temperature=0.1)
     try:
-        limpo = re.sub(r"^```(?:json)?", "", texto_json.strip())
-        limpo = re.sub(r"```$", "", limpo.strip()).strip()
-        return json.loads(limpo)
+        texto_json, prov = _chamar_provedor_ia(SYS_COMPOSITOMETRO, user_prompt, modelo_gemini, temperature=0.1)
+        match = re.search(r'\{.*\}', texto_json, re.DOTALL)
+        if match:
+            return json.loads(match.group(0))
+        return json.loads(texto_json.strip())
     except Exception:
         return None
 
@@ -691,11 +746,9 @@ def renderizar_cockpit():
                     st.session_state["ck_ideia"] = ideia_input.strip()
                     st.session_state["ck_preprompt"] = pre_texto
                     st.session_state["ck_diagnostico"] = diag
-                    # Limpa checkboxes de sugestões anteriores
                     for k in list(st.session_state.keys()):
                         if k.startswith("sug_chk_"):
                             st.session_state.pop(k, None)
-                    # Pré-posiciona o slider se detectado pelo compositômetro
                     if diag:
                         sug_lvl = diag.get("nivel_sensualidade_sugerido", 1)
                         if 1 <= sug_lvl <= 6:
@@ -731,7 +784,6 @@ def renderizar_cockpit():
             st.markdown("### 🎨 Pré-prompt (Direção Visual Ajustada)")
             st.caption("Visualização da composição desenvolvida em português antes da tradução técnica para o motor de imagem.")
             
-            # Legenda indicando quem escreveu o que
             st.markdown(
                 "<div class='ps-legend'>"
                 "<span><span class='ps-user-word'>Sua Ideia</span> (Inserção do Usuário)</span>"
@@ -741,14 +793,12 @@ def renderizar_cockpit():
                 unsafe_allow_html=True
             )
 
-            # Texto com marcação colorida
             markup = _ps_markup_origin(
                 st.session_state["ck_preprompt"],
                 st.session_state.get("ck_ideia", "")
             )
             st.markdown(f"<div class='ps-preprompt'>{markup}</div>", unsafe_allow_html=True)
 
-            # Campo editável para ajustes finos
             preprompt_editado = st.text_area(
                 "Ajustar o Pré-prompt se desejar (o texto abaixo será a base da compilação técnica):",
                 value=st.session_state["ck_preprompt"],
@@ -766,7 +816,6 @@ def renderizar_cockpit():
         with st.container(border=True):
             st.markdown("#### 📊 Raio-X do Compositômetro")
             
-            # Badges de Status
             col_stat1, col_stat2, col_stat3, col_stat4, col_stat5 = st.columns(5)
             
             def badge_cor(status):
@@ -797,7 +846,6 @@ def renderizar_cockpit():
             if diag_atual.get("diagnostico_texto"):
                 st.caption(f"ℹ️ **Diagnóstico:** {diag_atual.get('diagnostico_texto')}")
 
-            # Checkboxes de Apoio Dinâmico (1.1)
             sugestoes = diag_atual.get("sugestoes_cirurgicas", [])
             if sugestoes:
                 st.markdown("##### ✨ Sugestões Cirúrgicas Opcionais (Marque para incorporar):")
@@ -808,7 +856,7 @@ def renderizar_cockpit():
                 st.session_state["ck_sugestoes_marcadas"] = selecionadas
 
     # --------------------------------------------------------------------------
-    # 3. MODULADOR DE SENSUALIDADE / RISCO NSFW (INDICADOR + LIMITADOR DESLIZANTE)
+    # 4. MODULADOR DE SENSUALIDADE / RISCO NSFW
     # --------------------------------------------------------------------------
     st.write("")
     with st.container(border=True):
@@ -816,7 +864,9 @@ def renderizar_cockpit():
         st.caption("A IA pré-ajusta o nível com base na cena. Você tem total controle para modular a barra; nossa função é informar os riscos de compatibilidade.")
 
         if "ck_sens_slider" not in st.session_state:
-            st.session_state["ck_sens_slider"] = OPCOES_SENSUALIDADE[1]
+            sug_diag = (st.session_state.get("ck_diagnostico") or {}).get("nivel_sensualidade_sugerido", 2)
+            idx_inicial = max(0, min(sug_diag - 1, len(OPCOES_SENSUALIDADE) - 1))
+            st.session_state["ck_sens_slider"] = OPCOES_SENSUALIDADE[idx_inicial]
 
         sens_escolhida = st.select_slider(
             "Selecione o nível desejado:",
@@ -826,7 +876,6 @@ def renderizar_cockpit():
 
         num_nivel = int(sens_escolhida[0]) if sens_escolhida and sens_escolhida[0].isdigit() else 1
 
-        # Legenda Dinâmica de Risco (Transparência Técnica sem Paternalismo)
         if num_nivel in [1, 2]:
             st.markdown(
                 "<div class='risk-banner risk-green'>"
@@ -850,7 +899,7 @@ def renderizar_cockpit():
             )
 
     # --------------------------------------------------------------------------
-    # 4. SELETOR DE MOTOR DESTINO
+    # 5. SELETOR DE MOTOR DESTINO E EXECUÇÃO
     # --------------------------------------------------------------------------
     col_dest1, col_dest2 = st.columns([7, 3])
     with col_dest1:
@@ -865,20 +914,27 @@ def renderizar_cockpit():
         st.write("")
         btn_executar = st.button("⚡ Gerar Prompt Agora", type="primary", use_container_width=True, key="btn_executar_final")
 
-    # --------------------------------------------------------------------------
-    # EXECUÇÃO DA SÍNTESE TÉCNICA
-    # --------------------------------------------------------------------------
     if btn_executar:
         if not ideia_input.strip():
             st.warning("Por favor, descreva sua ideia no campo de texto.")
         else:
             real_dest = destino_selecionado
+            texto_base = st.session_state.get("ck_preprompt", ideia_input.strip())
+            
+            # Roteamento inteligente para 'Recomendado automaticamente'
             if real_dest == "Recomendado automaticamente":
-                real_dest = "ComfyUI / Pony SDXL" if num_nivel >= 4 else "Midjourney v6.1"
+                ideia_lower = texto_base.lower()
+                if any(term in ideia_lower for term in ["anime", "manga", "desenho", "2d", "ilustração", "waifu"]):
+                    real_dest = "ComfyUI / Pony SDXL" if num_nivel >= 3 else "ComfyUI / Illustrious"
+                elif num_nivel >= 4:
+                    real_dest = "ComfyUI / Pony SDXL"
+                elif any(term in ideia_lower for term in ["foto", "retrato", "realista", "cinematográfico", "fotografia"]):
+                    real_dest = "Flux.1 (Dev/Schnell)"
+                else:
+                    real_dest = "Midjourney v6.1"
 
             sug_aceitas = st.session_state.get("ck_sugestoes_marcadas", [])
 
-            texto_base = st.session_state.get("ck_preprompt", ideia_input.strip())
             with st.spinner(f"Compilando prompt otimizado para {real_dest}..."):
                 try:
                     resultado, prov = sintetizar_prompt_final(
@@ -897,7 +953,7 @@ def renderizar_cockpit():
                     st.error(f"Erro ao processar: {ex}")
 
     # --------------------------------------------------------------------------
-    # 5. EXIBIÇÃO DO RESULTADO COMPILADO
+    # 6. EXIBIÇÃO DO RESULTADO COMPILADO
     # --------------------------------------------------------------------------
     if st.session_state.get("ck_prompt_final"):
         st.write("")
