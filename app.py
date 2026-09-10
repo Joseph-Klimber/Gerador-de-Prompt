@@ -4,7 +4,7 @@ Prompt Studio Cockpit — Interface Minimalista de Alta Precisão
 Atrito zero para o usuário: Entrada livre de ideias + Compositômetro inteligente +
 Slider de Sensualidade com alerta transparente de risco de censura +
 Motor técnico mestre com física óptica avançada e negativos compostos calibrados
-nativamente por arquitetura de difusão.
+nativamente por arquitetura de difusão. Exportação em .TXT e .JSON estruturado.
 """
 
 import os
@@ -178,7 +178,6 @@ LINK_KIWIFY_30_DIAS = "https://pay.kiwify.com.br/dyfEGe5"
 LINK_KIWIFY_90_DIAS = "https://pay.kiwify.com.br/xo0m3rF"
 
 PASTA_CONFIGS = "configs_usuarios"
-PASTA_RESULTADOS = "resultados"
 
 OPCOES_SENSUALIDADE = [
     "1 - Seguro (SFW)",
@@ -307,19 +306,50 @@ def salvar_config(chaves_dict, modelo_padrao, usar_busca_web=False, email=None,
         json.dump(dados, f, indent=4, ensure_ascii=False)
 
 
-def salvar_resultado_manual(texto, nome_sujeito, email=None):
-    if not texto or not str(texto).strip():
-        return "⚠️ Nenhum resultado para salvar."
-    slug_usuario = _slug_usuario(email)
-    pasta_usuario = os.path.join(PASTA_RESULTADOS, slug_usuario)
-    os.makedirs(pasta_usuario, exist_ok=True)
-    timestamp = time.strftime("%Y%m%d_%H%M%S")
-    sanitizado = re.sub(r'[^\w\-]', '_', str(nome_sujeito or "prompt")).strip('_').lower() or "prompt"
-    nome_arquivo = f"prompt_{sanitizado}_{timestamp}.txt"
-    caminho = os.path.join(pasta_usuario, nome_arquivo)
-    with open(caminho, "w", encoding="utf-8") as f:
-        f.write(texto)
-    return f"💾 Prompt salvo no servidor: `{nome_arquivo}`"
+def _gerar_nome_arquivo_base(destino, sens_escolhida):
+    """Gera o nome do arquivo identificando a linguagem/motor, nível SFW e timestamp."""
+    nome_motor = destino.split("->")[0].strip() if "->" in destino else destino
+    slug_motor = re.sub(r'[^\w]', '_', nome_motor.lower())
+    slug_motor = re.sub(r'_+', '_', slug_motor).strip('_')
+
+    slug_sens = re.sub(r'[^\w]', '_', sens_escolhida.lower())
+    slug_sens = re.sub(r'_+', '_', slug_sens).strip('_')
+
+    data_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return f"prompt_{slug_motor}_sfw_{slug_sens}_{data_str}"
+
+
+def _estruturar_prompt_json(texto_prompt, destino, nivel_sens, ideia_orig, preprompt, provedor):
+    """Estrutura o resultado em JSON técnico e organizado com metadados da geração."""
+    dados = {
+        "metadata": {
+            "motor_alvo": destino,
+            "nivel_sensualidade": nivel_sens,
+            "data_geracao": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "provedor_ia": provedor,
+        },
+        "entradas": {
+            "ideia_usuario": ideia_orig,
+            "preprompt_visual": preprompt,
+        },
+        "prompt_completo_raw": texto_prompt,
+    }
+
+    p_pos = re.search(r'1\.\s*PROMPT\s*(?:\(Inglês\))?:\s*(.*?)(?=\n2\.|\n###|$)', texto_prompt, re.DOTALL | re.IGNORECASE)
+    p_neg = re.search(r'2\.\s*PROMPT NEGATIVO:\s*(.*?)(?=\n3\.|\n###|$)', texto_prompt, re.DOTALL | re.IGNORECASE)
+    p_desc = re.search(r'3\.\s*DESCRIÇÃO REDES SOCIAIS\s*(?:\(Português\))?:\s*(.*?)(?=\n4\.|\n###|$)', texto_prompt, re.DOTALL | re.IGNORECASE)
+    p_hash = re.search(r'4\.\s*HASHTAGS:\s*(.*?)(?=\n💡|\n###|$)', texto_prompt, re.DOTALL | re.IGNORECASE)
+    p_dica = re.search(r'💡\s*DICA TÉCNICA:\s*(.*?)$', texto_prompt, re.DOTALL | re.IGNORECASE)
+
+    dados["secoes"] = {
+        "prompt_positivo": p_pos.group(1).strip() if p_pos else "",
+        "prompt_negativo": p_neg.group(1).strip() if p_neg else "",
+        "descricao_redes": p_desc.group(1).strip() if p_desc else "",
+        "hashtags": p_hash.group(1).strip() if p_hash else "",
+        "dica_tecnica": p_dica.group(1).strip() if p_dica else ""
+    }
+
+    return json.dumps(dados, indent=2, ensure_ascii=False)
 
 # ==============================================================================
 # 4. MOTOR DE CHAMADA A PROVEDORES DE IA (MULTI-PROVEDOR + RESILIÊNCIA)
@@ -694,7 +724,6 @@ def renderizar_cockpit():
         unsafe_allow_html=True
     )
 
-    email = st.session_state.get("user_email", "")
     modelo_ia = st.session_state.get("modelo_gemini_selecionado", "gemini-2.5-flash")
 
     # --------------------------------------------------------------------------
@@ -936,7 +965,6 @@ def renderizar_cockpit():
             real_dest = destino_selecionado
             texto_base = st.session_state.get("ck_preprompt_editado") or st.session_state.get("ck_preprompt") or ideia_input.strip()
             
-            # Roteamento inteligente para 'Recomendado automaticamente'
             if real_dest == "Recomendado automaticamente":
                 ideia_lower = texto_base.lower()
                 if any(term in ideia_lower for term in ["anime", "manga", "desenho", "2d", "ilustração", "waifu"]):
@@ -967,12 +995,13 @@ def renderizar_cockpit():
                     st.session_state["ck_prompt_final"] = resultado
                     st.session_state["ck_prov_usado"] = prov
                     st.session_state["ck_dest_usado"] = real_dest
+                    st.session_state["ck_sens_usada"] = sens_escolhida
                     st.rerun()
                 except Exception as ex:
                     st.error(f"Erro ao processar: {ex}")
 
     # --------------------------------------------------------------------------
-    # 6. EXIBIÇÃO DO RESULTADO COMPILADO
+    # 6. EXIBIÇÃO DO RESULTADO COMPILADO E DOWNLOADS (.TXT / .JSON)
     # --------------------------------------------------------------------------
     if st.session_state.get("ck_prompt_final"):
         st.write("")
@@ -982,24 +1011,39 @@ def renderizar_cockpit():
 
         st.code(st.session_state["ck_prompt_final"], language="markdown")
 
+        nome_base = _gerar_nome_arquivo_base(
+            st.session_state.get("ck_dest_usado", "motor"),
+            st.session_state.get("ck_sens_usada", "sfw")
+        )
+
+        dados_json = _estruturar_prompt_json(
+            texto_prompt=st.session_state["ck_prompt_final"],
+            destino=st.session_state.get("ck_dest_usado", "Padrão"),
+            nivel_sens=st.session_state.get("ck_sens_usada", "SFW"),
+            ideia_orig=st.session_state.get("ck_ideia", ""),
+            preprompt=st.session_state.get("ck_preprompt", ""),
+            provedor=st.session_state.get("ck_prov_usado", "Gemini")
+        )
+
         col_d1, col_d2 = st.columns(2)
         with col_d1:
             st.download_button(
                 "📥 Baixar Prompt (.TXT)",
                 data=st.session_state["ck_prompt_final"],
-                file_name=f"prompt_cockpit_{int(time.time())}.txt",
+                file_name=f"{nome_base}.txt",
                 mime="text/plain",
                 use_container_width=True,
-                key="ck_dn_btn"
+                key="ck_dn_btn_txt"
             )
         with col_d2:
-            if st.button("💾 Salvar Cópia no Servidor", use_container_width=True, key="ck_save_btn"):
-                msg = salvar_resultado_manual(
-                    st.session_state["ck_prompt_final"],
-                    "cockpit_prompt",
-                    email=email
-                )
-                st.info(msg)
+            st.download_button(
+                "📦 Baixar Estrutura (.JSON)",
+                data=dados_json,
+                file_name=f"{nome_base}.json",
+                mime="application/json",
+                use_container_width=True,
+                key="ck_dn_btn_json"
+            )
 
 # ==============================================================================
 # 8. BARRA LATERAL (CONFIGURAÇÕES E CREDENCIAIS)
