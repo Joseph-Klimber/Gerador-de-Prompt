@@ -192,14 +192,14 @@ OPCOES_SENSUALIDADE = [
 
 OPCOES_DESTINO = [
     "Recomendado automaticamente",
-    "ComfyUI / Pony SDXL",
-    "ComfyUI / Illustrious",
-    "ComfyUI / SDXL Base Natural",
-    "Flux.1 (Dev/Schnell)",
-    "Midjourney v6.1",
-    "Ideogram 2.0",
-    "DALL-E 3 / Bing Image Creator",
-    "Leonardo.Ai / SeaArt",
+    "Flux.1 (Dev/Schnell) -> Nano Banana / Fal.ai",
+    "ComfyUI / Pony SDXL -> ComfyUI / Forge (Anime & NSFW Local)",
+    "ComfyUI / Illustrious -> ComfyUI / WebUI (Anime & 2D Moderno)",
+    "ComfyUI / SDXL Base Natural -> Fooocus / ComfyUI (RealVis & Juggernaut)",
+    "Midjourney v6.1 -> Midjourney (Discord / Web)",
+    "Ideogram 2.0 -> Ideogram.ai (Design & Tipografia)",
+    "DALL-E 3 / Bing Image Creator -> ChatGPT Plus / Copilot Designer",
+    "Leonardo.Ai / SeaArt -> Leonardo.Ai / SeaArt.ai",
 ]
 
 # ==============================================================================
@@ -925,13 +925,17 @@ def renderizar_cockpit():
             if real_dest == "Recomendado automaticamente":
                 ideia_lower = texto_base.lower()
                 if any(term in ideia_lower for term in ["anime", "manga", "desenho", "2d", "ilustração", "waifu"]):
-                    real_dest = "ComfyUI / Pony SDXL" if num_nivel >= 3 else "ComfyUI / Illustrious"
+                    real_dest = (
+                        "ComfyUI / Pony SDXL -> ComfyUI / Forge (Anime & NSFW Local)"
+                        if num_nivel >= 3
+                        else "ComfyUI / Illustrious -> ComfyUI / WebUI (Anime & 2D Moderno)"
+                    )
                 elif num_nivel >= 4:
-                    real_dest = "ComfyUI / Pony SDXL"
+                    real_dest = "ComfyUI / Pony SDXL -> ComfyUI / Forge (Anime & NSFW Local)"
                 elif any(term in ideia_lower for term in ["foto", "retrato", "realista", "cinematográfico", "fotografia"]):
-                    real_dest = "Flux.1 (Dev/Schnell)"
+                    real_dest = "Flux.1 (Dev/Schnell) -> Nano Banana / Fal.ai"
                 else:
-                    real_dest = "Midjourney v6.1"
+                    real_dest = "Midjourney v6.1 -> Midjourney (Discord / Web)"
 
             sug_aceitas = st.session_state.get("ck_sugestoes_marcadas", [])
 
