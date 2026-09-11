@@ -176,10 +176,10 @@ st.markdown(
 # ==============================================================================
 # 2. CONSTANTES, DIRETÓRIOS E LISTAS
 # ==============================================================================
-APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyLlqkhYChBHM6K08DnNP67C9t7E2kRS3N0pINa65oYa81--Cv4amoJm3OZ_v_MSDA7/exec"
-LINK_KIWIFY_15_DIAS = "https://pay.kiwify.com.br/MXVL98k"
-LINK_KIWIFY_30_DIAS = "https://pay.kiwify.com.br/dyfEGe5"
-LINK_KIWIFY_90_DIAS = "https://pay.kiwify.com.br/xo0m3rF"
+APPS_SCRIPT_URL = "[https://script.google.com/macros/s/AKfycbyLlqkhYChBHM6K08DnNP67C9t7E2kRS3N0pINa65oYa81--Cv4amoJm3OZ_v_MSDA7/exec](https://script.google.com/macros/s/AKfycbyLlqkhYChBHM6K08DnNP67C9t7E2kRS3N0pINa65oYa81--Cv4amoJm3OZ_v_MSDA7/exec)"
+LINK_KIWIFY_15_DIAS = "[https://pay.kiwify.com.br/MXVL98k](https://pay.kiwify.com.br/MXVL98k)"
+LINK_KIWIFY_30_DIAS = "[https://pay.kiwify.com.br/dyfEGe5](https://pay.kiwify.com.br/dyfEGe5)"
+LINK_KIWIFY_90_DIAS = "[https://pay.kiwify.com.br/xo0m3rF](https://pay.kiwify.com.br/xo0m3rF)"
 
 PASTA_CONFIGS = "configs_usuarios"
 PASTA_RESULTADOS = "resultados"
@@ -398,7 +398,7 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-fl
                     "temperature": temperature,
                 }
                 resp = requests.post(
-                    "https://api.groq.com/openai/v1/chat/completions",
+                    "[https://api.groq.com/openai/v1/chat/completions](https://api.groq.com/openai/v1/chat/completions)",
                     headers={"Authorization": f"Bearer {credencial}", "Content-Type": "application/json"},
                     json=payload,
                     timeout=90
@@ -409,7 +409,7 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-fl
             elif nome_prov == "Cloudflare":
                 token, account = credencial
                 model_cf = st.session_state.get("modelo_cloudflare", config.get("modelo_cloudflare", "@cf/openai/gpt-oss-120b"))
-                endpoint = f"https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/{model_cf}"
+                endpoint = f"[https://api.cloudflare.com/client/v4/accounts/](https://api.cloudflare.com/client/v4/accounts/){account}/ai/run/{model_cf}"
                 payload = {
                     "messages": [
                         {"role": "system", "content": sys_final},
@@ -630,8 +630,10 @@ def analisar_no_compositometro(texto_ideia, modelo_gemini):
     user_prompt = f"AVALIE ESTA IDEIA NO COMPOSITÔMETRO:\n{texto_ideia}"
     texto_json, prov = _chamar_provedor_ia(SYS_COMPOSITOMETRO, user_prompt, modelo_gemini, temperature=0.1)
     try:
-        limpo = re.sub(r"^```(?:json)?", "", texto_json.strip())
-        limpo = re.sub(r"```$", "", limpo.strip()).strip()
+        # Usa limpeza segura via strip para evitar erro de aspas do markdown
+        limpo = texto_json.strip().strip("`")
+        if limpo.lower().startswith("json"):
+            limpo = limpo[4:].strip()
         return json.loads(limpo)
     except Exception:
         return None
@@ -685,5 +687,166 @@ def processar_imagem_visao(arquivo_imagem, modo_leitura, modelo_gemini):
     
     if is_parametrico:
         try:
-            limpo = re.sub(r"^```(?:json)?", "", texto_resposta.strip())
-            limpo = re.sub(r"
+            # Usa limpeza segura via strip para evitar erro de aspas do markdown
+            limpo = texto_resposta.strip().strip("`")
+            if limpo.lower().startswith("json"):
+                limpo = limpo[4:].strip()
+            dados = json.loads(limpo)
+            
+            # Monta o HTML colorido para exibição rica
+            html_colorido = f"""
+            <div style="background: #ffffff; border: 1px solid var(--ps-line); border-radius: 12px; padding: 1.25rem; font-size: 1.02rem; line-height: 1.6; margin-bottom: 1.2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                <div style="font-size: 0.8rem; font-weight: bold; color: var(--ps-muted); margin-bottom: 8px; text-transform: uppercase;">Leitura Paramétrica Concluída:</div>
+                A imagem mostra <span style="color:#2563eb; font-weight:600; background-color:#eff6ff; padding:2px 4px; border-radius:4px;">{dados.get('sujeito', '')}</span>, 
+                que está <span style="color:#059669; font-weight:600; background-color:#ecfdf5; padding:2px 4px; border-radius:4px;">{dados.get('acao', '')}</span>. 
+                O ambiente é <span style="color:#b45309; font-weight:600; background-color:#fffbeb; padding:2px 4px; border-radius:4px;">{dados.get('cenario', '')}</span>. 
+                A iluminação é <span style="color:#d97706; font-weight:600; background-color:#fffbeb; padding:2px 4px; border-radius:4px;">{dados.get('iluminacao', '')}</span>. 
+                A captura foi feita com <span style="color:#e11d48; font-weight:600; background-color:#fff1f2; padding:2px 4px; border-radius:4px;">{dados.get('estilo_camera', '')}</span>.
+            </div>
+            """
+            # Monta o texto limpo para jogar na caixa de edição
+            texto_plano = f"A imagem mostra {dados.get('sujeito', '')}, que está {dados.get('acao', '')}. O ambiente é {dados.get('cenario', '')}. A iluminação é {dados.get('iluminacao', '')}. A captura foi feita com {dados.get('estilo_camera', '')}."
+            
+            return {"tipo": "html", "html": html_colorido, "texto": texto_plano}
+        except Exception:
+            # Fallback se o JSON falhar
+            return {"tipo": "texto", "texto": texto_resposta}
+    else:
+        return {"tipo": "texto", "texto": texto_resposta}
+
+# ==============================================================================
+# 7. INTERFACE PRINCIPAL (COCKPIT MINIMALISTA)
+# ==============================================================================
+def renderizar_cockpit():
+    st.markdown("<div class='ps-kicker'>PROMPT STUDIO COCKPIT · ATRITO ZERO</div>", unsafe_allow_html=True)
+    st.markdown("<h1 class='ps-title'>Ideia Livre. Engenharia Invisível.</h1>", unsafe_allow_html=True)
+    st.markdown(
+        "<p class='ps-subtitle'>"
+        "Escreva sua ideia sem se preocupar com dezenas de caixas. "
+        "O Compositômetro avalia os pilares visuais e nosso motor técnico compila nativamente para o seu gerador de imagem."
+        "</p>",
+        unsafe_allow_html=True
+    )
+
+    email = st.session_state.get("user_email", "")
+    modelo_ia = st.session_state.get("modelo_gemini_selecionado", "gemini-3.8-flash")
+
+    # --------------------------------------------------------------------------
+    # 1. DETALHADOR DE IMAGEM & CAMPO DE TEXTO LIVRE
+    # --------------------------------------------------------------------------
+    with st.container(border=True):
+        st.markdown("### 🖼️ Detalhador de Imagem (Opcional)")
+        st.caption("Faça upload de uma referência para extrair a composição exata (Engenharia Reversa).")
+        
+        col_img1, col_img2 = st.columns([4, 6])
+        with col_img1:
+            img_file = st.file_uploader("Upload de Referência", type=["png", "jpg", "jpeg", "webp"], key="ck_img_uploader", label_visibility="collapsed")
+        with col_img2:
+            modo_leitura = st.radio(
+                "Modo de Leitura Óptica:",
+                options=["Clonagem Narrativa (Fluido)", "Raio-X Paramétrico (Colorido)"],
+                horizontal=True,
+                key="ck_modo_leitura"
+            )
+            btn_ler_imagem = st.button("👁️ Extrair Prompt da Imagem", type="secondary", use_container_width=True)
+
+        # Lógica de Leitura da Imagem
+        if btn_ler_imagem:
+            if not img_file:
+                st.warning("Selecione uma imagem primeiro.")
+            else:
+                with st.spinner("Analisando matriz óptica e desconstruindo cena..."):
+                    try:
+                        resultado_visao = processar_imagem_visao(img_file, modo_leitura, modelo_ia)
+                        if resultado_visao["tipo"] == "html":
+                            st.session_state["ck_img_html"] = resultado_visao["html"]
+                            st.session_state["ck_ideia"] = resultado_visao["texto"]
+                        else:
+                            st.session_state.pop("ck_img_html", None)
+                            st.session_state["ck_ideia"] = resultado_visao["texto"]
+                        
+                        # Limpa os passos seguintes para forçar reavaliação
+                        st.session_state.pop("ck_preprompt", None)
+                        st.session_state.pop("ck_diagnostico", None)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Erro na visão: {e}")
+
+        # Se houver leitura paramétrica salva, exibe a caixinha colorida Rica
+        if st.session_state.get("ck_img_html"):
+            st.markdown(st.session_state["ck_img_html"], unsafe_allow_html=True)
+        
+        st.markdown("---")
+        st.markdown("### 💡 O que você quer criar?")
+        
+        # O campo de texto agora pega o "ck_ideia" dinamicamente se a imagem foi lida
+        ideia_input = st.text_area(
+            "Descreva sua cena (ou edite a extração da imagem acima):",
+            value=st.session_state.get("ck_ideia", ""),
+            key="ck_ideia_input",
+            height=140,
+            placeholder="Exemplo: Android 18 sentada perto de uma janela molhada pela chuva em um café acolhedor em Tóquio, tomando chá em uma xícara cerâmica, luz suave da tarde com reflexos aconchegantes..."
+        )
+
+        col_b1, col_b2, col_b3 = st.columns([4, 4, 2])
+        with col_b1:
+            btn_preprompt = st.button("👁️ Pré-prompt", type="primary", help="Gera a direção visual ajustada em português com distinção por cores", use_container_width=True, key="btn_preprompt")
+        with col_b2:
+            btn_avaliar = st.button("🔍 Avaliar no Compositômetro", help="Verifica a integridade dos pilares visuais da sua ideia", use_container_width=True, key="btn_avaliar")
+        with col_b3:
+            if st.button("🗑️ Limpar", use_container_width=True, key="btn_limpar_cockpit"):
+                st.session_state["ck_ideia"] = ""
+                st.session_state["ck_ideia_input"] = ""
+                st.session_state.pop("ck_img_html", None)
+                st.session_state.pop("ck_preprompt", None)
+                st.session_state.pop("ck_diagnostico", None)
+                st.session_state.pop("ck_prompt_final", None)
+                for k in list(st.session_state.keys()):
+                    if k.startswith("sug_chk_"):
+                        st.session_state.pop(k, None)
+                st.rerun()
+
+    # --------------------------------------------------------------------------
+    # TRATAMENTO DOS BOTÕES: PRÉ-PROMPT E COMPOSITÔMETRO
+    # --------------------------------------------------------------------------
+    if btn_preprompt:
+        if not ideia_input.strip():
+            st.warning("Escreva sua ideia antes de gerar o Pré-prompt.")
+        else:
+            with st.spinner("Construindo direção visual do Pré-prompt..."):
+                pre_texto = gerar_preprompt_visual(ideia_input.strip(), modelo_ia)
+                diag = analisar_no_compositometro(ideia_input.strip(), modelo_ia)
+                if pre_texto:
+                    st.session_state["ck_ideia"] = ideia_input.strip()
+                    st.session_state["ck_preprompt"] = pre_texto
+                    st.session_state["ck_diagnostico"] = diag
+                    # Limpa checkboxes de sugestões anteriores
+                    for k in list(st.session_state.keys()):
+                        if k.startswith("sug_chk_"):
+                            st.session_state.pop(k, None)
+                    # Pré-posiciona o slider se detectado pelo compositômetro
+                    if diag:
+                        sug_lvl = diag.get("nivel_sensualidade_sugerido", 1)
+                        if 1 <= sug_lvl <= 6:
+                            st.session_state["ck_sens_slider"] = OPCOES_SENSUALIDADE[sug_lvl - 1]
+                    st.rerun()
+                else:
+                    st.error("Não foi possível gerar o Pré-prompt no momento.")
+
+    if btn_avaliar:
+        if not ideia_input.strip():
+            st.warning("Escreva sua ideia antes de rodar o Compositômetro.")
+        else:
+            with st.spinner("Raio-X da composição em andamento..."):
+                diag = analisar_no_compositometro(ideia_input.strip(), modelo_ia)
+                if diag:
+                    st.session_state["ck_ideia"] = ideia_input.strip()
+                    st.session_state["ck_diagnostico"] = diag
+                    for k in list(st.session_state.keys()):
+                        if k.startswith("sug_chk_"):
+                            st.session_state.pop(k, None)
+                    sug_lvl = diag.get("nivel_sensualidade_sugerido", 1)
+                    if 1 <= sug_lvl <= 6:
+                        st.session_state["ck_sens_slider"] = OPCOES_SENSUALIDADE[sug_lvl - 1]
+                    st.rerun()
+                else
