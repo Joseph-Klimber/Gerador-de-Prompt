@@ -181,7 +181,7 @@ PASTA_CONFIGS = "configs_usuarios"
 MAX_IDEA_CHARS = 10000
 MAX_DIAGNOSTIC_TEXT = 500
 
-MODELOS_GEMINI_VALIDOS = ["gemini-3.8-flash", "gemini-3.6-pro"]
+MODELOS_GEMINI_VALIDOS = ["gemini-3.8-flash", "gemini-3.6-flash"]
 MODELOS_GROQ_VALIDOS = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
 MODELOS_CF_VALIDOS = ["@cf/meta/llama-3.1-70b-instruct", "@cf/meta/llama-3.1-8b-instruct"]
 
