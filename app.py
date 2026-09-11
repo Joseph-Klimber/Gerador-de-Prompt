@@ -16,6 +16,7 @@ import html
 import unicodedata
 from datetime import datetime
 import requests
+from PIL import Image
 import streamlit as st
 
 try:
@@ -523,6 +524,32 @@ Não use markdown extra nem blocos explicativos."""
 SYS_MESTRE_SINTETIZADOR = r"""Você é o Motor de Síntese Óptica e Engenharia de Prompts de Alta Fidelidade do Prompt Studio.
 Sua missão é transformar a intenção do usuário no prompt final perfeito, obedecendo às seguintes regras inegociáveis:
 
+SYS_LEITOR_CLONAGEM = r"""Você é o Engenheiro de Replicação Óptica do Prompt Studio.
+Sua missão é analisar a imagem fornecida e gerar uma descrição textual contínua e de altíssima fidelidade, projetada para recriar esta exata imagem em motores de IA generativa.
+
+REGRAS MANDATÓRIAS:
+1. FOCO FÍSICO E MATERIAL (ZERO FLUFF): Descreva apenas o que é tangível. Especifique raça/etnia aparente, idade, cores exatas, texturas (couro, jeans, metal, neon) e proporções. NUNCA use metáforas poéticas, sentimentos subjetivos ou conceitos invisíveis.
+2. DETALHAMENTO CIRÚRGICO DO SUJEITO: Descreva as roupas detalhadamente (caimento, tipo, cor), o cabelo (corte, estilo, cor), a expressão facial e quaisquer acessórios ou marcas.
+3. ILUMINAÇÃO E CÂMERA: Identifique a principal fonte de luz (luz dura, difusa, volumétrica, neon, contraluz), a paleta de cores predominante e o ângulo da câmera (close-up, plano médio, vista de baixo/cima).
+4. CENÁRIO: Descreva o fundo e a profundidade de campo (fundo desfocado, ambiente fechado detalhado, paisagem externa).
+5. SAÍDA EXCLUSIVA: Retorne APENAS um texto fluido e coeso em Português. Não use tópicos, não faça introduções e não coloque títulos."""
+
+SYS_LEITOR_PARAMETRICO = r"""Você é o Cirurgião Óptico e Engenheiro de Desconstrução Visual do Prompt Studio.
+Sua missão é analisar a imagem fornecida e fazer a engenharia reversa dela, separando seus elementos visuais em parâmetros isolados e precisos.
+
+REGRAS MANDATÓRIAS:
+1. ZERO FLUFF: Descreva os elementos de forma técnica e direta. Não use adjetivos emocionais ou poéticos. Concentre-se em geometria, física, texturas e ótica.
+2. DIVISÃO ESTRITA: Desconstrua a imagem nos 5 pilares exatos listados abaixo. Se algum pilar não estiver presente, descreva como "Fundo neutro" ou "Ausente".
+
+Retorne EXCLUSIVAMENTE um JSON válido no seguinte formato exato, sem formatação markdown em volta:
+{
+  "sujeito": "descrição física exata do personagem/objeto, incluindo roupas, cabelo, etnia e idade aparente",
+  "acao": "a pose exata, o que o sujeito está fazendo ou para onde está olhando",
+  "cenario": "descrição do ambiente, elementos ao redor e profundidade de campo",
+  "iluminacao": "tipo de luz (dura, difusa, volumétrica), direção da luz principal e paleta de cores atmosférica",
+  "estilo_camera": "estilo de arte (ex: foto realista, anime 90s, pintura a óleo), enquadramento (ex: close-up, plano aberto) e tipo de lente/ângulo percebido"
+}"""
+
 =============================================================================
 1. PROTOCOLO ANTI-FLUFF E ANTI-POESIA (ZERO TOLERÂNCIA)
 =============================================================================
@@ -627,6 +654,61 @@ NÍVEL DE SENSUALIDADE ESCOLHIDO PELO USUÁRIO: {nivel_sensualidade}
 Gere o prompt final aplicando rigidamente o protocolo anti-fluff, hard anchoring do sujeito e a sintaxe exigida pelo motor {destino}."""
 
     return _chamar_provedor_ia(SYS_MESTRE_SINTETIZADOR, user_prompt, modelo_gemini, temperature=0.25)
+    
+def processar_imagem_visao(arquivo_imagem, modo_leitura, modelo_gemini):
+    """Extrai a engenharia reversa da imagem forçando a engine do Gemini."""
+    email = st.session_state.get("user_email", "")
+    config = carregar_config(email)
+    
+    # Força uso da chave Gemini independente do fallback
+    gemini_key = st.session_state.get("input_key_1", "").strip() or config.get("chaves", {}).get("Chave 1", "")
+    if not gemini_key or genai is None:
+        raise RuntimeError("⚠️ Chave do Google Gemini ausente ou SDK não carregado. O detalhador de imagem exige o motor Gemini.")
+
+    client = genai.Client(api_key=gemini_key)
+    img_pil = Image.open(arquivo_imagem)
+    
+    is_parametrico = "Paramétrico" in modo_leitura
+    sys_prompt = SYS_LEITOR_PARAMETRICO if is_parametrico else SYS_LEITOR_CLONAGEM
+    user_prompt = "Faça a engenharia reversa desta imagem conforme as regras do sistema."
+
+    resp = client.models.generate_content(
+        model=modelo_gemini,
+        contents=[img_pil, user_prompt],
+        config=types.GenerateContentConfig(
+            system_instruction=sys_prompt,
+            temperature=0.2 # Baixa temperatura = mais precisão técnica
+        )
+    )
+    
+    texto_resposta = getattr(resp, "text", "") or ""
+    
+    if is_parametrico:
+        try:
+            limpo = re.sub(r"^```(?:json)?", "", texto_resposta.strip())
+            limpo = re.sub(r"```$", "", limpo.strip()).strip()
+            dados = json.loads(limpo)
+            
+            # Monta o HTML colorido para exibição rica
+            html_colorido = f"""
+            <div style="background: #ffffff; border: 1px solid var(--ps-line); border-radius: 12px; padding: 1.25rem; font-size: 1.02rem; line-height: 1.6; margin-bottom: 1.2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                <div style="font-size: 0.8rem; font-weight: bold; color: var(--ps-muted); margin-bottom: 8px; text-transform: uppercase;">Leitura Paramétrica Concluída:</div>
+                A imagem mostra <span style="color:#2563eb; font-weight:600; background-color:#eff6ff; padding:2px 4px; border-radius:4px;">{dados.get('sujeito', '')}</span>, 
+                que está <span style="color:#059669; font-weight:600; background-color:#ecfdf5; padding:2px 4px; border-radius:4px;">{dados.get('acao', '')}</span>. 
+                O ambiente é <span style="color:#b45309; font-weight:600; background-color:#fffbeb; padding:2px 4px; border-radius:4px;">{dados.get('cenario', '')}</span>. 
+                A iluminação é <span style="color:#d97706; font-weight:600; background-color:#fffbeb; padding:2px 4px; border-radius:4px;">{dados.get('iluminacao', '')}</span>. 
+                A captura foi feita com <span style="color:#e11d48; font-weight:600; background-color:#fff1f2; padding:2px 4px; border-radius:4px;">{dados.get('estilo_camera', '')}</span>.
+            </div>
+            """
+            # Monta o texto limpo para jogar na caixa de edição
+            texto_plano = f"A imagem mostra {dados.get('sujeito', '')}, que está {dados.get('acao', '')}. O ambiente é {dados.get('cenario', '')}. A iluminação é {dados.get('iluminacao', '')}. A captura foi feita com {dados.get('estilo_camera', '')}."
+            
+            return {"tipo": "html", "html": html_colorido, "texto": texto_plano}
+        except Exception:
+            # Fallback se o JSON falhar
+            return {"tipo": "texto", "texto": texto_resposta}
+    else:
+        return {"tipo": "texto", "texto": texto_resposta}
 
 # ==============================================================================
 # 7. INTERFACE PRINCIPAL (COCKPIT MINIMALISTA)
