@@ -685,6 +685,9 @@ def processar_imagem_visao(arquivo_imagem, modo_leitura, modelo_gemini):
     
     texto_resposta = getattr(resp, "text", "") or ""
     
+    if not texto_resposta.strip():
+        raise RuntimeError("A IA não retornou nenhum dado. A imagem pode ter sido bloqueada pelos filtros de segurança da API.")
+    
     if is_parametrico:
         try:
             # Usa limpeza segura via strip para evitar erro de aspas do markdown
@@ -758,12 +761,17 @@ def renderizar_cockpit():
                 with st.spinner("Analisando matriz óptica e desconstruindo cena..."):
                     try:
                         resultado_visao = processar_imagem_visao(img_file, modo_leitura, modelo_ia)
+                        
+                        texto_extraido = resultado_visao["texto"]
+                        
                         if resultado_visao["tipo"] == "html":
                             st.session_state["ck_img_html"] = resultado_visao["html"]
-                            st.session_state["ck_ideia"] = resultado_visao["texto"]
                         else:
                             st.session_state.pop("ck_img_html", None)
-                            st.session_state["ck_ideia"] = resultado_visao["texto"]
+                        
+                        # A MÁGICA ACONTECE AQUI: Atualizamos não só a ideia, mas a CHAVE visual da caixa de texto
+                        st.session_state["ck_ideia"] = texto_extraido
+                        st.session_state["ck_ideia_input"] = texto_extraido
                         
                         # Limpa os passos seguintes para forçar reavaliação
                         st.session_state.pop("ck_preprompt", None)
