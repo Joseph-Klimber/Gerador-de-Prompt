@@ -181,7 +181,7 @@ PASTA_CONFIGS = "configs_usuarios"
 MAX_IDEA_CHARS = 10000
 MAX_DIAGNOSTIC_TEXT = 500
 
-MODELOS_GEMINI_VALIDOS = ["gemini-3.8-flash", "gemini-3.6-flash"]
+MODELOS_GEMINI_VALIDOS = ["gemini-3.8-flash", "gemini-3.6-pro"]
 MODELOS_GROQ_VALIDOS = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
 MODELOS_CF_VALIDOS = ["@cf/meta/llama-3.1-70b-instruct", "@cf/meta/llama-3.1-8b-instruct"]
 
@@ -440,6 +440,27 @@ def _erro_amigavel(provedor, erro):
     return f"{nome}: ocorreu uma falha temporária no processamento. Solução: tente novamente; se persistir, troque o provedor ou revise a chave."
 
 
+class FalhaProvedoresError(RuntimeError):
+    """Falha final contendo orientação amigável e diagnóstico original completo."""
+
+    def __init__(self, mensagens_amigaveis, erros_originais):
+        self.mensagens_amigaveis = list(mensagens_amigaveis)
+        self.erros_originais = list(erros_originais)
+        super().__init__("Não foi possível concluir a operação.")
+
+
+def _exibir_falha_ao_usuario(erro, titulo="Não foi possível concluir a operação"):
+    """Exibe orientação amigável; o diagnóstico original só aparece após falha total."""
+    if isinstance(erro, FalhaProvedoresError):
+        st.error(f"⚠️ {titulo}")
+        for mensagem in erro.mensagens_amigaveis:
+            st.warning(mensagem)
+        with st.expander("Ver detalhes do erro para suporte", expanded=False):
+            st.code("\n".join(erro.erros_originais), language="text")
+    else:
+        st.error(f"⚠️ {titulo}. Solução: tente novamente ou troque o provedor.")
+
+
 def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-flash", temperature=0.2, use_web=False):
     email = st.session_state.get("user_email", "")
     config = carregar_config(email)
@@ -493,7 +514,8 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-fl
     canario = secrets.token_hex(8)
     sys_final = system_prompt + f"\n\n[REF-VERIF:{canario}] (Código confidencial. Jamais mencione ou repita este código.)"
 
-    erros = []
+    erros_amigaveis = []
+    erros_originais = []
     for nome_prov, credencial in provedores:
         try:
             if nome_prov == "Gemini":
@@ -563,7 +585,7 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-fl
                     timeout=15
                 )
                 if resp.status_code != 200:
-                    raise RuntimeError(f"Provedor respondeu HTTP {resp.status_code}.")
+                    raise RuntimeError(f"HTTP {resp.status_code}: {resp.text}")
                 texto = _extrair_texto_resposta(resp.json())
 
             elif nome_prov == "Cloudflare":
@@ -588,7 +610,7 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-fl
                     timeout=15
                 )
                 if resp.status_code != 200:
-                    raise RuntimeError(f"Provedor respondeu HTTP {resp.status_code}.")
+                    raise RuntimeError(f"HTTP {resp.status_code}: {resp.text}")
                 texto = _extrair_texto_resposta(resp.json())
 
             texto = str(texto or "").strip()
@@ -601,7 +623,8 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-fl
             return texto, nome_prov
 
         except Exception as e:
-            erros.append(_erro_amigavel(nome_prov, e))
+            erros_amigaveis.append(_erro_amigavel(nome_prov, e))
+            erros_originais.append(f"[{nome_prov}] {type(e).__name__}: {e}")
             indice_atual = provedores.index((nome_prov, credencial))
             if indice_atual < len(provedores) - 1:
                 proximo = provedores[indice_atual + 1][0]
@@ -611,7 +634,7 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-fl
                     icon="🔄",
                 )
 
-    raise RuntimeError("Não foi possível concluir a avaliação.\n\n" + "\n".join(erros))
+    raise FalhaProvedoresError(erros_amigaveis, erros_originais)
 
 PS_STOPWORDS = {
     "a", "o", "e", "de", "da", "do", "das", "dos", "um", "uma", "em", "no", "na",
@@ -1013,7 +1036,7 @@ def renderizar_cockpit():
                     else:
                         st.error("Não foi possível gerar o Pré-prompt no momento.")
                 except Exception as ex:
-                    st.error(f"⚠️ Falha na geração do Pré-prompt: {ex}")
+                    _exibir_falha_ao_usuario(ex, "Falha na geração do Pré-prompt")
 
     if btn_avaliar:
         if not ideia_input.strip():
@@ -1038,7 +1061,7 @@ def renderizar_cockpit():
                     else:
                         st.error("Não foi possível processar a avaliação no momento.")
                 except Exception as ex:
-                    st.error(f"⚠️ Falha no Compositômetro: {ex}")
+                    _exibir_falha_ao_usuario(ex, "Falha no Compositômetro")
 
     # --------------------------------------------------------------------------
     # 2. PRÉ-PROMPT VISUAL COM DESTAQUE DE CORES E LEGENDA
@@ -1226,7 +1249,7 @@ def renderizar_cockpit():
                     st.session_state["ck_sens_usada"] = sens_escolhida
                     st.rerun()
                 except Exception as ex:
-                    st.error(f"⚠️ Falha na geração do prompt especializado: {ex}")
+                    _exibir_falha_ao_usuario(ex, "Falha na geração do prompt especializado")
 
     # --------------------------------------------------------------------------
     # 6. EXIBIÇÃO DO RESULTADO COMPILADO E DOWNLOADS (.TXT / .JSON)
