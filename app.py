@@ -1067,7 +1067,7 @@ def renderizar_sidebar():
         else:
             st.session_state.ps_provedor_manual = "Automático"
 
-        st.selectbox("Modelo Gemini", ["gemini-3.8-flash", "gemini-2.0-flash"], index=0, key="modelo_gemini_selecionado")
+        st.selectbox("Modelo Gemini", ["gemini-3.8-flash", "gemini-3.6-flash"], index=0, key="modelo_gemini_selecionado")
         k1 = st.text_input("Chave Google Gemini", value=config.get("chaves", {}).get("Chave 1", ""), type="password", key="input_key_1")
         k_groq = st.text_input("Chave Groq API", value=config.get("groq_api_key", ""), type="password", key="input_groq_api")
         cf_acc = st.text_input("Cloudflare Account ID", value=config.get("cloudflare_account_id", ""), key="input_cloudflare_account")
