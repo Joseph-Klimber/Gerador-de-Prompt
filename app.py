@@ -14,7 +14,7 @@ import secrets
 import time
 import html
 import unicodedata
-from datetime import datetime
+from datetime import datetime, timezone
 import requests
 import streamlit as st
 
@@ -178,6 +178,8 @@ LINK_KIWIFY_30_DIAS = "https://pay.kiwify.com.br/dyfEGe5"
 LINK_KIWIFY_90_DIAS = "https://pay.kiwify.com.br/xo0m3rF"
 
 PASTA_CONFIGS = "configs_usuarios"
+MAX_IDEA_CHARS = 10000
+MAX_DIAGNOSTIC_TEXT = 500
 
 MODELOS_GEMINI_VALIDOS = ["gemini-3.0-flash", "gemini-3.0-pro"]
 MODELOS_GROQ_VALIDOS = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
@@ -243,17 +245,21 @@ def verificar_acesso_sheets(email):
                 if not encontrado:
                     return False, expiracao_str, "⚠️ E-mail não encontrado na base de clientes autorizados."
 
-                if expiracao_str:
-                    for fmt in ("%d/%m/%Y", "%Y-%m-%d"):
-                        try:
-                            dt_clean = expiracao_str.split("T")[0].split(" ")[0].strip()
-                            dt_exp = datetime.strptime(dt_clean, fmt)
-                            if dt_exp.date() < datetime.now().date():
-                                return False, expiracao_str, f"⚠️ Seu acesso expirou em {expiracao_str}. Renove seu plano para continuar gerando."
-                            break
-                        except Exception:
-                            continue
+                if not expiracao_str:
+                    return False, "", "⚠️ A base de clientes não informou uma data de expiração válida."
 
+                dt_exp = None
+                dt_clean = expiracao_str.split("T")[0].split(" ")[0].strip()
+                for fmt in ("%d/%m/%Y", "%Y-%m-%d"):
+                    try:
+                        dt_exp = datetime.strptime(dt_clean, fmt)
+                        break
+                    except ValueError:
+                        continue
+                if dt_exp is None:
+                    return False, expiracao_str, "⚠️ A data de expiração retornada pela base é inválida."
+                if dt_exp.date() < datetime.now(timezone.utc).date():
+                    return False, expiracao_str, f"⚠️ Seu acesso expirou em {expiracao_str}. Renove seu plano para continuar gerando."
                 return True, expiracao_str, None
             except Exception:
                 return False, "", "⚠️ Resposta com formato inválido do servidor."
@@ -284,6 +290,11 @@ def carregar_config(email=None):
         try:
             with open(caminho, "r", encoding="utf-8") as f:
                 dados_salvos = json.load(f)
+                if not isinstance(dados_salvos, dict):
+                    raise ValueError("Configuração deve ser um objeto JSON")
+                # Segredos nunca são carregados de arquivos de usuário.
+                for campo_sensivel in ("chaves", "groq_api_key", "cloudflare_account_id", "cloudflare_api_token"):
+                    dados_salvos.pop(campo_sensivel, None)
                 # Purga modelos inválidos ou Flash < 3.0 salvos em arquivos antigos
                 if dados_salvos.get("modelo_groq") not in MODELOS_GROQ_VALIDOS:
                     dados_salvos["modelo_groq"] = "llama-3.3-70b-versatile"
@@ -325,10 +336,7 @@ def salvar_config(chaves_dict, modelo_padrao, usar_busca_web=False, email=None,
                   provedor_ia="Gemini", fallback_automatico=True,
                   modelo_groq="llama-3.3-70b-versatile", modelo_cloudflare="@cf/meta/llama-3.1-70b-instruct"):
     dados = {
-        "chaves": chaves_dict,
-        "groq_api_key": groq_api_key,
-        "cloudflare_account_id": cloudflare_account_id,
-        "cloudflare_api_token": cloudflare_api_token,
+        # Credenciais ficam somente em st.secrets/ambiente ou na sessão atual.
         "provedor_ia": provedor_ia,
         "fallback_automatico": fallback_automatico,
         "modelo_groq": modelo_groq if modelo_groq in MODELOS_GROQ_VALIDOS else "llama-3.3-70b-versatile",
@@ -522,7 +530,7 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.0-fl
                     timeout=60
                 )
                 if resp.status_code != 200:
-                    raise RuntimeError(f"HTTP {resp.status_code}: {resp.text}")
+                    raise RuntimeError(f"Provedor respondeu HTTP {resp.status_code}.")
                 texto = _extrair_texto_resposta(resp.json())
 
             elif nome_prov == "Cloudflare":
@@ -547,7 +555,7 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.0-fl
                     timeout=60
                 )
                 if resp.status_code != 200:
-                    raise RuntimeError(f"HTTP {resp.status_code}: {resp.text}")
+                    raise RuntimeError(f"Provedor respondeu HTTP {resp.status_code}.")
                 texto = _extrair_texto_resposta(resp.json())
 
             texto = str(texto or "").strip()
@@ -734,8 +742,38 @@ def gerar_preprompt_visual(texto_ideia, modelo_gemini):
     if not texto_ideia.strip():
         return ""
     user_prompt = f"DESENVOLVA O PRÉ-PROMPT VISUAL PARA ESTA IDEIA:\n{texto_ideia}"
-    texto_pre, prov = _chamar_provedor_ia(SYS_GERADOR_PREPROMPT, user_prompt, modelo_gemini, temperature=0.3)
+    texto_pre, prov = _chamar_provedor_ia(SYS_GERADOR_PREPROMPT, user_prompt, modelo_gemini, temperature=0.3, use_web=bool(st.session_state.get("usar_busca_web", False)))
     return texto_pre.strip()
+
+
+def _normalizar_diagnostico(dados):
+    """Valida e limita o diagnóstico retornado pelo provedor antes da renderização."""
+    if not isinstance(dados, dict):
+        return None
+    enums = {
+        "sujeito_status": {"Definido", "Vago", "Ausente"},
+        "acao_status": {"Presente", "Estática", "Ausente"},
+        "cenario_status": {"Definido", "Vago", "Ausente"},
+        "iluminacao_status": {"Definida", "Inferida pela IA"},
+        "camera_status": {"Definida", "Inferida pela IA"},
+    }
+    resultado = {}
+    for campo, permitidos in enums.items():
+        valor = dados.get(campo, "")
+        resultado[campo] = valor if isinstance(valor, str) and valor in permitidos else "Ausente"
+    try:
+        nivel = int(dados.get("nivel_sensualidade_sugerido", 1))
+    except (TypeError, ValueError):
+        nivel = 1
+    resultado["nivel_sensualidade_sugerido"] = max(1, min(6, nivel))
+    for campo in ("sujeito_resumo", "diagnostico_texto"):
+        valor = dados.get(campo, "")
+        resultado[campo] = str(valor)[:MAX_DIAGNOSTIC_TEXT] if valor is not None else ""
+    sugestoes = dados.get("sugestoes_cirurgicas", [])
+    if not isinstance(sugestoes, list):
+        sugestoes = []
+    resultado["sugestoes_cirurgicas"] = [str(x)[:MAX_DIAGNOSTIC_TEXT] for x in sugestoes if isinstance(x, str)][:3]
+    return resultado
 
 
 def analisar_no_compositometro(texto_ideia, modelo_gemini):
@@ -744,11 +782,10 @@ def analisar_no_compositometro(texto_ideia, modelo_gemini):
         return None
     user_prompt = f"AVALIE ESTA IDEIA NO COMPOSITÔMETRO:\n{texto_ideia}"
     try:
-        texto_json, prov = _chamar_provedor_ia(SYS_COMPOSITOMETRO, user_prompt, modelo_gemini, temperature=0.1)
+        texto_json, prov = _chamar_provedor_ia(SYS_COMPOSITOMETRO, user_prompt, modelo_gemini, temperature=0.1, use_web=bool(st.session_state.get("usar_busca_web", False)))
         match = re.search(r'\{.*\}', texto_json, re.DOTALL)
-        if match:
-            return json.loads(match.group(0))
-        return json.loads(texto_json.strip())
+        dados = json.loads(match.group(0)) if match else json.loads(texto_json.strip())
+        return _normalizar_diagnostico(dados)
     except Exception:
         return None
 
@@ -793,7 +830,7 @@ FORMATO DE SAÍDA OBRIGATÓRIO (Mantenha rigorosamente esta numeração):
 - Sugestões de Composição Incorporadas:
 {sug_str}"""
 
-    return _chamar_provedor_ia(system_prompt_dinamico, user_prompt, modelo_gemini, temperature=0.15)
+    return _chamar_provedor_ia(system_prompt_dinamico, user_prompt, modelo_gemini, temperature=0.15, use_web=bool(st.session_state.get("usar_busca_web", False)))
 
 # ==============================================================================
 # 7. INTERFACE PRINCIPAL (COCKPIT MINIMALISTA)
@@ -816,10 +853,12 @@ def renderizar_cockpit():
     # --------------------------------------------------------------------------
     with st.container(border=True):
         st.markdown("### 💡 O que você quer criar?")
+        input_widget_key = f"ck_ideia_input_{st.session_state.get('clear_generation', 0)}"
         ideia_input = st.text_area(
             "Descreva sua cena em linguagem humana natural:",
             value=st.session_state.get("ck_ideia", ""),
-            key="ck_ideia_input",
+            max_chars=MAX_IDEA_CHARS,
+            key=input_widget_key,
             height=140,
             placeholder="Exemplo: Android 18 sentada perto de uma janela molhada pela chuva em um café acolhedor em Tóquio, tomando chá em uma xícara cerâmica, luz suave da tarde com reflexos aconchegantes..."
         )
@@ -839,7 +878,7 @@ def renderizar_cockpit():
         with col_b3:
             if st.button("🗑️ Limpar", use_container_width=True, key="btn_limpar_cockpit"):
                 st.session_state["ck_ideia"] = ""
-                st.session_state["ck_ideia_input"] = ""
+                st.session_state["clear_generation"] = st.session_state.get("clear_generation", 0) + 1
                 st.session_state.pop("ck_preprompt", None)
                 st.session_state.pop("ck_preprompt_editado", None)
                 st.session_state.pop("ck_diagnostico", None)
@@ -957,22 +996,27 @@ def renderizar_cockpit():
                 else:
                     return "comp-blue", "⚙️"
 
-            c1, i1 = badge_cor(diag_atual.get("sujeito_status", ""))
-            c2, i2 = badge_cor(diag_atual.get("acao_status", ""))
-            c3, i3 = badge_cor(diag_atual.get("cenario_status", ""))
-            c4, i4 = badge_cor(diag_atual.get("iluminacao_status", ""))
-            c5, i5 = badge_cor(diag_atual.get("camera_status", ""))
+            status_sujeito = html.escape(str(diag_atual.get("sujeito_status", "")))
+            status_acao = html.escape(str(diag_atual.get("acao_status", "")))
+            status_cenario = html.escape(str(diag_atual.get("cenario_status", "")))
+            status_luz = html.escape(str(diag_atual.get("iluminacao_status", "")))
+            status_camera = html.escape(str(diag_atual.get("camera_status", "")))
+            c1, i1 = badge_cor(status_sujeito)
+            c2, i2 = badge_cor(status_acao)
+            c3, i3 = badge_cor(status_cenario)
+            c4, i4 = badge_cor(status_luz)
+            c5, i5 = badge_cor(status_camera)
 
             with col_stat1:
-                st.markdown(f"<div class='comp-badge {c1}'>{i1} Sujeito: {diag_atual.get('sujeito_status')}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='comp-badge {c1}'>{i1} Sujeito: {status_sujeito}</div>", unsafe_allow_html=True)
             with col_stat2:
-                st.markdown(f"<div class='comp-badge {c2}'>{i2} Ação: {diag_atual.get('acao_status')}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='comp-badge {c2}'>{i2} Ação: {status_acao}</div>", unsafe_allow_html=True)
             with col_stat3:
-                st.markdown(f"<div class='comp-badge {c3}'>{i3} Cenário: {diag_atual.get('cenario_status')}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='comp-badge {c3}'>{i3} Cenário: {status_cenario}</div>", unsafe_allow_html=True)
             with col_stat4:
-                st.markdown(f"<div class='comp-badge {c4}'>{i4} Luz: {diag_atual.get('iluminacao_status')}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='comp-badge {c4}'>{i4} Luz: {status_luz}</div>", unsafe_allow_html=True)
             with col_stat5:
-                st.markdown(f"<div class='comp-badge {c5}'>{i5} Câmera: {diag_atual.get('camera_status')}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='comp-badge {c5}'>{i5} Câmera: {status_camera}</div>", unsafe_allow_html=True)
 
             if diag_atual.get("diagnostico_texto"):
                 st.caption(f"ℹ️ **Diagnóstico:** {diag_atual.get('diagnostico_texto')}")
@@ -1145,7 +1189,19 @@ def renderizar_sidebar():
         st.sidebar.caption(f"Validade do Acesso: **{st.session_state.expiracao}**")
 
     if st.sidebar.button("🚪 Sair do Sistema", use_container_width=True):
+        chaves_sensiveis = {
+            "input_key_1", "input_groq_api", "input_cloudflare_account",
+            "input_cloudflare_token", "ck_ideia", "ck_ideia_input",
+            "ck_preprompt", "ck_preprompt_editado", "ck_diagnostico",
+            "ck_prompt_final", "ck_prov_usado", "ck_dest_usado", "ck_sens_usada",
+            "user_email", "expiracao", "autenticado"
+        }
+        for chave in list(st.session_state.keys()):
+            if chave in chaves_sensiveis or chave.startswith("ck_ideia_input_") or chave.startswith("sug_chk_"):
+                st.session_state.pop(chave, None)
         st.session_state.autenticado = False
+        st.session_state.user_email = ""
+        st.session_state.expiracao = ""
         st.rerun()
 
     config = carregar_config(st.session_state.get("user_email", ""))
@@ -1157,7 +1213,9 @@ def renderizar_sidebar():
         else:
             st.session_state.ps_provedor_manual = "Automático"
 
-        st.selectbox("Modelo Gemini", MODELOS_GEMINI_VALIDOS, index=0, key="modelo_gemini_selecionado")
+        modelo_salvo = config.get("modelo_padrao", MODELOS_GEMINI_VALIDOS[0])
+        indice_modelo = MODELOS_GEMINI_VALIDOS.index(modelo_salvo) if modelo_salvo in MODELOS_GEMINI_VALIDOS else 0
+        st.selectbox("Modelo Gemini", MODELOS_GEMINI_VALIDOS, index=indice_modelo, key="modelo_gemini_selecionado")
         k1 = st.text_input("Chave Google Gemini", value=config.get("chaves", {}).get("Chave 1", ""), type="password", key="input_key_1")
         k_groq = st.text_input("Chave Groq API", value=config.get("groq_api_key", ""), type="password", key="input_groq_api")
         cf_acc = st.text_input("Cloudflare Account ID", value=config.get("cloudflare_account_id", ""), key="input_cloudflare_account")
@@ -1190,6 +1248,8 @@ if "user_email" not in st.session_state:
     st.session_state.user_email = ""
 if "expiracao" not in st.session_state:
     st.session_state.expiracao = ""
+if "clear_generation" not in st.session_state:
+    st.session_state.clear_generation = 0
 
 if not st.session_state.autenticado:
     st.markdown(
