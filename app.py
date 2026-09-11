@@ -854,13 +854,13 @@ REGRAS GERAIS INVIOLÁVEIS:
 {regra_especifica}
 
 FORMATO DE SAÍDA OBRIGATÓRIO: retorne EXCLUSIVAMENTE um JSON válido, sem markdown, com exatamente estes campos:
-{
+{{
   "prompt_positivo": "Prompt estruturado na sintaxe exata do motor, em inglês quando exigido pela regra",
   "prompt_negativo": "Prompt negativo conforme a regra do motor, ou texto de não aplicabilidade",
   "descricao_redes": "Legenda em português de 2 a 3 frases com CTA ao final",
   "hashtags": "#tags_especificas",
   "dica_tecnica": "Dica prática de amostragem, steps, CFG ou parâmetros do motor"
-}
+}}
 Não inclua cercas de código, comentários ou campos adicionais."""
 
     user_prompt = f"""CRIAR PROMPT ESPECIALIZADO:
