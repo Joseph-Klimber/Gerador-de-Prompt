@@ -181,7 +181,7 @@ PASTA_CONFIGS = "configs_usuarios"
 MAX_IDEA_CHARS = 10000
 MAX_DIAGNOSTIC_TEXT = 500
 
-MODELOS_GEMINI_VALIDOS = ["gemini-3.0-flash", "gemini-3.0-pro"]
+MODELOS_GEMINI_VALIDOS = ["gemini-3.8-flash", "gemini-3.6-pro"]
 MODELOS_GROQ_VALIDOS = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
 MODELOS_CF_VALIDOS = ["@cf/meta/llama-3.1-70b-instruct", "@cf/meta/llama-3.1-8b-instruct"]
 
@@ -281,7 +281,7 @@ def carregar_config(email=None):
         "fallback_automatico": True,
         "modelo_groq": "llama-3.3-70b-versatile",
         "modelo_cloudflare": "@cf/meta/llama-3.1-70b-instruct",
-        "modelo_padrao": "gemini-3.0-flash",
+        "modelo_padrao": "gemini-3.8-flash",
         "usar_busca_web": False,
     }
     slug = _slug_usuario(email)
@@ -301,7 +301,7 @@ def carregar_config(email=None):
                 if dados_salvos.get("modelo_cloudflare") not in MODELOS_CF_VALIDOS:
                     dados_salvos["modelo_cloudflare"] = "@cf/meta/llama-3.1-70b-instruct"
                 if dados_salvos.get("modelo_padrao") not in MODELOS_GEMINI_VALIDOS:
-                    dados_salvos["modelo_padrao"] = "gemini-3.0-flash"
+                    dados_salvos["modelo_padrao"] = "gemini-3.8-flash"
                 config.update(dados_salvos)
         except Exception:
             pass
@@ -341,7 +341,7 @@ def salvar_config(chaves_dict, modelo_padrao, usar_busca_web=False, email=None,
         "fallback_automatico": fallback_automatico,
         "modelo_groq": modelo_groq if modelo_groq in MODELOS_GROQ_VALIDOS else "llama-3.3-70b-versatile",
         "modelo_cloudflare": modelo_cloudflare if modelo_cloudflare in MODELOS_CF_VALIDOS else "@cf/meta/llama-3.1-70b-instruct",
-        "modelo_padrao": modelo_padrao if modelo_padrao in MODELOS_GEMINI_VALIDOS else "gemini-3.0-flash",
+        "modelo_padrao": modelo_padrao if modelo_padrao in MODELOS_GEMINI_VALIDOS else "gemini-3.8-flash",
         "usar_busca_web": usar_busca_web,
     }
     os.makedirs(PASTA_CONFIGS, exist_ok=True)
@@ -412,7 +412,7 @@ def _extrair_texto_resposta(obj):
     return ""
 
 
-def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.0-flash", temperature=0.2, use_web=False):
+def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-flash", temperature=0.2, use_web=False):
     email = st.session_state.get("user_email", "")
     config = carregar_config(email)
     provedor_preferido = st.session_state.get("ps_provedor_manual", "Automático")
@@ -469,8 +469,8 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.0-fl
     for nome_prov, credencial in provedores:
         try:
             if nome_prov == "Gemini":
-                # Força modelo Flash >= 3.0
-                mod_gem = modelo_gemini if modelo_gemini in MODELOS_GEMINI_VALIDOS else "gemini-3.0-flash"
+                # Força modelo Flash >= 3.8
+                mod_gem = modelo_gemini if modelo_gemini in MODELOS_GEMINI_VALIDOS else "gemini-3.8-flash"
                 client = genai.Client(api_key=credencial)
                 kwargs = {"system_instruction": sys_final, "temperature": temperature}
 
@@ -895,7 +895,7 @@ def renderizar_cockpit():
         unsafe_allow_html=True
     )
 
-    modelo_ia = st.session_state.get("modelo_gemini_selecionado", "gemini-3.0-flash")
+    modelo_ia = st.session_state.get("modelo_gemini_selecionado", "gemini-3.8-flash")
 
     # --------------------------------------------------------------------------
     # 1. CAMPO DE TEXTO LIVRE PRINCIPAL
@@ -1276,7 +1276,7 @@ def renderizar_sidebar():
         if st.button("💾 Salvar Configurações", type="primary", use_container_width=True):
             salvar_config(
                 chaves_dict={"Chave 1": k1, "Chave 2": config.get("chaves", {}).get("Chave 2", "")},
-                modelo_padrao=st.session_state.get("modelo_gemini_selecionado", "gemini-3.0-flash"),
+                modelo_padrao=st.session_state.get("modelo_gemini_selecionado", "gemini-3.8-flash"),
                 usar_busca_web=web_search_chk,
                 email=st.session_state.get("user_email", ""),
                 groq_api_key=k_groq,
