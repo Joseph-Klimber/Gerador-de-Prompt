@@ -208,6 +208,18 @@ def _slug_usuario(email):
     return re.sub(r'[^\w\-.]', '_', email_limpo) or "anonimo"
 
 
+def _buscar_secret_ou_env(chave):
+    """Busca credenciais de modo resiliente em st.secrets ou variáveis de ambiente."""
+    try:
+        if hasattr(st, "secrets") and chave in st.secrets:
+            val = str(st.secrets[chave]).strip()
+            if val:
+                return val
+    except Exception:
+        pass
+    return os.environ.get(chave, "").strip()
+
+
 def verificar_acesso_sheets(email):
     """Verifica e-mail e checa se a assinatura está dentro da validade."""
     try:
@@ -259,7 +271,7 @@ def carregar_config(email=None):
         "fallback_automatico": True,
         "modelo_groq": "llama-3.3-70b-versatile",
         "modelo_cloudflare": "@cf/meta/llama-3.3-70b-instruct",
-        "modelo_padrao": "gemini-3.8-flash",
+        "modelo_padrao": "gemini-2.5-flash",
         "usar_busca_web": False,
     }
     slug = _slug_usuario(email)
@@ -271,14 +283,27 @@ def carregar_config(email=None):
         except Exception:
             pass
 
-    if not config["chaves"].get("Chave 1") and os.path.exists(".api_key.txt"):
-        try:
-            with open(".api_key.txt", "r", encoding="utf-8") as f:
-                k = f.read().strip()
-                if k:
-                    config["chaves"]["Chave 1"] = k
-        except Exception:
-            pass
+    if not config["chaves"].get("Chave 1"):
+        k_sec = _buscar_secret_ou_env("GEMINI_API_KEY")
+        if k_sec:
+            config["chaves"]["Chave 1"] = k_sec
+        elif os.path.exists(".api_key.txt"):
+            try:
+                with open(".api_key.txt", "r", encoding="utf-8") as f:
+                    k = f.read().strip()
+                    if k:
+                        config["chaves"]["Chave 1"] = k
+            except Exception:
+                pass
+
+    if not config.get("groq_api_key"):
+        config["groq_api_key"] = _buscar_secret_ou_env("GROQ_API_KEY")
+
+    if not config.get("cloudflare_api_token"):
+        config["cloudflare_api_token"] = _buscar_secret_ou_env("CLOUDFLARE_API_TOKEN")
+
+    if not config.get("cloudflare_account_id"):
+        config["cloudflare_account_id"] = _buscar_secret_ou_env("CLOUDFLARE_ACCOUNT_ID")
 
     return config
 
@@ -367,28 +392,49 @@ def _extrair_texto_resposta(obj):
     return ""
 
 
-def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-flash", temperature=0.25, use_web=False):
+def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-2.5-flash", temperature=0.25, use_web=False):
     email = st.session_state.get("user_email", "")
     config = carregar_config(email)
     provedor_preferido = st.session_state.get("ps_provedor_manual", "Automático")
     fallback = st.session_state.get("fallback_automatico", config.get("fallback_automatico", True))
 
     provedores = []
-    gemini_key = st.session_state.get("input_key_1", "").strip() or config.get("chaves", {}).get("Chave 1", "") or config.get("chaves", {}).get("Chave 2", "")
+    
+    # 1. Credencial Gemini
+    gemini_key = (
+        st.session_state.get("input_key_1", "").strip()
+        or config.get("chaves", {}).get("Chave 1", "")
+        or config.get("chaves", {}).get("Chave 2", "")
+        or _buscar_secret_ou_env("GEMINI_API_KEY")
+    )
     if gemini_key and genai is not None:
         provedores.append(("Gemini", gemini_key))
 
-    groq_key = st.session_state.get("input_groq_api", "").strip() or config.get("groq_api_key", "")
+    # 2. Credencial Groq
+    groq_key = (
+        st.session_state.get("input_groq_api", "").strip()
+        or config.get("groq_api_key", "")
+        or _buscar_secret_ou_env("GROQ_API_KEY")
+    )
     if groq_key:
         provedores.append(("Groq", groq_key))
 
-    cf_token = st.session_state.get("input_cloudflare_token", "").strip() or config.get("cloudflare_api_token", "")
-    cf_account = st.session_state.get("input_cloudflare_account", "").strip() or config.get("cloudflare_account_id", "")
+    # 3. Credencial Cloudflare
+    cf_token = (
+        st.session_state.get("input_cloudflare_token", "").strip()
+        or config.get("cloudflare_api_token", "")
+        or _buscar_secret_ou_env("CLOUDFLARE_API_TOKEN")
+    )
+    cf_account = (
+        st.session_state.get("input_cloudflare_account", "").strip()
+        or config.get("cloudflare_account_id", "")
+        or _buscar_secret_ou_env("CLOUDFLARE_ACCOUNT_ID")
+    )
     if cf_token and cf_account:
         provedores.append(("Cloudflare", (cf_token, cf_account)))
 
     if not provedores:
-        raise RuntimeError("Nenhuma chave de API configurada. Adicione sua chave do Gemini, Groq ou Cloudflare na barra lateral.")
+        raise RuntimeError("Nenhuma chave de API configurada. Adicione sua chave do Gemini, Groq ou Cloudflare na barra lateral ou nos Secrets da aplicação.")
 
     if provedor_preferido != "Automático":
         provedores = sorted(provedores, key=lambda x: 0 if x[0] == provedor_preferido else 1)
@@ -405,14 +451,36 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-fl
             if nome_prov == "Gemini":
                 client = genai.Client(api_key=credencial)
                 kwargs = {"system_instruction": sys_final, "temperature": temperature}
-                if use_web and st.session_state.get("usar_busca_web", False) and types is not None:
-                    kwargs["tools"] = [types.Tool(google_search=types.GoogleSearch())]
+
+                # Desativa bloqueios de moderação agressivos para garantir fluxo de prompts artísticos
+                if types is not None:
+                    kwargs["safety_settings"] = [
+                        types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                        types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                        types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                        types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                    ]
+                    if use_web and st.session_state.get("usar_busca_web", False):
+                        kwargs["tools"] = [types.Tool(google_search=types.GoogleSearch())]
+                    config_gen = types.GenerateContentConfig(**kwargs)
+                else:
+                    config_gen = kwargs
+
                 resp = client.models.generate_content(
                     model=modelo_gemini,
                     contents=user_prompt,
-                    config=types.GenerateContentConfig(**kwargs) if types is not None else kwargs,
+                    config=config_gen,
                 )
-                texto = getattr(resp, "text", "") or ""
+                
+                texto = ""
+                try:
+                    texto = resp.text or ""
+                except Exception:
+                    pass
+
+                if not texto and getattr(resp, "candidates", None):
+                    motivo = getattr(resp.candidates[0], "finish_reason", "INDEFINIDO")
+                    raise RuntimeError(f"Gemini bloqueou a resposta por moderação (Motivo: {motivo}).")
 
             elif nome_prov == "Groq":
                 payload = {
@@ -455,7 +523,7 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-fl
 
             texto = str(texto or "").strip()
             if not texto:
-                raise RuntimeError("Resposta vazia da API.")
+                raise RuntimeError("Resposta vazia retornada pelo provedor.")
 
             if canario in texto or any(m in texto for m in ["[REF-VERIF:", "PROTOCOLO DE SIGILO ABSOLUTO"]):
                 raise RuntimeError("Resposta com anomalia de segurança detectada.")
@@ -724,7 +792,7 @@ def renderizar_cockpit():
         unsafe_allow_html=True
     )
 
-    modelo_ia = st.session_state.get("modelo_gemini_selecionado", "gemini-3.8-flash")
+    modelo_ia = st.session_state.get("modelo_gemini_selecionado", "gemini-2.5-flash")
 
     # --------------------------------------------------------------------------
     # 1. CAMPO DE TEXTO LIVRE PRINCIPAL
@@ -768,54 +836,60 @@ def renderizar_cockpit():
                 st.rerun()
 
     # --------------------------------------------------------------------------
-    # TRATAMENTO DOS BOTÕES: PRÉ-PROMPT E COMPOSITÔMETRO
+    # TRATAMENTO DOS BOTÕES: PRÉ-PROMPT E COMPOSITÔMETRO (BLINDAGEM TRY-EXCEPT)
     # --------------------------------------------------------------------------
     if btn_preprompt:
         if not ideia_input.strip():
             st.warning("Escreva sua ideia antes de gerar o Pré-prompt.")
         else:
             with st.spinner("Construindo direção visual do Pré-prompt..."):
-                pre_texto = gerar_preprompt_visual(ideia_input.strip(), modelo_ia)
-                diag = analisar_no_compositometro(ideia_input.strip(), modelo_ia)
-                if pre_texto:
-                    st.session_state["ck_ideia"] = ideia_input.strip()
-                    st.session_state["ck_preprompt"] = pre_texto
-                    st.session_state["ck_diagnostico"] = diag
-                    for k in list(st.session_state.keys()):
-                        if k.startswith("sug_chk_"):
-                            st.session_state.pop(k, None)
-                    if diag:
-                        try:
-                            sug_lvl = int(str(diag.get("nivel_sensualidade_sugerido", 1)).strip()[0])
-                            if 1 <= sug_lvl <= len(OPCOES_SENSUALIDADE):
-                                st.session_state["ck_sens_slider"] = OPCOES_SENSUALIDADE[sug_lvl - 1]
-                        except Exception:
-                            pass
-                    st.rerun()
-                else:
-                    st.error("Não foi possível gerar o Pré-prompt no momento.")
+                try:
+                    pre_texto = gerar_preprompt_visual(ideia_input.strip(), modelo_ia)
+                    diag = analisar_no_compositometro(ideia_input.strip(), modelo_ia)
+                    if pre_texto:
+                        st.session_state["ck_ideia"] = ideia_input.strip()
+                        st.session_state["ck_preprompt"] = pre_texto
+                        st.session_state["ck_diagnostico"] = diag
+                        for k in list(st.session_state.keys()):
+                            if k.startswith("sug_chk_"):
+                                st.session_state.pop(k, None)
+                        if diag:
+                            try:
+                                sug_lvl = int(str(diag.get("nivel_sensualidade_sugerido", 1)).strip()[0])
+                                if 1 <= sug_lvl <= len(OPCOES_SENSUALIDADE):
+                                    st.session_state["ck_sens_slider"] = OPCOES_SENSUALIDADE[sug_lvl - 1]
+                            except Exception:
+                                pass
+                        st.rerun()
+                    else:
+                        st.error("Não foi possível gerar o Pré-prompt no momento.")
+                except Exception as ex:
+                    st.error(f"⚠️ Falha na geração do Pré-prompt: {ex}")
 
     if btn_avaliar:
         if not ideia_input.strip():
             st.warning("Escreva sua ideia antes de rodar o Compositômetro.")
         else:
             with st.spinner("Raio-X da composição em andamento..."):
-                diag = analisar_no_compositometro(ideia_input.strip(), modelo_ia)
-                if diag:
-                    st.session_state["ck_ideia"] = ideia_input.strip()
-                    st.session_state["ck_diagnostico"] = diag
-                    for k in list(st.session_state.keys()):
-                        if k.startswith("sug_chk_"):
-                            st.session_state.pop(k, None)
-                    try:
-                        sug_lvl = int(str(diag.get("nivel_sensualidade_sugerido", 1)).strip()[0])
-                        if 1 <= sug_lvl <= len(OPCOES_SENSUALIDADE):
-                            st.session_state["ck_sens_slider"] = OPCOES_SENSUALIDADE[sug_lvl - 1]
-                    except Exception:
-                        pass
-                    st.rerun()
-                else:
-                    st.error("Não foi possível processar a avaliação no momento.")
+                try:
+                    diag = analisar_no_compositometro(ideia_input.strip(), modelo_ia)
+                    if diag:
+                        st.session_state["ck_ideia"] = ideia_input.strip()
+                        st.session_state["ck_diagnostico"] = diag
+                        for k in list(st.session_state.keys()):
+                            if k.startswith("sug_chk_"):
+                                st.session_state.pop(k, None)
+                        try:
+                            sug_lvl = int(str(diag.get("nivel_sensualidade_sugerido", 1)).strip()[0])
+                            if 1 <= sug_lvl <= len(OPCOES_SENSUALIDADE):
+                                st.session_state["ck_sens_slider"] = OPCOES_SENSUALIDADE[sug_lvl - 1]
+                        except Exception:
+                            pass
+                        st.rerun()
+                    else:
+                        st.error("Não foi possível processar a avaliação no momento.")
+                except Exception as ex:
+                    st.error(f"⚠️ Falha no Compositômetro: {ex}")
 
     # --------------------------------------------------------------------------
     # 2. PRÉ-PROMPT VISUAL COM DESTAQUE DE CORES E LEGENDA
@@ -998,7 +1072,7 @@ def renderizar_cockpit():
                     st.session_state["ck_sens_usada"] = sens_escolhida
                     st.rerun()
                 except Exception as ex:
-                    st.error(f"Erro ao processar: {ex}")
+                    st.error(f"⚠️ Falha na geração do prompt especializado: {ex}")
 
     # --------------------------------------------------------------------------
     # 6. EXIBIÇÃO DO RESULTADO COMPILADO E DOWNLOADS (.TXT / .JSON)
@@ -1067,7 +1141,7 @@ def renderizar_sidebar():
         else:
             st.session_state.ps_provedor_manual = "Automático"
 
-        st.selectbox("Modelo Gemini", ["gemini-3.8-flash", "gemini-3.6-flash"], index=0, key="modelo_gemini_selecionado")
+        st.selectbox("Modelo Gemini", ["gemini-2.5-flash", "gemini-2.0-flash"], index=0, key="modelo_gemini_selecionado")
         k1 = st.text_input("Chave Google Gemini", value=config.get("chaves", {}).get("Chave 1", ""), type="password", key="input_key_1")
         k_groq = st.text_input("Chave Groq API", value=config.get("groq_api_key", ""), type="password", key="input_groq_api")
         cf_acc = st.text_input("Cloudflare Account ID", value=config.get("cloudflare_account_id", ""), key="input_cloudflare_account")
@@ -1078,7 +1152,7 @@ def renderizar_sidebar():
         if st.button("💾 Salvar Configurações", type="primary", use_container_width=True):
             salvar_config(
                 chaves_dict={"Chave 1": k1, "Chave 2": config.get("chaves", {}).get("Chave 2", "")},
-                modelo_padrao=st.session_state.get("modelo_gemini_selecionado", "gemini-3.8-flash"),
+                modelo_padrao=st.session_state.get("modelo_gemini_selecionado", "gemini-2.5-flash"),
                 usar_busca_web=web_search_chk,
                 email=st.session_state.get("user_email", ""),
                 groq_api_key=k_groq,
