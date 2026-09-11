@@ -176,10 +176,10 @@ st.markdown(
 # ==============================================================================
 # 2. CONSTANTES, DIRETÓRIOS E LISTAS
 # ==============================================================================
-APPS_SCRIPT_URL = "[https://script.google.com/macros/s/AKfycbyLlqkhYChBHM6K08DnNP67C9t7E2kRS3N0pINa65oYa81--Cv4amoJm3OZ_v_MSDA7/exec](https://script.google.com/macros/s/AKfycbyLlqkhYChBHM6K08DnNP67C9t7E2kRS3N0pINa65oYa81--Cv4amoJm3OZ_v_MSDA7/exec)"
-LINK_KIWIFY_15_DIAS = "[https://pay.kiwify.com.br/MXVL98k](https://pay.kiwify.com.br/MXVL98k)"
-LINK_KIWIFY_30_DIAS = "[https://pay.kiwify.com.br/dyfEGe5](https://pay.kiwify.com.br/dyfEGe5)"
-LINK_KIWIFY_90_DIAS = "[https://pay.kiwify.com.br/xo0m3rF](https://pay.kiwify.com.br/xo0m3rF)"
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyLlqkhYChBHM6K08DnNP67C9t7E2kRS3N0pINa65oYa81--Cv4amoJm3OZ_v_MSDA7/exec"
+LINK_KIWIFY_15_DIAS = "https://pay.kiwify.com.br/MXVL98k"
+LINK_KIWIFY_30_DIAS = "https://pay.kiwify.com.br/dyfEGe5"
+LINK_KIWIFY_90_DIAS = "https://pay.kiwify.com.br/xo0m3rF"
 
 PASTA_CONFIGS = "configs_usuarios"
 PASTA_RESULTADOS = "resultados"
@@ -398,7 +398,7 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-fl
                     "temperature": temperature,
                 }
                 resp = requests.post(
-                    "[https://api.groq.com/openai/v1/chat/completions](https://api.groq.com/openai/v1/chat/completions)",
+                    "https://api.groq.com/openai/v1/chat/completions",
                     headers={"Authorization": f"Bearer {credencial}", "Content-Type": "application/json"},
                     json=payload,
                     timeout=90
@@ -409,7 +409,7 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-fl
             elif nome_prov == "Cloudflare":
                 token, account = credencial
                 model_cf = st.session_state.get("modelo_cloudflare", config.get("modelo_cloudflare", "@cf/openai/gpt-oss-120b"))
-                endpoint = f"[https://api.cloudflare.com/client/v4/accounts/](https://api.cloudflare.com/client/v4/accounts/){account}/ai/run/{model_cf}"
+                endpoint = f"https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/{model_cf}"
                 payload = {
                     "messages": [
                         {"role": "system", "content": sys_final},
@@ -849,4 +849,303 @@ def renderizar_cockpit():
                     if 1 <= sug_lvl <= 6:
                         st.session_state["ck_sens_slider"] = OPCOES_SENSUALIDADE[sug_lvl - 1]
                     st.rerun()
-                else
+                else:
+                    st.error("Não foi possível processar a avaliação no momento.")
+
+    # --------------------------------------------------------------------------
+    # 2. PRÉ-PROMPT VISUAL COM DESTAQUE DE CORES E LEGENDA
+    # --------------------------------------------------------------------------
+    if st.session_state.get("ck_preprompt"):
+        with st.container(border=True):
+            st.markdown("### 🎨 Pré-prompt (Direção Visual Ajustada)")
+            st.caption("Visualização da composição desenvolvida em português antes da tradução técnica para o motor de imagem.")
+            
+            # Legenda indicando quem escreveu o que
+            st.markdown(
+                "<div class='ps-legend'>"
+                "<span><span class='ps-user-word'>Sua Ideia</span> (Inserção do Usuário)</span>"
+                " &nbsp;&nbsp;•&nbsp;&nbsp; "
+                "<span><span class='ps-ai-word'>Desenvolvimento Óptico da IA</span> (Direção Visual)</span>"
+                "</div>",
+                unsafe_allow_html=True
+            )
+
+            # Texto com marcação colorida
+            markup = _ps_markup_origin(
+                st.session_state["ck_preprompt"],
+                st.session_state.get("ck_ideia", "")
+            )
+            st.markdown(f"<div class='ps-preprompt'>{markup}</div>", unsafe_allow_html=True)
+
+            # Campo editável para ajustes finos
+            preprompt_editado = st.text_area(
+                "Ajustar o Pré-prompt se desejar (o texto abaixo será a base da compilação técnica):",
+                value=st.session_state["ck_preprompt"],
+                height=130,
+                key="ck_preprompt_editado"
+            )
+            if preprompt_editado != st.session_state["ck_preprompt"]:
+                st.session_state["ck_preprompt"] = preprompt_editado
+
+    # --------------------------------------------------------------------------
+    # 3. O COMPOSITÔMETRO (FEEDBACK VISUAL PASSIVO + SUGESTÕES DE APOIO)
+    # --------------------------------------------------------------------------
+    diag_atual = st.session_state.get("ck_diagnostico")
+    if diag_atual:
+        with st.container(border=True):
+            st.markdown("#### 📊 Raio-X do Compositômetro")
+            
+            # Badges de Status
+            col_stat1, col_stat2, col_stat3, col_stat4, col_stat5 = st.columns(5)
+            
+            def badge_cor(status):
+                if status in ["Definido", "Presente"]:
+                    return "comp-green", "✓"
+                elif status in ["Vago", "Estática"]:
+                    return "comp-amber", "!"
+                else:
+                    return "comp-blue", "⚙️"
+
+            c1, i1 = badge_cor(diag_atual.get("sujeito_status", ""))
+            c2, i2 = badge_cor(diag_atual.get("acao_status", ""))
+            c3, i3 = badge_cor(diag_atual.get("cenario_status", ""))
+            c4, i4 = badge_cor(diag_atual.get("iluminacao_status", ""))
+            c5, i5 = badge_cor(diag_atual.get("camera_status", ""))
+
+            with col_stat1:
+                st.markdown(f"<div class='comp-badge {c1}'>{i1} Sujeito: {diag_atual.get('sujeito_status')}</div>", unsafe_allow_html=True)
+            with col_stat2:
+                st.markdown(f"<div class='comp-badge {c2}'>{i2} Ação: {diag_atual.get('acao_status')}</div>", unsafe_allow_html=True)
+            with col_stat3:
+                st.markdown(f"<div class='comp-badge {c3}'>{i3} Cenário: {diag_atual.get('cenario_status')}</div>", unsafe_allow_html=True)
+            with col_stat4:
+                st.markdown(f"<div class='comp-badge {c4}'>{i4} Luz: {diag_atual.get('iluminacao_status')}</div>", unsafe_allow_html=True)
+            with col_stat5:
+                st.markdown(f"<div class='comp-badge {c5}'>{i5} Câmera: {diag_atual.get('camera_status')}</div>", unsafe_allow_html=True)
+
+            if diag_atual.get("diagnostico_texto"):
+                st.caption(f"ℹ️ **Diagnóstico:** {diag_atual.get('diagnostico_texto')}")
+
+            # Checkboxes de Apoio Dinâmico (1.1)
+            sugestoes = diag_atual.get("sugestoes_cirurgicas", [])
+            if sugestoes:
+                st.markdown("##### ✨ Sugestões Cirúrgicas Opcionais (Marque para incorporar):")
+                selecionadas = []
+                for idx, sug in enumerate(sugestoes):
+                    if st.checkbox(sug, key=f"sug_chk_{idx}"):
+                        selecionadas.append(sug)
+                st.session_state["ck_sugestoes_marcadas"] = selecionadas
+
+    # --------------------------------------------------------------------------
+    # 3. MODULADOR DE SENSUALIDADE / RISCO NSFW (INDICADOR + LIMITADOR DESLIZANTE)
+    # --------------------------------------------------------------------------
+    st.write("")
+    with st.container(border=True):
+        st.markdown("#### 🎚️ Nível de Sensualidade & Modéstia")
+        st.caption("A IA pré-ajusta o nível com base na cena. Você tem total controle para modular a barra; nossa função é informar os riscos de compatibilidade.")
+
+        if "ck_sens_slider" not in st.session_state:
+            st.session_state["ck_sens_slider"] = OPCOES_SENSUALIDADE[1]
+
+        sens_escolhida = st.select_slider(
+            "Selecione o nível desejado:",
+            options=OPCOES_SENSUALIDADE,
+            key="ck_sens_slider"
+        )
+
+        num_nivel = int(sens_escolhida[0]) if sens_escolhida and sens_escolhida[0].isdigit() else 1
+
+        # Legenda Dinâmica de Risco (Transparência Técnica sem Paternalismo)
+        if num_nivel in [1, 2]:
+            st.markdown(
+                "<div class='risk-banner risk-green'>"
+                "🟢 <b>Zona Segura (SFW):</b> Totalmente compatível com todas as plataformas (Midjourney, DALL-E, Flux e ComfyUI). Risco zero de bloqueio."
+                "</div>",
+                unsafe_allow_html=True
+            )
+        elif num_nivel in [3, 4]:
+            st.markdown(
+                "<div class='risk-banner risk-amber'>"
+                "🟡 <b>Zona Moderada (Ecchi / Sensual):</b> Pode sofrer avisos ou rejeição em APIs com filtros rígidos (DALL-E / Bing / Midjourney). Otimizado para modelos locais (Pony SDXL, Flux local, SDXL Base)."
+                "</div>",
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown(
+                "<div class='risk-banner risk-rose'>"
+                "🔴 <b>Zona Explícita (Picante / Sem Censura):</b> Alto risco de bloqueio em ferramentas comerciais da Web. Projetado para checkpoints locais sem censura (Pony SDXL / Illustrious no ComfyUI)."
+                "</div>",
+                unsafe_allow_html=True
+            )
+
+    # --------------------------------------------------------------------------
+    # 4. SELETOR DE MOTOR DESTINO
+    # --------------------------------------------------------------------------
+    col_dest1, col_dest2 = st.columns([7, 3])
+    with col_dest1:
+        destino_selecionado = st.selectbox(
+            "Plataforma / Motor de Imagem Alvo:",
+            OPCOES_DESTINO,
+            index=0,
+            key="ck_destino_select"
+        )
+    with col_dest2:
+        st.write("")
+        st.write("")
+        btn_executar = st.button("⚡ Gerar Prompt Agora", type="primary", use_container_width=True, key="btn_executar_final")
+
+    # --------------------------------------------------------------------------
+    # EXECUÇÃO DA SÍNTESE TÉCNICA
+    # --------------------------------------------------------------------------
+    if btn_executar:
+        if not ideia_input.strip():
+            st.warning("Por favor, descreva sua ideia no campo de texto.")
+        else:
+            real_dest = destino_selecionado
+            if real_dest == "Recomendado automaticamente":
+                real_dest = "ComfyUI / Pony SDXL" if num_nivel >= 4 else "Midjourney v6.1"
+
+            sug_aceitas = st.session_state.get("ck_sugestoes_marcadas", [])
+
+            texto_base = st.session_state.get("ck_preprompt", ideia_input.strip())
+            with st.spinner(f"Compilando prompt otimizado para {real_dest}..."):
+                try:
+                    resultado, prov = sintetizar_prompt_final(
+                        texto_base,
+                        sens_escolhida,
+                        real_dest,
+                        sug_aceitas,
+                        modelo_ia
+                    )
+                    st.session_state["ck_ideia"] = ideia_input.strip()
+                    st.session_state["ck_prompt_final"] = resultado
+                    st.session_state["ck_prov_usado"] = prov
+                    st.session_state["ck_dest_usado"] = real_dest
+                    st.rerun()
+                except Exception as ex:
+                    st.error(f"Erro ao processar: {ex}")
+
+    # --------------------------------------------------------------------------
+    # 5. EXIBIÇÃO DO RESULTADO COMPILADO
+    # --------------------------------------------------------------------------
+    if st.session_state.get("ck_prompt_final"):
+        st.write("")
+        st.markdown("---")
+        st.markdown(f"### 📋 Prompt Final Especializado ({st.session_state.get('ck_dest_usado', 'Padrão')})")
+        st.caption(f"Compilado com motor de alta precisão via {st.session_state.get('ck_prov_usado', 'Prompt Studio')}.")
+
+        st.code(st.session_state["ck_prompt_final"], language="markdown")
+
+        col_d1, col_d2 = st.columns(2)
+        with col_d1:
+            st.download_button(
+                "📥 Baixar Prompt (.TXT)",
+                data=st.session_state["ck_prompt_final"],
+                file_name=f"prompt_cockpit_{int(time.time())}.txt",
+                mime="text/plain",
+                use_container_width=True,
+                key="ck_dn_btn"
+            )
+        with col_d2:
+            if st.button("💾 Salvar Cópia no Servidor", use_container_width=True, key="ck_save_btn"):
+                msg = salvar_resultado_manual(
+                    st.session_state["ck_prompt_final"],
+                    "cockpit_prompt",
+                    email=email
+                )
+                st.info(msg)
+
+# ==============================================================================
+# 8. BARRA LATERAL (CONFIGURAÇÕES E CREDENCIAIS)
+# ==============================================================================
+def renderizar_sidebar():
+    st.sidebar.markdown("## ⚙️ Configurações do Cockpit")
+    st.sidebar.caption(f"Usuário: **{st.session_state.get('user_email', '')}**")
+    if st.session_state.get("expiracao"):
+        st.sidebar.caption(f"Validade do Acesso: **{st.session_state.expiracao}**")
+
+    if st.sidebar.button("🚪 Sair do Sistema", use_container_width=True):
+        st.session_state.autenticado = False
+        st.rerun()
+
+    config = carregar_config(st.session_state.get("user_email", ""))
+
+    with st.sidebar.expander("🔑 Chaves de API e Provedores", expanded=False):
+        st.selectbox("Seleção de Provedor", ["Automático", "Avançado"], key="ps_selection_mode")
+        if st.session_state.ps_selection_mode == "Avançado":
+            st.selectbox("Provedor Prioritário", ["Automático", "Gemini", "Groq", "Cloudflare"], key="ps_provedor_manual")
+        else:
+            st.session_state.ps_provedor_manual = "Automático"
+
+        st.selectbox("Modelo Gemini", ["gemini-3.8-flash", "gemini-3.5-flash"], index=0, key="modelo_gemini_selecionado")
+        k1 = st.text_input("Chave Google Gemini", value=config.get("chaves", {}).get("Chave 1", ""), type="password", key="input_key_1")
+        k_groq = st.text_input("Chave Groq API", value=config.get("groq_api_key", ""), type="password", key="input_groq_api")
+        cf_acc = st.text_input("Cloudflare Account ID", value=config.get("cloudflare_account_id", ""), key="input_cloudflare_account")
+        cf_tok = st.text_input("Cloudflare Token", value=config.get("cloudflare_api_token", ""), type="password", key="input_cloudflare_token")
+        fallback_chk = st.checkbox("Fallback Automático", value=config.get("fallback_automatico", True), key="fallback_automatico")
+        web_search_chk = st.checkbox("Busca Web Ativa", value=config.get("usar_busca_web", False), key="usar_busca_web")
+
+        if st.button("💾 Salvar Configurações", type="primary", use_container_width=True):
+            salvar_config(
+                chaves_dict={"Chave 1": k1, "Chave 2": config.get("chaves", {}).get("Chave 2", "")},
+                modelo_padrao=st.session_state.get("modelo_gemini_selecionado", "gemini-3.8-flash"),
+                usar_busca_web=web_search_chk,
+                email=st.session_state.get("user_email", ""),
+                groq_api_key=k_groq,
+                cloudflare_account_id=cf_acc,
+                cloudflare_api_token=cf_tok,
+                provedor_ia=st.session_state.get("ps_provedor_manual", "Gemini"),
+                fallback_automatico=fallback_chk
+            )
+            st.sidebar.success("✅ Configurações salvas com sucesso!")
+
+# ==============================================================================
+# 9. PONTO DE ENTRADA DO APLICATIVO
+# ==============================================================================
+if "autenticado" not in st.session_state:
+    st.session_state.autenticado = False
+if "user_email" not in st.session_state:
+    st.session_state.user_email = ""
+if "expiracao" not in st.session_state:
+    st.session_state.expiracao = ""
+
+if not st.session_state.autenticado:
+    st.markdown(
+        "<div class='ps-login'>"
+        "<div class='ps-kicker'>PROMPT STUDIO COCKPIT</div>"
+        "<h1 class='ps-title'>Atrito Zero. Máxima Fidelidade.</h1>"
+        "<p class='ps-subtitle'>A evolução da geração de prompts: livre de caixas burocráticas, com diagnóstico óptico em tempo real e sem censura moralista.</p>"
+        "</div>",
+        unsafe_allow_html=True
+    )
+    st.divider()
+
+    col_l1, col_l2, col_l3 = st.columns([2, 6, 2])
+    with col_l2:
+        email_login = st.text_input("E-mail Cadastrado", key="login_email_cockpit", placeholder="seu-email@exemplo.com")
+        if st.button("Entrar no Cockpit", type="primary", use_container_width=True, key="btn_login_cockpit"):
+            if not email_login.strip():
+                st.warning("Por favor, digite seu e-mail cadastrado.")
+            else:
+                ok, exp, erro = verificar_acesso_sheets(email_login)
+                if ok:
+                    st.session_state.autenticado = True
+                    st.session_state.user_email = email_login.strip().lower()
+                    st.session_state.expiracao = exp
+                    st.rerun()
+                elif erro:
+                    st.error(erro)
+                else:
+                    st.error("E-mail não encontrado ou assinatura expirada.")
+
+        st.write("")
+        st.markdown("#### Planos e Assinaturas:")
+        st.link_button("Plano 15 Dias — R$ 14,99", LINK_KIWIFY_15_DIAS, use_container_width=True)
+        st.link_button("Plano 30 Dias — R$ 29,99", LINK_KIWIFY_30_DIAS, use_container_width=True)
+        st.link_button("Plano 90 Dias — R$ 59,99", LINK_KIWIFY_90_DIAS, use_container_width=True)
+
+else:
+    renderizar_sidebar()
+    st.markdown("<div class='ps-brand'>PROMPT STUDIO COCKPIT</div>", unsafe_allow_html=True)
+    st.markdown("<div class='ps-header-note'>Direção Visual Inteligente · Diagnóstico Óptico em Tempo Real</div>", unsafe_allow_html=True)
+    renderizar_cockpit()
