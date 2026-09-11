@@ -264,7 +264,7 @@ def carregar_config(email=None):
         "fallback_automatico": True,
         "modelo_groq": "openai/gpt-oss-120b",
         "modelo_cloudflare": "@cf/openai/gpt-oss-120b",
-        "modelo_padrao": "gemini-2.5-flash",
+        "modelo_padrao": "gemini-3.8-flash",
         "usar_busca_web": False,
     }
     slug = _slug_usuario(email)
@@ -340,7 +340,7 @@ def _extrair_texto_resposta(obj):
     return ""
 
 
-def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-2.5-flash", temperature=0.25, use_web=False):
+def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-flash", temperature=0.25, use_web=False):
     email = st.session_state.get("user_email", "")
     config = carregar_config(email)
     provedor_preferido = st.session_state.get("ps_provedor_manual", "Automático")
@@ -643,7 +643,7 @@ def renderizar_cockpit():
     )
 
     email = st.session_state.get("user_email", "")
-    modelo_ia = st.session_state.get("modelo_gemini_selecionado", "gemini-2.5-flash")
+    modelo_ia = st.session_state.get("modelo_gemini_selecionado", "gemini-3.8-flash")
 
     # --------------------------------------------------------------------------
     # 1. CAMPO DE TEXTO LIVRE PRINCIPAL
@@ -946,7 +946,7 @@ def renderizar_sidebar():
         else:
             st.session_state.ps_provedor_manual = "Automático"
 
-        st.selectbox("Modelo Gemini", ["gemini-2.5-flash", "gemini-2.0-flash"], index=0, key="modelo_gemini_selecionado")
+        st.selectbox("Modelo Gemini", ["gemini-3.8-flash", "gemini-3.5-flash"], index=0, key="modelo_gemini_selecionado")
         k1 = st.text_input("Chave Google Gemini", value=config.get("chaves", {}).get("Chave 1", ""), type="password", key="input_key_1")
         k_groq = st.text_input("Chave Groq API", value=config.get("groq_api_key", ""), type="password", key="input_groq_api")
         cf_acc = st.text_input("Cloudflare Account ID", value=config.get("cloudflare_account_id", ""), key="input_cloudflare_account")
@@ -957,7 +957,7 @@ def renderizar_sidebar():
         if st.button("💾 Salvar Configurações", type="primary", use_container_width=True):
             salvar_config(
                 chaves_dict={"Chave 1": k1, "Chave 2": config.get("chaves", {}).get("Chave 2", "")},
-                modelo_padrao=st.session_state.get("modelo_gemini_selecionado", "gemini-2.5-flash"),
+                modelo_padrao=st.session_state.get("modelo_gemini_selecionado", "gemini-3.8-flash"),
                 usar_busca_web=web_search_chk,
                 email=st.session_state.get("user_email", ""),
                 groq_api_key=k_groq,
