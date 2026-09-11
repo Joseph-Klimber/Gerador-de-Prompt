@@ -412,6 +412,34 @@ def _extrair_texto_resposta(obj):
     return ""
 
 
+def _erro_amigavel(provedor, erro):
+    """Converte falhas internas em uma orientação curta de causa e solução."""
+    texto = str(erro or "").lower()
+    nome = str(provedor)
+
+    if isinstance(erro, requests.exceptions.Timeout) or "timeout" in texto or "timed out" in texto:
+        return f"{nome}: o servidor demorou para responder. Solução: aguarde alguns segundos e tente novamente; se persistir, use outro provedor."
+    if isinstance(erro, requests.exceptions.ConnectionError) or any(x in texto for x in ("connection", "connect", "dns", "name or service")):
+        return f"{nome}: não foi possível conectar ao servidor. Solução: verifique sua internet e tente novamente."
+    if "401" in texto or "unauthorized" in texto or "invalid api key" in texto or "api key not valid" in texto:
+        return f"{nome}: a chave de acesso foi recusada. Solução: confira, substitua e salve a chave de API."
+    if "403" in texto or "permission" in texto or "forbidden" in texto:
+        return f"{nome}: a chave não tem permissão para usar este serviço. Solução: habilite a API ou gere uma chave com permissão de geração de texto."
+    if "404" in texto or "not found" in texto or "unknown model" in texto or "model_not_found" in texto:
+        return f"{nome}: o modelo selecionado não está disponível para esta conta. Solução: escolha um modelo disponível na lista do provedor."
+    if "429" in texto or "rate limit" in texto or "quota" in texto or "resource exhausted" in texto:
+        return f"{nome}: o limite de uso foi atingido. Solução: aguarde a renovação do limite ou use outro provedor."
+    if "400" in texto or "invalid argument" in texto or "bad request" in texto:
+        return f"{nome}: a solicitação não foi aceita pelo servidor. Solução: tente novamente com uma ideia menor ou selecione outro modelo."
+    if "blocked" in texto or "block_reason" in texto or "safety" in texto or "filtro" in texto:
+        return f"{nome}: o conteúdo foi bloqueado pelas regras de segurança do servidor. Solução: reduza o nível de sensualidade ou remova elementos que possam ser interpretados como inadequados."
+    if "json" in texto or "resposta vazia" in texto or "não retornou texto" in texto:
+        return f"{nome}: o servidor respondeu em um formato que não pôde ser processado. Solução: tente novamente; se persistir, use outro provedor."
+    if "http" in texto or "server error" in texto or "internal" in texto or "503" in texto or "502" in texto:
+        return f"{nome}: o serviço está temporariamente indisponível. Solução: aguarde um momento e tente novamente ou use outro provedor."
+    return f"{nome}: ocorreu uma falha temporária no processamento. Solução: tente novamente; se persistir, troque o provedor ou revise a chave."
+
+
 def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-flash", temperature=0.2, use_web=False):
     email = st.session_state.get("user_email", "")
     config = carregar_config(email)
@@ -454,7 +482,7 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-fl
         provedores.append(("Cloudflare", (cf_token, cf_account)))
 
     if not provedores:
-        raise RuntimeError("Nenhuma chave de API configurada. Adicione sua chave na barra lateral ou em Secrets.")
+        raise RuntimeError("Nenhum provedor está configurado. Causa: não há uma chave de API disponível. Solução: informe e salve pelo menos uma chave na barra lateral.")
 
     if provedor_preferido != "Automático":
         provedores = sorted(provedores, key=lambda x: 0 if x[0] == provedor_preferido else 1)
@@ -573,7 +601,7 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-fl
             return texto, nome_prov
 
         except Exception as e:
-            erros.append(f"{nome_prov}: {e}")
+            erros.append(_erro_amigavel(nome_prov, e))
             indice_atual = provedores.index((nome_prov, credencial))
             if indice_atual < len(provedores) - 1:
                 proximo = provedores[indice_atual + 1][0]
@@ -583,7 +611,7 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-fl
                     icon="🔄",
                 )
 
-    raise RuntimeError("Falha em todos os provedores: " + " | ".join(erros))
+    raise RuntimeError("Não foi possível concluir a avaliação.\n\n" + "\n".join(erros))
 
 PS_STOPWORDS = {
     "a", "o", "e", "de", "da", "do", "das", "dos", "um", "uma", "em", "no", "na",
@@ -836,8 +864,12 @@ def analisar_no_compositometro(texto_ideia, modelo_gemini):
         match = re.search(r'\{.*\}', texto_json, re.DOTALL)
         dados = json.loads(match.group(0)) if match else json.loads(texto_json.strip())
         return _normalizar_diagnostico(dados)
+    except RuntimeError:
+        raise
+    except json.JSONDecodeError:
+        raise RuntimeError("O servidor respondeu, mas o diagnóstico veio em formato inválido. Solução: tente novamente ou use outro provedor.")
     except Exception:
-        return None
+        raise RuntimeError("A avaliação não pôde ser concluída. Solução: tente novamente ou troque o provedor.")
 
 
 def sintetizar_prompt_final(texto_ideia, nivel_sensualidade, destino, sugestoes_aceitas, modelo_gemini):
