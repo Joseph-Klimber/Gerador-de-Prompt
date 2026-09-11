@@ -469,9 +469,12 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-fl
     for nome_prov, credencial in provedores:
         try:
             if nome_prov == "Gemini":
-                # Força modelo Flash >= 3.8
+                # Força modelo Flash >= 3.0
                 mod_gem = modelo_gemini if modelo_gemini in MODELOS_GEMINI_VALIDOS else "gemini-3.8-flash"
-                client = genai.Client(api_key=credencial)
+                client_kwargs = {"api_key": credencial}
+                if types is not None and hasattr(types, "HttpOptions"):
+                    client_kwargs["http_options"] = types.HttpOptions(timeout=15000)
+                client = genai.Client(**client_kwargs)
                 kwargs = {"system_instruction": sys_final, "temperature": temperature}
 
                 if types is not None:
@@ -481,7 +484,9 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-fl
                         types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
                         types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
                     ]
-                    if use_web and st.session_state.get("usar_busca_web", False):
+                    # Busca web é opt-in e só pode ser usada pelo Gemini.
+                    busca_web_ativa = bool(use_web is True and st.session_state.get("usar_busca_web", False))
+                    if busca_web_ativa:
                         kwargs["tools"] = [types.Tool(google_search=types.GoogleSearch())]
                     config_gen = types.GenerateContentConfig(**kwargs)
                 else:
@@ -527,7 +532,7 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-fl
                     "https://api.groq.com/openai/v1/chat/completions",
                     headers={"Authorization": f"Bearer {credencial}", "Content-Type": "application/json"},
                     json=payload,
-                    timeout=60
+                    timeout=15
                 )
                 if resp.status_code != 200:
                     raise RuntimeError(f"Provedor respondeu HTTP {resp.status_code}.")
@@ -552,7 +557,7 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-fl
                     endpoint,
                     headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
                     json=payload,
-                    timeout=60
+                    timeout=15
                 )
                 if resp.status_code != 200:
                     raise RuntimeError(f"Provedor respondeu HTTP {resp.status_code}.")
@@ -569,6 +574,14 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-fl
 
         except Exception as e:
             erros.append(f"{nome_prov}: {e}")
+            indice_atual = provedores.index((nome_prov, credencial))
+            if indice_atual < len(provedores) - 1:
+                proximo = provedores[indice_atual + 1][0]
+                st.warning(
+                    f"⚠️ O servidor {nome_prov} não respondeu como esperado. "
+                    f"Mudando automaticamente para o servidor {proximo}; aguarde alguns segundos.",
+                    icon="🔄",
+                )
 
     raise RuntimeError("Falha em todos os provedores: " + " | ".join(erros))
 
@@ -1270,8 +1283,13 @@ def renderizar_sidebar():
         cf_acc = st.text_input("Cloudflare Account ID", value=config.get("cloudflare_account_id", ""), key="input_cloudflare_account")
         cf_tok = st.text_input("Cloudflare Token", value=config.get("cloudflare_api_token", ""), type="password", key="input_cloudflare_token")
         fallback_chk = st.checkbox("Fallback Automático", value=config.get("fallback_automatico", True), key="fallback_automatico")
-        web_search_chk = st.checkbox("Busca Web Ativa", value=config.get("usar_busca_web", False), key="usar_busca_web")
-        st.caption("A busca web é aplicada somente quando o provedor Gemini estiver sendo usado.")
+        web_search_chk = st.checkbox(
+            "Buscar na Web (opcional)",
+            value=config.get("usar_busca_web", False),
+            key="usar_busca_web",
+            help="Desativada por padrão. Só será usada se você marcar esta opção e o Gemini estiver ativo.",
+        )
+        st.caption("Busca web desativada por padrão; nunca participa do fallback em Groq ou Cloudflare.")
 
         if st.button("💾 Salvar Configurações", type="primary", use_container_width=True):
             salvar_config(
