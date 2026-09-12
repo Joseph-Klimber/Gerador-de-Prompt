@@ -734,7 +734,7 @@ def processar_imagem_visao(arquivo_imagem, modo_leitura, modelo_gemini):
             dados = json.loads(limpo)
             
             html_colorido = f"""
-            <div style="background: #ffffff; border: 1px solid var(--ps-line); border-radius: 12px; padding: 1.25rem; font-size: 1.02rem; line-height: 1.6; margin-bottom: 1.2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+            <div style="background: #ffffff; color: #0f172a; border: 1px solid var(--ps-line); border-radius: 12px; padding: 1.25rem; font-size: 1.02rem; line-height: 1.6; margin-bottom: 1.2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
                 <div style="font-size: 0.8rem; font-weight: bold; color: var(--ps-muted); margin-bottom: 8px; text-transform: uppercase;">Leitura Paramétrica Concluída:</div>
                 A imagem mostra <span style="color:#2563eb; font-weight:600; background-color:#eff6ff; padding:2px 4px; border-radius:4px;">{dados.get('sujeito', '')}</span>, 
                 que está <span style="color:#059669; font-weight:600; background-color:#ecfdf5; padding:2px 4px; border-radius:4px;">{dados.get('acao', '')}</span>. 
