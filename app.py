@@ -2,8 +2,7 @@
 """
 Prompt Studio Cockpit — Interface Minimalista de Alta Precisão
 Atrito zero para o usuário: Entrada livre de ideias + Compositômetro inteligente +
-Slider de Sensualidade com alerta transparente de risco de censura +
-Motor técnico mestre dinâmico (Injeção Granular por Modelo) + Transferência de Estilo.
+Agentes Modificadores Unificados (Shift-Left Architecture).
 """
 
 import os
@@ -208,7 +207,7 @@ BANCO_DE_MOTORES = {
     "Flux.1 / Flux.2 (Klein)": {
         "regra_positivo": "Parágrafo narrativo longo, fluido e hiper-descritivo em inglês. SEM tags separadas por vírgula e SEM underscores. Descreva microtexturas (poros, fios de tecido, poeira no ar), realismo da lente da câmera (ex: 35mm lens, f/1.8) e como a iluminação interage com a física dos materiais na cena.",
         "regra_negativo": None,
-        "dica_tecnica": "Modelos Flux (Dev/Klein) operam melhor sem prompt negativo. Foque na riqueza da prosa fotográfica."
+        "dica_tecnica": "Modelos Flux operam melhor sem prompt negativo. Foque na riqueza da prosa fotográfica."
     },
     "Midjourney v6.1+": {
         "regra_positivo": "Frases objetivas separadas por vírgulas em inglês natural. Foque na estética cinematográfica, direção de arte, paleta de cores (ex: teal and orange) e equipamento fotográfico exato (ex: shot on RED V-Raptor, Kodak Portra 400). Termine OBRIGATORIAMENTE o prompt com os parâmetros: --ar 16:9 --v 6.1 --stylize 250",
@@ -223,7 +222,7 @@ BANCO_DE_MOTORES = {
     "Ideogram 4": {
         "regra_positivo": "Foco absurdo em diagramação, coerência espacial e design gráfico. Se a ideia do usuário incluir palavras escritas, letreiros, placas ou estampas, VOCÊ DEVE colocar o texto exato em inglês ENTRE ASPAS DUPLAS (ex: wearing a shirt that says \"HELLO\"). Especifique a fonte tipográfica (ex: bold sans-serif neon font).",
         "regra_negativo": None,
-        "dica_tecnica": "Ideogram 4 possui renderização tipográfica perfeita. Use aspas duplas (\" \") para textos."
+        "dica_tecnica": "Ideogram possui renderização tipográfica perfeita. Use aspas duplas (\" \") para textos."
     },
     "Krea 2": {
         "regra_positivo": "Inglês direto, focado na estrutura espacial. Divida mentalmente a cena: Foreground (primeiro plano), Midground (meio-termo), Background (fundo). Palavras de forte impacto visual, focando no contraste e nas formas.",
@@ -258,7 +257,6 @@ def _slug_usuario(email):
 
 
 def verificar_acesso_sheets(email):
-    """Verifica e-mail e checa se a assinatura está dentro da validade."""
     try:
         email_limpo = (email or "").strip().lower()
         response = requests.get(
@@ -519,119 +517,97 @@ def _ps_markup_origin(preprompt_text, original_text):
     return "".join(pieces)
 
 
+# ==============================================================================
+# 5. ENGENHARIA DE PROMPT: COMPOSITÔMETRO E SYSTEM INSTRUCTION MESTRE
+# ==============================================================================
+
 SYS_GERADOR_PREPROMPT = r"""Você é o Diretor de Arte Óptica e Composição Visual do Prompt Studio.
 Sua missão é gerar um PRÉ-PROMPT visual completo, cinematográfico e coeso em Português a partir da ideia do usuário.
 
 REGRAS MANDATÓRIAS:
 1. PRESERVAÇÃO INTEGRAL DA IDEIA (INVIOLABILIDADE):
-   - Preserve rigorosamente os nomes de personagens, franquias, gênero, cores, objetos e ações fornecidos pelo usuário. Não troque, não omita e não resuma.
+   - Preserve rigorosamente os nomes de personagens, franquias, gênero, cores e ações fornecidos. Não troque, não omita.
 2. EXPANSÃO ÓPTICA E FÍSICA (ZERO FLUFF / ZERO POESIA):
-   - Adicione somente o que uma câmera ótica profissional captaria: fonte e ângulo da iluminação, sombras, texturas de materiais, disposição espacial de planos (primeiro plano, meio termo e fundo), enquadramento de câmera e atmosfera tangível.
-   - É ESTRITAMENTE PROIBIDO usar metáforas poéticas ou conceitos invisíveis (ex: NUNCA use 'sensação de nostalgia', 'vento sussurra segredos', 'aura de bravura', 'testamento ao heroísmo').
-3. SAÍDA EXCLUSIVA:
-   - Responda APENAS com a descrição visual coesa em Português (um texto fluido e denso).
-   - Não use títulos, introduções, saudações ou explicações."""
+   - Adicione somente o que uma câmera profissional captaria: fonte de iluminação, sombras, texturas, cenários palpáveis.
+   - É ESTRITAMENTE PROIBIDO usar metáforas poéticas ou conceitos invisíveis.
+3. SAÍDA EXCLUSIVA: Responda APENAS com a descrição visual coesa em Português. Não use títulos."""
 
 SYS_COMPOSITOMETRO = r"""Você é o Auditor Óptico e Analista de Composição do Prompt Studio.
-Analise a ideia escrita pelo usuário para geração de imagens e avalie a presença e integridade dos 5 pilares visuais fundamentais:
-1. Sujeito / Identidade: O sujeito principal está claro? (Status: Definido, Vago, ou Ausente)
-2. Ação / Dinâmica: Há ação, pose ou estado claro? (Status: Presente, Estática, ou Ausente)
-3. Cenário / Ambiente: O local e profundidade estão informados? (Status: Definido, Vago, ou Ausente)
-4. Iluminação / Clima: A luz e atmosfera foram ditadas? (Status: Definida, ou Inferida pela IA)
-5. Câmera / Enquadramento: A perspectiva/lente foi especificada? (Status: Definida, ou Inferida pela IA)
-
-Além disso:
-- Detecte o nível sugerido de sensualidade (1 a 6) intrínseco na frase.
-- Sugira EXATAMENTE 2 a 3 melhorias de composição cirúrgicas e breves (máximo 1 frase cada) que o usuário pode opcionalmente aceitar para elevar a qualidade visual da cena.
+Analise a ideia escrita pelo usuário e avalie a integridade dos 5 pilares visuais:
+1. Sujeito / Identidade
+2. Ação / Dinâmica
+3. Cenário / Ambiente
+4. Iluminação / Clima
+5. Câmera / Enquadramento
 
 Retorne EXCLUSIVAMENTE um JSON válido no seguinte formato:
 {
   "sujeito_status": "Definido | Vago | Ausente",
-  "sujeito_resumo": "breve texto identificando o sujeito",
+  "sujeito_resumo": "resumo do sujeito",
   "acao_status": "Presente | Estática | Ausente",
   "cenario_status": "Definido | Vago | Ausente",
   "iluminacao_status": "Definida | Inferida pela IA",
   "camera_status": "Definida | Inferida pela IA",
   "nivel_sensualidade_sugerido": 1,
-  "diagnostico_texto": "1 a 2 frases curtas explicando o que a IA manterá e o que inferirá automaticamente",
-  "sugestoes_cirurgicas": [
-    "sugestão de iluminação ou câmera opcional 1",
-    "sugestão de atmosfera ou ângulo opcional 2"
-  ]
-}
-Não use markdown extra nem blocos explicativos."""
-
-SYS_LEITOR_CLONAGEM = r"""Você é o Engenheiro de Replicação Óptica do Prompt Studio.
-Sua missão é analisar a imagem fornecida e gerar uma descrição textual contínua e de altíssima fidelidade, projetada para recriar esta exata imagem em motores de IA generativa.
-
-REGRAS MANDATÓRIAS:
-1. FOCO FÍSICO E MATERIAL (ZERO FLUFF): Descreva apenas o que é tangível. Especifique raça/etnia aparente, idade, cores exatas, texturas (couro, jeans, metal, neon) e proporções. NUNCA use metáforas poéticas, sentimentos subjetivos ou conceitos invisíveis.
-2. DETALHAMENTO CIRÚRGICO DO SUJEITO: Descreva as roupas detalhadamente (caimento, tipo, cor), o cabelo (corte, estilo, cor), a expressão facial e quaisquer acessórios ou marcas.
-3. ILUMINAÇÃO E CÂMERA: Identifique a principal fonte de luz (luz dura, difusa, volumétrica, neon, contraluz), a paleta de cores predominante e o ângulo da câmera (close-up, plano médio, vista de baixo/cima).
-4. CENÁRIO: Descreva o fundo e a profundidade de campo (fundo desfocado, ambiente fechado detalhado, paisagem externa).
-5. SAÍDA EXCLUSIVA: Retorne APENAS um texto fluido e coeso em Português. Não use tópicos, não faça introduções e não coloque títulos."""
-
-SYS_LEITOR_PARAMETRICO = r"""Você é o Cirurgião Óptico e Engenheiro de Desconstrução Visual do Prompt Studio.
-Sua missão é analisar a imagem fornecida e fazer a engenharia reversa dela, separando seus elementos visuais em parâmetros isolados e precisos.
-
-REGRAS MANDATÓRIAS:
-1. ZERO FLUFF: Descreva os elementos de forma técnica e direta. Não use adjetivos emocionais ou poéticos. Concentre-se em geometria, física, texturas e ótica.
-2. DIVISÃO ESTRITA: Desconstrua a imagem nos 5 pilares exatos listados abaixo. Se algum pilar não estiver presente, descreva como "Fundo neutro" ou "Ausente".
-
-Retorne EXCLUSIVAMENTE um JSON válido no seguinte formato exato, sem formatação markdown em volta:
-{
-  "sujeito": "descrição física exata do personagem/objeto, incluindo roupas, cabelo, etnia e idade aparente",
-  "acao": "a pose exata, o que o sujeito está fazendo ou para onde está olhando",
-  "cenario": "descrição do ambiente, elementos ao redor e profundidade de campo",
-  "iluminacao": "tipo de luz (dura, difusa, volumétrica), direção da luz principal e paleta de cores atmosférica",
-  "estilo_camera": "estilo de arte (ex: foto realista, anime 90s, pintura a óleo), enquadramento (ex: close-up, plano aberto) e tipo de lente/ângulo percebido"
+  "diagnostico_texto": "breve diagnostico",
+  "sugestoes_cirurgicas": [ "sugestão 1", "sugestão 2" ]
 }"""
 
-# Apenas o CORE estático (Regras universais). A gramática será injetada dinamicamente.
-# Apenas o CORE estático (Regras universais). A gramática será injetada dinamicamente.
+SYS_LEITOR_CLONAGEM = r"""Você é o Engenheiro de Replicação Óptica do Prompt Studio.
+Faça a engenharia reversa da imagem fornecida gerando uma descrição textual contínua e de altíssima fidelidade.
+REGRAS: Zero fluff, detalhamento cirúrgico do sujeito (roupas, cabelo), luz e câmera exatas. Retorne APENAS um texto fluido e coeso em Português."""
+
+SYS_LEITOR_PARAMETRICO = r"""Você é o Cirurgião Óptico e Engenheiro de Desconstrução Visual do Prompt Studio.
+Desconstrua a imagem nos 5 pilares listados. Retorne EXCLUSIVAMENTE um JSON válido no formato:
+{
+  "sujeito": "descrição física exata",
+  "acao": "a pose",
+  "cenario": "descrição do ambiente",
+  "iluminacao": "tipo de luz e paleta",
+  "estilo_camera": "estilo de arte e lente"
+}"""
+
+# O CORE do Sintetizador agora confia que a narrativa visual já foi resolvida (Shift-Left)
 SYS_MESTRE_CORE = r"""Você é o Motor de Síntese Óptica e Engenharia de Prompts de Alta Fidelidade do Prompt Studio.
-Sua missão é transformar a intenção do usuário no prompt final perfeito, garantindo uma FIDELIDADE ABSOLUTA (99%) à ideia original.
+Sua missão é compilar o prompt final na sintaxe exata exigida pelo motor destino. A FIDELIDADE estrutural é absoluta.
 
 =============================================================================
-1. PROTOCOLO ANTI-FLUFF E ANTI-POESIA (ZERO TOLERÂNCIA)
+1. PROTOCOLO ANTI-FLUFF E ÓPTICO-MATERIAL
 =============================================================================
-- PROIBIÇÃO DE RETÓRICA LITERÁRIA: É estritamente proibido usar metáforas, sentimentos ou conceitos invisíveis.
-- FOCO ÓPTICO-MATERIAL: Text encoders só entendem geometria, anatomia, tecidos, fonte de luz, direção de sombras, materiais, perspectiva e atmosfera física. Descreva O QUE SE VÊ, não o que se sente.
+- PROIBIÇÃO DE RETÓRICA LITERÁRIA: É estritamente proibido usar metáforas ou conceitos invisíveis.
+- FOCO MATERIAL: Encoders só entendem geometria, texturas, física e luz.
 
 =============================================================================
-2. ANCORAGEM CANÔNICA FORÇADA (GARANTIA DE 99% DE FIDELIDADE)
+2. ANCORAGEM CANÔNICA (GARANTIA DE 99% DE FIDELIDADE)
 =============================================================================
-- O NÚCLEO DO USUÁRIO É SAGRADO: Nunca altere gênero, espécie, idade, cores ou ações informadas.
-- INJEÇÃO CANÔNICA ATIVA (OBRIGATÓRIO): Se o usuário solicitar um personagem existente de uma franquia, VOCÊ DEVE buscar em seu banco de dados e INJETAR EXPLICITAMENTE todas as tags físicas canônicas desse personagem (cor dos olhos, cabelo, vestuário clássico). Mantenha a anatomia canônica mas obedeça à roupa do usuário se ele a alterar.
-- INFERÊNCIA COERENTE: Deduza com maestria física apenas os elementos de cenário e iluminação que o usuário NÃO especificou.
+- Identidades são sagradas. Se o usuário solicitar um personagem existente, INJETE as tags físicas canônicas dele.
 
 =============================================================================
-3. MODULADOR GRADUAL DE SENSUALIDADE (TRADUÇÃO SIMBIÓTICA DE VESTUÁRIO)
+3. INJEÇÃO DE TAGS DE RATING E SENSUALIDADE
 =============================================================================
-ATENÇÃO: O nível de sensualidade NÃO DEVE ser apenas uma tag jogada no final. Ele DEVE modificar organicamente a forma como você descreve o VESTUÁRIO e a POSE na sintaxe do motor. Não faça "8 ou 80". Seja um alfaiate: adapte o tecido e o caimento da roupa do usuário conforme o nível:
-
-- Nível 1 (Seguro): Tag 'rating_safe'. Preserve as roupas exatas do usuário ou adicione roupas modestas. Pose neutra e fechada.
-- Nível 2 (Menos Seguro): Tag 'rating_safe'. Mantenha as roupas da ideia original, mas descreva-as com caimento que destaque a silhueta (tight-fitting, form-fitting). Pose elegante.
-- Nível 3 (Ecchi Leve): Tag 'rating_questionable'. Adapte a roupa do usuário para uma versão mais reveladora (ex: jaqueta aberta, saia curta, decote moderado) OU aplique lingerie/swimwear se a cena pedir.
-- Nível 4 (Ecchi Agressivo): Tag 'rating_questionable, nsfw'. Redesenhe a roupa do usuário em micro-trajes, tecidos translúcidos (see-through, sheer fabric), underboob, roupas rasgadas ou decote extremo. Pose altamente provocativa.
-- Nível 5 (Explícito Absoluto): Tag 'rating_explicit, nude, nsfw'. Remova as roupas. Descreva a anatomia nua integrada perfeitamente à iluminação e cenário solicitados.
-- Nível 6 (Dual): Gere o prompt em duas partes: VERSÃO A (Censurada Nível 2) e VERSÃO B (Explícita Nível 5).
+ATENÇÃO: A narrativa visual (roupas, exposição, pose) já foi definida nas etapas de Modificação Global. Sua função aqui é APENAS garantir a formatação final e INJETAR as "Tags de Rating" necessárias para a sintaxe do motor:
+- Nível 1 (Seguro) / Nível 2 (Menos Seguro): Adicione a tag 'rating_safe'.
+- Nível 3 (Ecchi Leve) / Nível 4 (Ecchi Agressivo): Adicione as tags 'rating_questionable, nsfw'.
+- Nível 5 (Explícito Absoluto): Adicione as tags 'rating_explicit, nude, nsfw, uncensored'. Utilize tags Danbooru precisas para a anatomia exposta.
+- Nível 6 (Dual): Gere o prompt em duas partes: VERSÃO A (Censurada) e VERSÃO B (Explícita).
 """
 
 # ==============================================================================
 # 6. FUNÇÕES DE PROCESSAMENTO E INJEÇÃO DINÂMICA
 # ==============================================================================
-def gerar_preprompt_visual(texto_ideia, modelo_gemini):
-    """Gera a direção visual (pré-prompt) em português fundindo a ideia do usuário com expansão óptica."""
+def gerar_preprompt_visual(texto_ideia, nivel_sensualidade, modelo_gemini):
+    """Shift-Left: Gera a direção visual já englobando a alteração de figurino/sensualidade no texto."""
     if not texto_ideia.strip():
         return ""
-    user_prompt = f"DESENVOLVA O PRÉ-PROMPT VISUAL PARA ESTA IDEIA:\n{texto_ideia}"
+    
+    instrucao_shift_left = f"\n\n[AGENTE MODIFICADOR GLOBAL: SENSUALIDADE/VESTUÁRIO] -> O usuário definiu o Nível: '{nivel_sensualidade}'. ATUE COMO FIGURINISTA: Ao expandir a ideia do usuário, desenhe as roupas, o caimento e a pose para refletirem EXATAMENTE esse nível de exposição. Se o nível for explícito (4 ou 5), descreva a cena com trajes mínimos ou nudez cirúrgica, substituindo as roupas sugeridas pelo usuário."
+    
+    user_prompt = f"DESENVOLVA O PRÉ-PROMPT VISUAL PARA ESTA IDEIA:\n{texto_ideia}" + instrucao_shift_left
     texto_pre, prov = _chamar_provedor_ia(SYS_GERADOR_PREPROMPT, user_prompt, modelo_gemini, temperature=0.3)
     return texto_pre.strip()
 
 
 def analisar_no_compositometro(texto_ideia, modelo_gemini):
-    """Executa a leitura óptica e diagnóstico do Compositômetro."""
     if not texto_ideia.strip():
         return None
     user_prompt = f"AVALIE ESTA IDEIA NO COMPOSITÔMETRO:\n{texto_ideia}"
@@ -646,54 +622,29 @@ def analisar_no_compositometro(texto_ideia, modelo_gemini):
 
 
 def sintetizar_prompt_final(texto_ideia, nivel_sensualidade, destino, sugestoes_aceitas, modelo_gemini):
-    """Gera o prompt final injetando dinamicamente as regras do motor selecionado (Otimização Hiper-Veloz)."""
+    """Gera o prompt final injetando dinamicamente as regras do motor selecionado."""
     sug_str = "\n".join(f"- {s}" for s in sugestoes_aceitas) if sugestoes_aceitas else "Nenhuma sugestão adicional marcada."
 
     engine_data = BANCO_DE_MOTORES.get(destino, BANCO_DE_MOTORES["ComfyUI / Pony SDXL"])
 
-    bloco_regras_motor = f"""
-=============================================================================
-4. ADAPTAÇÃO GRAMATICAL NATIVA: {destino.upper()}
-=============================================================================
-- SINTAXE DO POSITIVO: {engine_data['regra_positivo']}
-"""
+    bloco_regras_motor = f"\n=============================================================================\n4. ADAPTAÇÃO GRAMATICAL NATIVA: {destino.upper()}\n=============================================================================\n- SINTAXE DO POSITIVO: {engine_data['regra_positivo']}\n"
     
     if engine_data.get('regra_negativo'):
         bloco_regras_motor += f"- NEGATIVO (Obrigatório): {engine_data['regra_negativo']}\n"
     else:
         bloco_regras_motor += "- NEGATIVO: Não aplicável para este motor (Focado em linguagem natural). Retorne apenas 'Não aplicável para este motor'.\n"
 
-    bloco_regras_motor += f"""
-=============================================================================
-FORMATO DE SAÍDA EXATO:
-=============================================================================
-### 🖼️ PROMPT GERADO: [{destino}]
-1. PROMPT (Inglês): [Prompt estruturado na sintaxe exata do motor]
-2. PROMPT NEGATIVO: [Prompt Negativo de alta densidade/dinâmico ou 'Não aplicável para este motor']
-3. DESCRIÇÃO REDES SOCIAIS (Português): [Legenda curta e cativante conectando sujeito e cena + CTA]
-4. HASHTAGS: [#tags]
-💡 DICA TÉCNICA: {engine_data['dica_tecnica']}
-"""
+    bloco_regras_motor += f"\n=============================================================================\nFORMATO DE SAÍDA EXATO:\n=============================================================================\n### 🖼️ PROMPT GERADO: [{destino}]\n1. PROMPT (Inglês): [Prompt estruturado na sintaxe exata do motor]\n2. PROMPT NEGATIVO: [Prompt Negativo de alta densidade/dinâmico ou 'Não aplicável para este motor']\n3. DESCRIÇÃO REDES SOCIAIS (Português): [Legenda curta e cativante conectando sujeito e cena + CTA]\n4. HASHTAGS: [#tags]\n💡 DICA TÉCNICA: {engine_data['dica_tecnica']}\n"
 
     sys_prompt_dinamico = SYS_MESTRE_CORE + bloco_regras_motor
 
-    user_prompt = f"""=== ENTRADA DE SÍNTESE DO COCKPIT ===
-PLATAFORMA DESTINO: {destino}
-NÍVEL DE SENSUALIDADE ESCOLHIDO PELO USUÁRIO: {nivel_sensualidade}
-
-1. IDEIA LIVRE DO USUÁRIO:
-{texto_ideia}
-
-2. SUGESTÕES CIRÚRGICAS INCORPORADAS:
-{sug_str}
-
-Gere o prompt final aplicando rigidamente o protocolo anti-fluff, hard anchoring do sujeito e a sintaxe exigida pelo motor {destino}."""
+    user_prompt = f"=== ENTRADA DE SÍNTESE DO COCKPIT ===\nPLATAFORMA DESTINO: {destino}\nNÍVEL DE SENSUALIDADE (Para Injeção de Tags Rating): {nivel_sensualidade}\n\n1. NARRATIVA VISUAL (A roupa e pose já estão resolvidas aqui, apenas traduza):\n{texto_ideia}\n\n2. SUGESTÕES CIRÚRGICAS INCORPORADAS:\n{sug_str}\n\nGere o prompt final aplicando rigidamente o protocolo anti-fluff e a sintaxe exigida pelo motor {destino}."
 
     return _chamar_provedor_ia(sys_prompt_dinamico, user_prompt, modelo_gemini, temperature=0.25)
 
 
-def processar_imagem_visao(arquivo_imagem, modo_leitura, estilo_conversao, modelo_gemini):
-    """Extrai a engenharia reversa da imagem forçando a engine do Gemini, com injeção de conversão de estilo."""
+def processar_imagem_visao(arquivo_imagem, modo_leitura, estilo_conversao, nivel_sensualidade, modelo_gemini):
+    """Shift-Left: Aplica os modificadores de Estilo e Sensualidade diretamente na extração da imagem."""
     email = st.session_state.get("user_email", "")
     config = carregar_config(email)
     
@@ -708,11 +659,13 @@ def processar_imagem_visao(arquivo_imagem, modo_leitura, estilo_conversao, model
     sys_prompt = SYS_LEITOR_PARAMETRICO if is_parametrico else SYS_LEITOR_CLONAGEM
     user_prompt = "Faça a engenharia reversa desta imagem conforme as regras do sistema."
 
-    # Módulo de Transferência de Estilo (Cross-Prompting)
+    # Injeção Unificada de Agentes Modificadores (Visão)
     if "Fotorrealismo" in estilo_conversao:
-        user_prompt += "\n\nINSTRUÇÃO DE CONVERSÃO OBRIGATÓRIA: Ignore o estilo de arte original da imagem. Traduza a cena inteira para o MUNDO REAL. Descreva texturas reais, tecidos, pele realista, iluminação física e defina o estilo visual como 'Fotografia cinematográfica, lente fotográfica, fotorrealismo hiper-detalhado'. É expressamente PROIBIDO usar termos de desenho, anime, lineart ou 3D na sua descrição."
+        user_prompt += "\n\n[AGENTE MODIFICADOR 1: ESTILO]: Ignore o estilo de arte original da imagem. Traduza a cena inteira para o MUNDO REAL. Descreva texturas reais, tecidos, pele realista, iluminação física e defina o estilo visual como 'Fotografia cinematográfica, lente fotográfica, fotorrealismo hiper-detalhado'. PROIBIDO usar termos de desenho, anime, lineart ou 3D na sua descrição."
     elif "Anime" in estilo_conversao:
-        user_prompt += "\n\nINSTRUÇÃO DE CONVERSÃO OBRIGATÓRIA: Ignore o estilo de arte original da imagem (mesmo que seja uma foto real). Traduza a cena inteira para ILUSTRAÇÃO 2D / ANIME. Descreva o estilo visual como 'Ilustração digital 2D, estilo anime de estúdio, cel shading, lineart vibrante, flat colors'. É expressamente PROIBIDO usar termos de fotorrealismo, pele real, poros ou lente de câmera na sua descrição."
+        user_prompt += "\n\n[AGENTE MODIFICADOR 1: ESTILO]: Ignore o estilo de arte original da imagem (mesmo que seja uma foto real). Traduza a cena inteira para ILUSTRAÇÃO 2D / ANIME. Descreva o estilo visual como 'Ilustração digital 2D, estilo anime de estúdio, cel shading, flat colors'. PROIBIDO usar termos de fotorrealismo, poros ou lente de câmera."
+
+    user_prompt += f"\n\n[AGENTE MODIFICADOR 2: SENSUALIDADE/VESTUÁRIO]: O usuário definiu o Nível: '{nivel_sensualidade}'. ATUE COMO FIGURINISTA: Reescreva as roupas e a pose da imagem original para refletir EXATAMENTE este nível de exposição descritiva. Se o nível for 4 ou 5, remova/rasgue as roupas originais para refletir a nudez ou exposição cirúrgica exigida."
 
     resp = client.models.generate_content(
         model=modelo_gemini,
@@ -735,7 +688,6 @@ def processar_imagem_visao(arquivo_imagem, modo_leitura, estilo_conversao, model
                 limpo = limpo[4:].strip()
             dados = json.loads(limpo)
             
-            # Cor fixada no bloco para fundo claro/escuro
             html_colorido = f"""
             <div style="background: #ffffff; color: #0f172a; border: 1px solid var(--ps-line); border-radius: 12px; padding: 1.25rem; font-size: 1.02rem; line-height: 1.6; margin-bottom: 1.2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
                 <div style="font-size: 0.8rem; font-weight: bold; color: var(--ps-muted); margin-bottom: 8px; text-transform: uppercase;">Leitura Paramétrica Concluída:</div>
@@ -772,11 +724,43 @@ def renderizar_cockpit():
     modelo_ia = st.session_state.get("modelo_gemini_selecionado", "gemini-3.8-flash")
 
     # --------------------------------------------------------------------------
-    # 1. DETALHADOR DE IMAGEM & CAMPO DE TEXTO LIVRE
+    # 1. AGENTES MODIFICADORES GLOBAIS (O "DNA" da Imagem)
+    # --------------------------------------------------------------------------
+    with st.container(border=True):
+        st.markdown("### 🧬 Agentes Modificadores Globais")
+        st.caption("Defina o 'DNA' do seu prompt. Estas regras atuam desde a leitura da imagem (Visão) até a síntese do código final.")
+
+        col_m1, col_m2 = st.columns(2)
+        with col_m1:
+            estilo_conversao = st.selectbox(
+                "Tradução de Estilo de Arte (Cross-Prompting):",
+                ["Manter Estilo Original", "📸 Converter para Fotorrealismo (Live-Action)", "🎨 Converter para Anime / Ilustração 2D"],
+                key="ck_estilo_conversao"
+            )
+        with col_m2:
+            if "ck_sens_slider" not in st.session_state:
+                st.session_state["ck_sens_slider"] = OPCOES_SENSUALIDADE[1]
+            sens_escolhida = st.select_slider(
+                "Nível de Sensualidade & Modéstia:",
+                options=OPCOES_SENSUALIDADE,
+                key="ck_sens_slider"
+            )
+
+        # Banners de alerta simplificados movidos para debaixo do slider
+        num_nivel = int(sens_escolhida[0]) if sens_escolhida and sens_escolhida[0].isdigit() else 1
+        if num_nivel in [1, 2]:
+            st.markdown("<div class='risk-banner risk-green'>🟢 <b>Zona Segura (SFW):</b> Risco zero de bloqueio em IAs comerciais.</div>", unsafe_allow_html=True)
+        elif num_nivel in [3, 4]:
+            st.markdown("<div class='risk-banner risk-amber'>🟡 <b>Zona Moderada:</b> Pode sofrer rejeição em IAs estritas (Midjourney/DALL-E).</div>", unsafe_allow_html=True)
+        else:
+            st.markdown("<div class='risk-banner risk-rose'>🔴 <b>Zona Explícita (NSFW):</b> Alto risco de bloqueio via API. Use em modelos locais (Pony/Illustrious).</div>", unsafe_allow_html=True)
+
+    # --------------------------------------------------------------------------
+    # 2. DETALHADOR DE IMAGEM & CAMPO DE TEXTO LIVRE
     # --------------------------------------------------------------------------
     with st.container(border=True):
         st.markdown("### 🖼️ Detalhador de Imagem (Opcional)")
-        st.caption("Faça upload de uma referência para extrair a composição exata (Engenharia Reversa).")
+        st.caption("Faça upload de uma referência para extrair a composição. Os Modificadores Globais acima serão aplicados na leitura!")
         
         col_img1, col_img2 = st.columns([4, 6])
         with col_img1:
@@ -788,20 +772,16 @@ def renderizar_cockpit():
                 horizontal=True,
                 key="ck_modo_leitura"
             )
-            estilo_conversao = st.selectbox(
-                "Tradução de Estilo de Arte (Cross-Prompting):",
-                ["Manter Estilo Original da Imagem", "📸 Converter para Fotorrealismo (Live-Action)", "🎨 Converter para Anime / Ilustração 2D"],
-                key="ck_estilo_conversao"
-            )
             btn_ler_imagem = st.button("👁️ Extrair Prompt da Imagem", type="secondary", use_container_width=True)
 
         if btn_ler_imagem:
             if not img_file:
                 st.warning("Selecione uma imagem primeiro.")
             else:
-                with st.spinner("Analisando matriz óptica e processando conversão de traços..."):
+                with st.spinner("Analisando matriz óptica e injetando modificadores globais..."):
                     try:
-                        resultado_visao = processar_imagem_visao(img_file, modo_leitura, estilo_conversao, modelo_ia)
+                        # Agora envia o estilo_conversao e o sens_escolhida direto para a Visão!
+                        resultado_visao = processar_imagem_visao(img_file, modo_leitura, estilo_conversao, sens_escolhida, modelo_ia)
                         
                         texto_extraido = resultado_visao["texto"]
                         
@@ -826,7 +806,6 @@ def renderizar_cockpit():
         st.markdown("---")
         st.markdown("### 💡 O que você quer criar?")
         
-        # Correção Crítica de Ghost State: O "value" foi removido
         ideia_input = st.text_area(
             "Descreva sua cena (ou edite a extração da imagem acima):",
             key="ck_ideia_input",
@@ -836,12 +815,11 @@ def renderizar_cockpit():
 
         col_b1, col_b2, col_b3 = st.columns([4, 4, 2])
         with col_b1:
-            btn_preprompt = st.button("👁️ Pré-prompt", type="primary", help="Gera a direção visual ajustada em português com distinção por cores", use_container_width=True, key="btn_preprompt")
+            btn_preprompt = st.button("👁️ Pré-prompt", type="primary", help="Gera a direção visual ajustada aos Modificadores Globais", use_container_width=True, key="btn_preprompt")
         with col_b2:
             btn_avaliar = st.button("🔍 Avaliar no Compositômetro", help="Verifica a integridade dos pilares visuais da sua ideia", use_container_width=True, key="btn_avaliar")
         with col_b3:
             if st.button("🗑️ Limpar", use_container_width=True, key="btn_limpar_cockpit"):
-                # Limpeza completa (Garante que nenhum resquício fique na tela)
                 st.session_state["ck_ideia_input"] = ""
                 st.session_state.pop("ck_ideia", None)
                 st.session_state.pop("ck_img_html", None)
@@ -863,8 +841,9 @@ def renderizar_cockpit():
         if not ideia_input.strip():
             st.warning("Escreva sua ideia antes de gerar o Pré-prompt.")
         else:
-            with st.spinner("Construindo direção visual do Pré-prompt..."):
-                pre_texto = gerar_preprompt_visual(ideia_input.strip(), modelo_ia)
+            with st.spinner("Construindo direção visual e aplicando figurino..."):
+                # Agora enviamos sens_escolhida pro Pré-prompt
+                pre_texto = gerar_preprompt_visual(ideia_input.strip(), sens_escolhida, modelo_ia)
                 diag = analisar_no_compositometro(ideia_input.strip(), modelo_ia)
                 if pre_texto:
                     st.session_state["ck_ideia"] = ideia_input.strip()
@@ -874,10 +853,6 @@ def renderizar_cockpit():
                     for k in list(st.session_state.keys()):
                         if k.startswith("sug_chk_"):
                             st.session_state.pop(k, None)
-                    if diag:
-                        sug_lvl = diag.get("nivel_sensualidade_sugerido", 1)
-                        if 1 <= sug_lvl <= 6:
-                            st.session_state["ck_sens_slider"] = OPCOES_SENSUALIDADE[sug_lvl - 1]
                     st.rerun()
                 else:
                     st.error("Não foi possível gerar o Pré-prompt no momento.")
@@ -894,26 +869,23 @@ def renderizar_cockpit():
                     for k in list(st.session_state.keys()):
                         if k.startswith("sug_chk_"):
                             st.session_state.pop(k, None)
-                    sug_lvl = diag.get("nivel_sensualidade_sugerido", 1)
-                    if 1 <= sug_lvl <= 6:
-                        st.session_state["ck_sens_slider"] = OPCOES_SENSUALIDADE[sug_lvl - 1]
                     st.rerun()
                 else:
                     st.error("Não foi possível processar a avaliação no momento.")
 
     # --------------------------------------------------------------------------
-    # 2. PRÉ-PROMPT VISUAL COM DESTAQUE DE CORES E LEGENDA
+    # 3. PRÉ-PROMPT VISUAL COM DESTAQUE DE CORES E LEGENDA
     # --------------------------------------------------------------------------
     if st.session_state.get("ck_preprompt"):
         with st.container(border=True):
             st.markdown("### 🎨 Pré-prompt (Direção Visual Ajustada)")
-            st.caption("Visualização da composição desenvolvida em português antes da tradução técnica para o motor de imagem.")
+            st.caption("A narrativa abaixo já incorporou as regras de Estilo e Sensualidade. Esta será a base da compilação técnica.")
             
             st.markdown(
                 "<div class='ps-legend'>"
-                "<span><span class='ps-user-word'>Sua Ideia</span> (Inserção do Usuário)</span>"
+                "<span><span class='ps-user-word'>Sua Ideia</span> (Inserção Original)</span>"
                 " &nbsp;&nbsp;•&nbsp;&nbsp; "
-                "<span><span class='ps-ai-word'>Desenvolvimento Óptico da IA</span> (Direção Visual)</span>"
+                "<span><span class='ps-ai-word'>Desenvolvimento Óptico da IA</span> (Direção Visual e Figurino)</span>"
                 "</div>",
                 unsafe_allow_html=True
             )
@@ -924,18 +896,16 @@ def renderizar_cockpit():
             )
             st.markdown(f"<div class='ps-preprompt'>{markup}</div>", unsafe_allow_html=True)
 
-            # Removemos o "value=" para eliminar o conflito do Streamlit
             preprompt_editado = st.text_area(
-                "Ajustar o Pré-prompt se desejar (o texto abaixo será a base da compilação técnica):",
+                "Ajustar o Pré-prompt se desejar:",
                 height=130,
                 key="ck_preprompt_editado"
             )
-            # Salvamos de volta na variável principal caso o usuário altere algo
             if preprompt_editado != st.session_state.get("ck_preprompt"):
                 st.session_state["ck_preprompt"] = preprompt_editado
 
     # --------------------------------------------------------------------------
-    # 3. O COMPOSITÔMETRO (FEEDBACK VISUAL PASSIVO + SUGESTÕES DE APOIO)
+    # 4. O COMPOSITÔMETRO (FEEDBACK VISUAL PASSIVO + SUGESTÕES DE APOIO)
     # --------------------------------------------------------------------------
     diag_atual = st.session_state.get("ck_diagnostico")
     if diag_atual:
@@ -982,49 +952,9 @@ def renderizar_cockpit():
                 st.session_state["ck_sugestoes_marcadas"] = selecionadas
 
     # --------------------------------------------------------------------------
-    # 3. MODULADOR DE SENSUALIDADE / RISCO NSFW (INDICADOR + LIMITADOR DESLIZANTE)
+    # 5. SELETOR DE MOTOR DESTINO E SÍNTESE FINAL
     # --------------------------------------------------------------------------
     st.write("")
-    with st.container(border=True):
-        st.markdown("#### 🎚️ Nível de Sensualidade & Modéstia")
-        st.caption("A IA pré-ajusta o nível com base na cena. Você tem total controle para modular a barra; nossa função é informar os riscos de compatibilidade.")
-
-        if "ck_sens_slider" not in st.session_state:
-            st.session_state["ck_sens_slider"] = OPCOES_SENSUALIDADE[1]
-
-        sens_escolhida = st.select_slider(
-            "Selecione o nível desejado:",
-            options=OPCOES_SENSUALIDADE,
-            key="ck_sens_slider"
-        )
-
-        num_nivel = int(sens_escolhida[0]) if sens_escolhida and sens_escolhida[0].isdigit() else 1
-
-        if num_nivel in [1, 2]:
-            st.markdown(
-                "<div class='risk-banner risk-green'>"
-                "🟢 <b>Zona Segura (SFW):</b> Totalmente compatível com todas as plataformas (Midjourney, DALL-E, Flux e ComfyUI). Risco zero de bloqueio."
-                "</div>",
-                unsafe_allow_html=True
-            )
-        elif num_nivel in [3, 4]:
-            st.markdown(
-                "<div class='risk-banner risk-amber'>"
-                "🟡 <b>Zona Moderada (Ecchi / Sensual):</b> Pode sofrer avisos ou rejeição em APIs com filtros rígidos (DALL-E / Bing / Midjourney). Otimizado para modelos locais (Pony SDXL, Flux local, SDXL Base)."
-                "</div>",
-                unsafe_allow_html=True
-            )
-        else:
-            st.markdown(
-                "<div class='risk-banner risk-rose'>"
-                "🔴 <b>Zona Explícita (Picante / Sem Censura):</b> Alto risco de bloqueio em ferramentas comerciais da Web. Projetado para checkpoints locais sem censura (Pony SDXL / Illustrious no ComfyUI)."
-                "</div>",
-                unsafe_allow_html=True
-            )
-
-    # --------------------------------------------------------------------------
-    # 4. SELETOR DE MOTOR DESTINO
-    # --------------------------------------------------------------------------
     col_dest1, col_dest2 = st.columns([7, 3])
     with col_dest1:
         destino_selecionado = st.selectbox(
@@ -1038,9 +968,6 @@ def renderizar_cockpit():
         st.write("")
         btn_executar = st.button("⚡ Gerar Prompt Agora", type="primary", use_container_width=True, key="btn_executar_final")
 
-    # --------------------------------------------------------------------------
-    # EXECUÇÃO DA SÍNTESE TÉCNICA
-    # --------------------------------------------------------------------------
     if btn_executar:
         if not ideia_input.strip():
             st.warning("Por favor, descreva sua ideia no campo de texto.")
@@ -1050,9 +977,9 @@ def renderizar_cockpit():
                 real_dest = "ComfyUI / Pony SDXL" if num_nivel >= 4 else "Midjourney v6.1+"
 
             sug_aceitas = st.session_state.get("ck_sugestoes_marcadas", [])
-
             texto_base = st.session_state.get("ck_preprompt", ideia_input.strip())
-            with st.spinner(f"Compilando prompt otimizado para {real_dest}..."):
+
+            with st.spinner(f"Compilando prompt na sintaxe final para {real_dest}..."):
                 try:
                     resultado, prov = sintetizar_prompt_final(
                         texto_base,
@@ -1070,7 +997,7 @@ def renderizar_cockpit():
                     st.error(f"Erro ao processar: {ex}")
 
     # --------------------------------------------------------------------------
-    # 5. EXIBIÇÃO DO RESULTADO COMPILADO
+    # 6. EXIBIÇÃO DO RESULTADO COMPILADO
     # --------------------------------------------------------------------------
     if st.session_state.get("ck_prompt_final"):
         st.write("")
