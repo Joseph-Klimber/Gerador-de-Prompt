@@ -3,7 +3,7 @@
 Prompt Studio Cockpit — Interface Minimalista de Alta Precisão
 Atrito zero para o usuário: Entrada livre de ideias + Compositômetro inteligente +
 Slider de Sensualidade com alerta transparente de risco de censura +
-Motor técnico mestre dinâmico (Injeção Granular por Modelo).
+Motor técnico mestre dinâmico (Injeção Granular por Modelo) + Transferência de Estilo.
 """
 
 import os
@@ -247,7 +247,6 @@ BANCO_DE_MOTORES = {
     }
 }
 
-# Auto-gera o dropdown com base no dicionário + opção automática
 OPCOES_DESTINO = ["Recomendado automaticamente"] + list(BANCO_DE_MOTORES.keys())
 
 # ==============================================================================
@@ -277,14 +276,13 @@ def verificar_acesso_sheets(email):
                 if not encontrado:
                     return False, expiracao_str, "⚠️ E-mail não encontrado na base de clientes autorizados."
 
-                # Checagem de expiração se houver data
                 if expiracao_str:
                     for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d/%m/%Y %H:%M", "%Y-%m-%d %H:%M:%S"):
                         try:
                             dt_clean = expiracao_str.split("T")[0]
                             dt_exp = datetime.strptime(dt_clean, fmt)
                             if dt_exp.date() < datetime.now().date():
-                                return False, expiracao_str, f"⚠️ Seu acesso expirou em {expiracao_str}. Renove seu plano para continuar gerando."
+                                return False, expiracao_str, f"⚠️ Seu acesso expirou em {expiracao_str}."
                             break
                         except Exception:
                             continue
@@ -648,10 +646,8 @@ def sintetizar_prompt_final(texto_ideia, nivel_sensualidade, destino, sugestoes_
     """Gera o prompt final injetando dinamicamente as regras do motor selecionado (Otimização Hiper-Veloz)."""
     sug_str = "\n".join(f"- {s}" for s in sugestoes_aceitas) if sugestoes_aceitas else "Nenhuma sugestão adicional marcada."
 
-    # 1. Puxa os dados do motor no dicionário (Fallback de segurança para o Pony SDXL)
     engine_data = BANCO_DE_MOTORES.get(destino, BANCO_DE_MOTORES["ComfyUI / Pony SDXL"])
 
-    # 2. Constrói o bloco Gramatical Modular
     bloco_regras_motor = f"""
 =============================================================================
 4. ADAPTAÇÃO GRAMATICAL NATIVA: {destino.upper()}
@@ -659,13 +655,11 @@ def sintetizar_prompt_final(texto_ideia, nivel_sensualidade, destino, sugestoes_
 - SINTAXE DO POSITIVO: {engine_data['regra_positivo']}
 """
     
-    # 3. Injecao inteligente do Negativo (Economia de Tokens)
     if engine_data.get('regra_negativo'):
         bloco_regras_motor += f"- NEGATIVO (Obrigatório): {engine_data['regra_negativo']}\n"
     else:
         bloco_regras_motor += "- NEGATIVO: Não aplicável para este motor (Focado em linguagem natural). Retorne apenas 'Não aplicável para este motor'.\n"
 
-    # 4. Trava do Formato Exato de Saída
     bloco_regras_motor += f"""
 =============================================================================
 FORMATO DE SAÍDA EXATO:
@@ -678,7 +672,6 @@ FORMATO DE SAÍDA EXATO:
 💡 DICA TÉCNICA: {engine_data['dica_tecnica']}
 """
 
-    # 5. Funde o Core estático com as regras isoladas
     sys_prompt_dinamico = SYS_MESTRE_CORE + bloco_regras_motor
 
     user_prompt = f"""=== ENTRADA DE SÍNTESE DO COCKPIT ===
@@ -696,8 +689,8 @@ Gere o prompt final aplicando rigidamente o protocolo anti-fluff, hard anchoring
     return _chamar_provedor_ia(sys_prompt_dinamico, user_prompt, modelo_gemini, temperature=0.25)
 
 
-def processar_imagem_visao(arquivo_imagem, modo_leitura, modelo_gemini):
-    """Extrai a engenharia reversa da imagem forçando a engine do Gemini."""
+def processar_imagem_visao(arquivo_imagem, modo_leitura, estilo_conversao, modelo_gemini):
+    """Extrai a engenharia reversa da imagem forçando a engine do Gemini, com injeção de conversão de estilo."""
     email = st.session_state.get("user_email", "")
     config = carregar_config(email)
     
@@ -711,6 +704,12 @@ def processar_imagem_visao(arquivo_imagem, modo_leitura, modelo_gemini):
     is_parametrico = "Paramétrico" in modo_leitura
     sys_prompt = SYS_LEITOR_PARAMETRICO if is_parametrico else SYS_LEITOR_CLONAGEM
     user_prompt = "Faça a engenharia reversa desta imagem conforme as regras do sistema."
+
+    # Módulo de Transferência de Estilo (Cross-Prompting)
+    if "Fotorrealismo" in estilo_conversao:
+        user_prompt += "\n\nINSTRUÇÃO DE CONVERSÃO OBRIGATÓRIA: Ignore o estilo de arte original da imagem. Traduza a cena inteira para o MUNDO REAL. Descreva texturas reais, tecidos, pele realista, iluminação física e defina o estilo visual como 'Fotografia cinematográfica, lente fotográfica, fotorrealismo hiper-detalhado'. É expressamente PROIBIDO usar termos de desenho, anime, lineart ou 3D na sua descrição."
+    elif "Anime" in estilo_conversao:
+        user_prompt += "\n\nINSTRUÇÃO DE CONVERSÃO OBRIGATÓRIA: Ignore o estilo de arte original da imagem (mesmo que seja uma foto real). Traduza a cena inteira para ILUSTRAÇÃO 2D / ANIME. Descreva o estilo visual como 'Ilustração digital 2D, estilo anime de estúdio, cel shading, lineart vibrante, flat colors'. É expressamente PROIBIDO usar termos de fotorrealismo, pele real, poros ou lente de câmera na sua descrição."
 
     resp = client.models.generate_content(
         model=modelo_gemini,
@@ -733,6 +732,7 @@ def processar_imagem_visao(arquivo_imagem, modo_leitura, modelo_gemini):
                 limpo = limpo[4:].strip()
             dados = json.loads(limpo)
             
+            # Cor fixada no bloco para fundo claro/escuro
             html_colorido = f"""
             <div style="background: #ffffff; color: #0f172a; border: 1px solid var(--ps-line); border-radius: 12px; padding: 1.25rem; font-size: 1.02rem; line-height: 1.6; margin-bottom: 1.2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
                 <div style="font-size: 0.8rem; font-weight: bold; color: var(--ps-muted); margin-bottom: 8px; text-transform: uppercase;">Leitura Paramétrica Concluída:</div>
@@ -743,7 +743,7 @@ def processar_imagem_visao(arquivo_imagem, modo_leitura, modelo_gemini):
                 A captura foi feita com <span style="color:#e11d48; font-weight:600; background-color:#fff1f2; padding:2px 4px; border-radius:4px;">{dados.get('estilo_camera', '')}</span>.
             </div>
             """
-            texto_plano = f"A imagem mostra {dados.get('sujeito', '')}, que está {dados.get('acao', '')}. O ambiente é {dados.get('cenario', '')}. A iluminação é {dados.get('iluminacao', '')}. A captura foi feita com {dados.get('estilo_camera', '')}."
+            texto_plano = f"A imagem mostra {dados.get('sujeito', '')}, que está {dados.get('acao', '')}. O ambiente é {dados.get('cenario', '')}. A iluminação é {dados.get('iluminacao', '')}. A captura/estilo foi feito em {dados.get('estilo_camera', '')}."
             
             return {"tipo": "html", "html": html_colorido, "texto": texto_plano}
         except Exception:
@@ -785,15 +785,20 @@ def renderizar_cockpit():
                 horizontal=True,
                 key="ck_modo_leitura"
             )
+            estilo_conversao = st.selectbox(
+                "Tradução de Estilo de Arte (Cross-Prompting):",
+                ["Manter Estilo Original da Imagem", "📸 Converter para Fotorrealismo (Live-Action)", "🎨 Converter para Anime / Ilustração 2D"],
+                key="ck_estilo_conversao"
+            )
             btn_ler_imagem = st.button("👁️ Extrair Prompt da Imagem", type="secondary", use_container_width=True)
 
         if btn_ler_imagem:
             if not img_file:
                 st.warning("Selecione uma imagem primeiro.")
             else:
-                with st.spinner("Analisando matriz óptica e desconstruindo cena..."):
+                with st.spinner("Analisando matriz óptica e processando conversão de traços..."):
                     try:
-                        resultado_visao = processar_imagem_visao(img_file, modo_leitura, modelo_ia)
+                        resultado_visao = processar_imagem_visao(img_file, modo_leitura, estilo_conversao, modelo_ia)
                         
                         texto_extraido = resultado_visao["texto"]
                         
@@ -806,6 +811,7 @@ def renderizar_cockpit():
                         st.session_state["ck_ideia_input"] = texto_extraido
                         
                         st.session_state.pop("ck_preprompt", None)
+                        st.session_state.pop("ck_preprompt_editado", None)
                         st.session_state.pop("ck_diagnostico", None)
                         st.rerun()
                     except Exception as e:
@@ -817,9 +823,9 @@ def renderizar_cockpit():
         st.markdown("---")
         st.markdown("### 💡 O que você quer criar?")
         
+        # Correção Crítica de Ghost State: O "value" foi removido
         ideia_input = st.text_area(
             "Descreva sua cena (ou edite a extração da imagem acima):",
-            value=st.session_state.get("ck_ideia", ""),
             key="ck_ideia_input",
             height=140,
             placeholder="Exemplo: Android 18 sentada perto de uma janela molhada pela chuva em um café acolhedor em Tóquio, tomando chá em uma xícara cerâmica, luz suave da tarde com reflexos aconchegantes..."
@@ -832,12 +838,16 @@ def renderizar_cockpit():
             btn_avaliar = st.button("🔍 Avaliar no Compositômetro", help="Verifica a integridade dos pilares visuais da sua ideia", use_container_width=True, key="btn_avaliar")
         with col_b3:
             if st.button("🗑️ Limpar", use_container_width=True, key="btn_limpar_cockpit"):
-                st.session_state["ck_ideia"] = ""
+                # Limpeza completa (Garante que nenhum resquício fique na tela)
                 st.session_state["ck_ideia_input"] = ""
+                st.session_state.pop("ck_ideia", None)
                 st.session_state.pop("ck_img_html", None)
                 st.session_state.pop("ck_preprompt", None)
+                st.session_state.pop("ck_preprompt_editado", None)
                 st.session_state.pop("ck_diagnostico", None)
                 st.session_state.pop("ck_prompt_final", None)
+                st.session_state.pop("ck_prov_usado", None)
+                st.session_state.pop("ck_dest_usado", None)
                 for k in list(st.session_state.keys()):
                     if k.startswith("sug_chk_"):
                         st.session_state.pop(k, None)
@@ -856,6 +866,7 @@ def renderizar_cockpit():
                 if pre_texto:
                     st.session_state["ck_ideia"] = ideia_input.strip()
                     st.session_state["ck_preprompt"] = pre_texto
+                    st.session_state["ck_preprompt_editado"] = pre_texto
                     st.session_state["ck_diagnostico"] = diag
                     for k in list(st.session_state.keys()):
                         if k.startswith("sug_chk_"):
@@ -910,13 +921,14 @@ def renderizar_cockpit():
             )
             st.markdown(f"<div class='ps-preprompt'>{markup}</div>", unsafe_allow_html=True)
 
+            # Removemos o "value=" para eliminar o conflito do Streamlit
             preprompt_editado = st.text_area(
                 "Ajustar o Pré-prompt se desejar (o texto abaixo será a base da compilação técnica):",
-                value=st.session_state["ck_preprompt"],
                 height=130,
                 key="ck_preprompt_editado"
             )
-            if preprompt_editado != st.session_state["ck_preprompt"]:
+            # Salvamos de volta na variável principal caso o usuário altere algo
+            if preprompt_editado != st.session_state.get("ck_preprompt"):
                 st.session_state["ck_preprompt"] = preprompt_editado
 
     # --------------------------------------------------------------------------
@@ -1137,6 +1149,8 @@ if "user_email" not in st.session_state:
     st.session_state.user_email = ""
 if "expiracao" not in st.session_state:
     st.session_state.expiracao = ""
+if "ck_ideia_input" not in st.session_state:
+    st.session_state.ck_ideia_input = ""
 
 if not st.session_state.autenticado:
     st.markdown(
