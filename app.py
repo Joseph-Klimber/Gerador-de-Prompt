@@ -3,7 +3,7 @@
 Prompt Studio Cockpit — Interface Minimalista de Alta Precisão
 Atrito zero para o usuário: Entrada livre de ideias + Compositômetro inteligente +
 Slider de Sensualidade com alerta transparente de risco de censura +
-Motor técnico mestre que elimina fluff poético e formata nativamente por modelo.
+Motor técnico mestre dinâmico (Injeção Granular por Modelo).
 """
 
 import os
@@ -174,7 +174,7 @@ st.markdown(
 )
 
 # ==============================================================================
-# 2. CONSTANTES, DIRETÓRIOS E LISTAS
+# 2. CONSTANTES, DIRETÓRIOS E BANCO DE MOTORES DINÂMICO
 # ==============================================================================
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyLlqkhYChBHM6K08DnNP67C9t7E2kRS3N0pINa65oYa81--Cv4amoJm3OZ_v_MSDA7/exec"
 LINK_KIWIFY_15_DIAS = "https://pay.kiwify.com.br/MXVL98k"
@@ -193,17 +193,62 @@ OPCOES_SENSUALIDADE = [
     "6 - Dual (Com & Sem Censura)",
 ]
 
-OPCOES_DESTINO = [
-    "Recomendado automaticamente",
-    "ComfyUI / Pony SDXL",
-    "ComfyUI / Illustrious",
-    "ComfyUI / SDXL Base Natural",
-    "Flux.1 (Dev/Schnell)",
-    "Midjourney v6.1",
-    "Ideogram 2.0",
-    "DALL-E 3 / Bing Image Creator",
-    "Leonardo.Ai / SeaArt",
-]
+# DICIONÁRIO GRANULAR: A base de dados isolada dos motores
+BANCO_DE_MOTORES = {
+    "ComfyUI / Pony SDXL": {
+        "regra_positivo": "Exclusivamente Danbooru tags separadas por vírgula, com underscore no lugar de espaço. Ordem estrita: 1. Qualidade (score_9, score_8_up, score_7_up) -> 2. Entidade/Lore -> 3. Anatomia Canônica -> 4. Vestuário -> 5. Ação/Pose -> 6. Cenário -> 7. Câmera/Luz. Mínimo de 40 tags densas.",
+        "regra_negativo": "Você DEVE construir uma blindagem maciça. BASE INEGOCIÁVEL: score_6, score_5, score_4, score_3, score_2, score_1, worst quality, low quality, normal quality, text, signature, watermark, username, jpeg artifacts, ugly, bad anatomy, bad hands, missing fingers, extra digits, fewer digits, mutated, deformed, poorly drawn, out of frame, blurry, cropped, disfigured, bad proportions. Se a cena for fotorrealista adicione: source_anime, source_cartoon, 3d, illustration.",
+        "dica_tecnica": "Use sampler Euler a, 30 steps, CFG 7.5. Alta densidade mecânica."
+    },
+    "ComfyUI / Illustrious": {
+        "regra_positivo": "Tags Danbooru estritas. PREFIXO OBRIGATÓRIO: masterpiece, best quality, ultra-detailed, illustration, aesthetic. Siga a mesma ordem anatômica e espacial do Danbooru.",
+        "regra_negativo": "NEGATIVO DINÂMICO ESTRUTURAL. Base obrigatória: lowres, bad quality, worst quality, normal quality, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, jpeg artifacts, signature, watermark, username. ATENÇÃO: Se o prompt positivo incluir 'depth of field' ou foco em rosto, VOCÊ DEVE REMOVER as palavras 'blurry' e 'out of focus' do negativo.",
+        "dica_tecnica": "Sensível a prompts curtos. Mantenha CFG entre 5.0 e 7.0."
+    },
+    "Flux.1 / Flux.2 (Klein)": {
+        "regra_positivo": "Parágrafo narrativo longo, fluido e hiper-descritivo em inglês. SEM tags separadas por vírgula e SEM underscores. Descreva microtexturas (poros, fios de tecido, poeira no ar), realismo da lente da câmera (ex: 35mm lens, f/1.8) e como a iluminação interage com a física dos materiais na cena.",
+        "regra_negativo": None,
+        "dica_tecnica": "Modelos Flux (Dev/Klein) operam melhor sem prompt negativo. Foque na riqueza da prosa fotográfica."
+    },
+    "Midjourney v6.1+": {
+        "regra_positivo": "Frases objetivas separadas por vírgulas em inglês natural. Foque na estética cinematográfica, direção de arte, paleta de cores (ex: teal and orange) e equipamento fotográfico exato (ex: shot on RED V-Raptor, Kodak Portra 400). Termine OBRIGATORIAMENTE o prompt com os parâmetros: --ar 16:9 --v 6.1 --stylize 250",
+        "regra_negativo": None, 
+        "dica_tecnica": "Basta copiar e colar no Discord ou na interface Web do Midjourney."
+    },
+    "ComfyUI / SDXL Base Natural": {
+        "regra_positivo": "Parágrafo descritivo em inglês. FÓRMULA: 'A breathtaking highly detailed [photo/painting] of [Sujeito + Anatomia + Roupas], who is [Ação/Pose], located in [Cenário Detalhado]. The lighting is [Iluminação]. Shot on [Câmera/Lente]. [Estilo Artístico]'.",
+        "regra_negativo": "NEGATIVO DINÂMICO ESTRUTURAL. Base: ugly, deformed, poorly drawn, bad anatomy, missing limbs, extra limbs, mutated hands, unnatural proportions, amateur, bad composition. EXCEÇÃO: Se o usuário pedir texto escrito na imagem, remova 'text' e 'watermark' da base.",
+        "dica_tecnica": "Ideal usar o Refiner em 20% finais para melhorar os detalhes."
+    },
+    "Ideogram 4": {
+        "regra_positivo": "Foco absurdo em diagramação, coerência espacial e design gráfico. Se a ideia do usuário incluir palavras escritas, letreiros, placas ou estampas, VOCÊ DEVE colocar o texto exato em inglês ENTRE ASPAS DUPLAS (ex: wearing a shirt that says \"HELLO\"). Especifique a fonte tipográfica (ex: bold sans-serif neon font).",
+        "regra_negativo": None,
+        "dica_tecnica": "Ideogram 4 possui renderização tipográfica perfeita. Use aspas duplas (\" \") para textos."
+    },
+    "Krea 2": {
+        "regra_positivo": "Inglês direto, focado na estrutura espacial. Divida mentalmente a cena: Foreground (primeiro plano), Midground (meio-termo), Background (fundo). Palavras de forte impacto visual, focando no contraste e nas formas.",
+        "regra_negativo": "blurry, low quality, deformed geometry, muddy colors, bad proportions, unnatural lighting.",
+        "dica_tecnica": "Otimizado para a engine de upscaling e latência zero do Krea."
+    },
+    "Qwen / Tongyi Wanxiang": {
+        "regra_positivo": "Inglês claro, objetivo e estruturado (Sujeito -> Ação -> Ambiente). Evite jargões complexos de câmera ocidental. Foque em descrever literalmente a cena de forma precisa e lógica.",
+        "regra_negativo": "poor quality, bad anatomy, watermark, text, out of frame, mutation.",
+        "dica_tecnica": "Modelos Qwen respondem melhor à clareza semântica direta."
+    },
+    "Ernie (ViLG)": {
+        "regra_positivo": "Descrições claras em inglês. Especifique a relação de proximidade entre os objetos. Use termos artísticos clássicos (ex: traditional oil painting, 3d render, anime style).",
+        "regra_negativo": "ugly, disfigured, low resolution, bad hands, deformed faces.",
+        "dica_tecnica": "A engine da Baidu prefere prompts literais. Evite metáforas."
+    },
+    "Z-Image": {
+        "regra_positivo": "Inglês descritivo hiper-realista. Foque na coerência global da cena, texturas de alta definição (HD textures, 8k, Unreal Engine 5 render) e iluminação volumétrica.",
+        "regra_negativo": "noisy, oversaturated, unrealistic, bad anatomy, bad lighting, watermark.",
+        "dica_tecnica": "Modelo versátil. Mantenha as configurações padrão do Z-Image."
+    }
+}
+
+# Auto-gera o dropdown com base no dicionário + opção automática
+OPCOES_DESTINO = ["Recomendado automaticamente"] + list(BANCO_DE_MOTORES.keys())
 
 # ==============================================================================
 # 3. AUTENTICAÇÃO E GESTÃO DE USUÁRIO
@@ -489,9 +534,6 @@ REGRAS MANDATÓRIAS:
    - Responda APENAS com a descrição visual coesa em Português (um texto fluido e denso).
    - Não use títulos, introduções, saudações ou explicações."""
 
-# ==============================================================================
-# 5. ENGENHARIA DE PROMPT: COMPOSITÔMETRO E SYSTEM INSTRUCTION MESTRE
-# ==============================================================================
 SYS_COMPOSITOMETRO = r"""Você é o Auditor Óptico e Analista de Composição do Prompt Studio.
 Analise a ideia escrita pelo usuário para geração de imagens e avalie a presença e integridade dos 5 pilares visuais fundamentais:
 1. Sujeito / Identidade: O sujeito principal está claro? (Status: Definido, Vago, ou Ausente)
@@ -547,7 +589,8 @@ Retorne EXCLUSIVAMENTE um JSON válido no seguinte formato exato, sem formataç�
   "estilo_camera": "estilo de arte (ex: foto realista, anime 90s, pintura a óleo), enquadramento (ex: close-up, plano aberto) e tipo de lente/ângulo percebido"
 }"""
 
-SYS_MESTRE_SINTETIZADOR = r"""Você é o Motor de Síntese Óptica e Engenharia de Prompts de Alta Fidelidade do Prompt Studio.
+# Apenas o CORE estático (Regras universais). A gramática será injetada dinamicamente.
+SYS_MESTRE_CORE = r"""Você é o Motor de Síntese Óptica e Engenharia de Prompts de Alta Fidelidade do Prompt Studio.
 Sua missão é transformar a intenção do usuário no prompt final perfeito, garantindo uma FIDELIDADE ABSOLUTA (99%) à ideia original.
 
 =============================================================================
@@ -560,7 +603,7 @@ Sua missão é transformar a intenção do usuário no prompt final perfeito, ga
 2. ANCORAGEM CANÔNICA FORÇADA (GARANTIA DE 99% DE FIDELIDADE)
 =============================================================================
 - O NÚCLEO DO USUÁRIO É SAGRADO: Nunca altere gênero, espécie, idade, cores ou ações informadas.
-- INJEÇÃO CANÔNICA ATIVA (OBRIGATÓRIO): Se o usuário solicitar um personagem existente de uma franquia (ex: Android 18, Batman, Goku), VOCÊ DEVE buscar em seu banco de dados e INJETAR EXPLICITAMENTE todas as tags físicas canônicas desse personagem (cor exata dos olhos, estilo e cor do cabelo, vestuário clássico padrão). Nunca confie apenas no nome do personagem; reforce a anatomia canônica para garantir que a IA desenhe perfeitamente. Caso o usuário especifique uma roupa diferente da original, mantenha a anatomia canônica mas obedeça à roupa do usuário.
+- INJEÇÃO CANÔNICA ATIVA (OBRIGATÓRIO): Se o usuário solicitar um personagem existente de uma franquia, VOCÊ DEVE buscar em seu banco de dados e INJETAR EXPLICITAMENTE todas as tags físicas canônicas desse personagem (cor dos olhos, cabelo, vestuário clássico). Mantenha a anatomia canônica mas obedeça à roupa do usuário se ele a alterar.
 - INFERÊNCIA COERENTE: Deduza com maestria física apenas os elementos de cenário e iluminação que o usuário NÃO especificou.
 
 =============================================================================
@@ -572,60 +615,10 @@ Sua missão é transformar a intenção do usuário no prompt final perfeito, ga
 - Nível 4 - Ecchi: rating_questionable, micro trajes, decote acentuado.
 - Nível 5 - Picante: rating_explicit, nudez artística/trajes mínimos sem censura.
 - Nível 6 - Dual: Gere VERSÃO A (Censurada) e VERSÃO B (Explícita).
-
-=============================================================================
-4. ADAPTAÇÃO GRAMATICAL NATIVA E ESCUDO NEGATIVO DE ALTA DENSIDADE
-=============================================================================
-A qualidade de modelos baseados em SDXL depende de um bloqueio maciço de artefatos. O Prompt Negativo NUNCA deve ser raso. Você DEVE usar as estruturas completas abaixo:
-
-- COMFYUI / PONY SDXL:
-  * SINTAXE DO POSITIVO: Exclusivamente Danbooru tags separadas por vírgula, com underscore no lugar de espaço. Mínimo de 30 a 50 tags densas. Ordem estrita de precedência: 1. Qualidade (score_9, etc.) -> 2. Entidade/Lore -> 3. Anatomia Canônica -> 4. Vestuário Detalhado -> 5. Ação/Pose -> 6. Cenário/Objetos -> 7. Câmera/Luz.
-  * NEGATIVO DE ALTA DENSIDADE (Uso Obrigatório): Você deve bloquear 3 camadas simultâneas (Scores base + Artefatos/Texto + Mutações Anatômicas). 
-  * USE EXATAMENTE ESTA BASE e adicione extras se a cena pedir:
-    "score_6, score_5, score_4, score_3, score_2, score_1, worst quality, low quality, normal quality, text, signature, watermark, username, jpeg artifacts, ugly, bad anatomy, bad hands, missing fingers, extra digits, fewer digits, mutated, deformed, poorly drawn, out of frame, blurry, cropped, disfigured, bad proportions."
-  * IMPORTANTE: Se o prompt positivo for realista/fotográfico (source_photography), ADICIONE no negativo: "source_anime, source_cartoon, source_furry, 3d, illustration, painting".
-
-- COMFYUI / ILLUSTRIOUS:
-  * SINTAXE DO POSITIVO: Tags Danbooru estritas. Ordem de precedência igual ao Pony. PREFIXO OBRIGATÓRIO: masterpiece, best quality, ultra-detailed, illustration, aesthetic.
-  * NEGATIVO DINÂMICO (Base + Contexto): NUNCA use uma string fixa blindada. Construa o negativo em duas camadas:
-    1. BASE INEGOCIÁVEL (Sempre inclua): "lowres, bad quality, worst quality, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry."
-    2. INTELIGÊNCIA CONTEXTUAL (Obrigatório): Adicione de 5 a 10 tags baseadas nos riscos específicos da cena. 
-       - Se for 1 personagem (solo): adicione "multiple boys/girls, extra figures, background characters".
-       - Se for foto realista: adicione "anime, cartoon, 3d, illustration, sketch".
-       - EXCEÇÃO CRÍTICA (O Paradoxo do Foco): Se o prompt positivo incluir "depth of field", "bokeh", "blurred background" ou foco em rosto, VOCÊ DEVE REMOVER as palavras "blurry" e "out of focus" da Base Inegociável.
-
-- COMFYUI / SDXL BASE NATURAL:
-  * SINTAXE DO POSITIVO: Parágrafo cinematográfico denso em inglês natural, sem underscores. FÓRMULA: "A breathtaking highly detailed [photo/painting] of [Sujeito + Anatomia + Roupas], who is [Ação/Pose], located in [Cenário Detalhado]. The lighting is [Iluminação]. Shot on [Equipamento da Câmera, Lente, Ângulo]. [Estilo Artístico]."
-  * NEGATIVO DINÂMICO ESTRUTURAL: Use descritores técnicos mesclando uma base fixa com contexto dinâmico.
-    1. BASE OBRIGATÓRIA: "ugly, deformed, poorly drawn, bad anatomy, missing limbs, extra limbs, mutated hands, unnatural proportions, watermark, signature, jpeg artifacts, amateur, bad composition."
-    2. INTELIGÊNCIA CONTEXTUAL (Obrigatório): Complemente com frases que anulem erros prováveis da cena solicitada. 
-       - Exemplo: Para um veículo, adicione "broken wheels, asymmetrical design, warped metal". 
-       - EXCEÇÃO CRÍTICA: Se o usuário pedir letras na roupa, cartazes ou letreiros na imagem, REMOVA a palavra "text" e "watermark" do prompt negativo.
-
-- FLUX.1 (DEV / SCHNELL):
-  * Parágrafo narrativo longo e ultra-descritivo em inglês natural (estilo Midjourney denso). Sem underscores. Foque em microtexturas de pele/tecido, realismo de lente e iluminação física. 
-  * NEGATIVO: Como este motor não utiliza prompts negativos de forma nativa ou efetiva, retorne "Não aplicável para este motor (Focado em linguagem natural)".
-
-- MIDJOURNEY v6.1:
-  * Frases objetivas, separadas por vírgulas, em inglês natural. Foco em estética, direção de arte e equipamento fotográfico. Parâmetros técnicos no final (--ar 16:9, --v 6.1, --stylize 250). 
-  * NEGATIVO: "Não aplicável para este motor (Focado em linguagem natural)".
-
-- IDEOGRAM 2.0:
-  * Foco em diagramação e tipografia. Textos literais da cena sempre entre aspas duplas (" "). 
-  * NEGATIVO: "Não aplicável para este motor (Focado em linguagem natural)".
-
-=============================================================================
-FORMATO DE SAÍDA EXATO:
-=============================================================================
-### 🖼️ PROMPT GERADO: [{MOTOR_DESTINO}]
-1. PROMPT (Inglês): [Prompt estruturado na sintaxe exata do motor]
-2. PROMPT NEGATIVO: [Prompt Negativo de alta densidade/dinâmico ou 'Não aplicável para este motor']
-3. DESCRIÇÃO REDES SOCIAIS (Português): [Legenda curta e cativante conectando sujeito e cena + CTA]
-4. HASHTAGS: [#tags]
-💡 DICA TÉCNICA: [Dica prática de amostragem/steps/cfg ideal para o motor]"""
+"""
 
 # ==============================================================================
-# 6. FUNÇÕES DE PROCESSAMENTO
+# 6. FUNÇÕES DE PROCESSAMENTO E INJEÇÃO DINÂMICA
 # ==============================================================================
 def gerar_preprompt_visual(texto_ideia, modelo_gemini):
     """Gera a direção visual (pré-prompt) em português fundindo a ideia do usuário com expansão óptica."""
@@ -643,7 +636,6 @@ def analisar_no_compositometro(texto_ideia, modelo_gemini):
     user_prompt = f"AVALIE ESTA IDEIA NO COMPOSITÔMETRO:\n{texto_ideia}"
     texto_json, prov = _chamar_provedor_ia(SYS_COMPOSITOMETRO, user_prompt, modelo_gemini, temperature=0.1)
     try:
-        # Usa limpeza segura via strip para evitar erro de aspas do markdown
         limpo = texto_json.strip().strip("`")
         if limpo.lower().startswith("json"):
             limpo = limpo[4:].strip()
@@ -653,8 +645,41 @@ def analisar_no_compositometro(texto_ideia, modelo_gemini):
 
 
 def sintetizar_prompt_final(texto_ideia, nivel_sensualidade, destino, sugestoes_aceitas, modelo_gemini):
-    """Gera o prompt final especializado com base na ideia e nos moduladores."""
+    """Gera o prompt final injetando dinamicamente as regras do motor selecionado (Otimização Hiper-Veloz)."""
     sug_str = "\n".join(f"- {s}" for s in sugestoes_aceitas) if sugestoes_aceitas else "Nenhuma sugestão adicional marcada."
+
+    # 1. Puxa os dados do motor no dicionário (Fallback de segurança para o Pony SDXL)
+    engine_data = BANCO_DE_MOTORES.get(destino, BANCO_DE_MOTORES["ComfyUI / Pony SDXL"])
+
+    # 2. Constrói o bloco Gramatical Modular
+    bloco_regras_motor = f"""
+=============================================================================
+4. ADAPTAÇÃO GRAMATICAL NATIVA: {destino.upper()}
+=============================================================================
+- SINTAXE DO POSITIVO: {engine_data['regra_positivo']}
+"""
+    
+    # 3. Injecao inteligente do Negativo (Economia de Tokens)
+    if engine_data.get('regra_negativo'):
+        bloco_regras_motor += f"- NEGATIVO (Obrigatório): {engine_data['regra_negativo']}\n"
+    else:
+        bloco_regras_motor += "- NEGATIVO: Não aplicável para este motor (Focado em linguagem natural). Retorne apenas 'Não aplicável para este motor'.\n"
+
+    # 4. Trava do Formato Exato de Saída
+    bloco_regras_motor += f"""
+=============================================================================
+FORMATO DE SAÍDA EXATO:
+=============================================================================
+### 🖼️ PROMPT GERADO: [{destino}]
+1. PROMPT (Inglês): [Prompt estruturado na sintaxe exata do motor]
+2. PROMPT NEGATIVO: [Prompt Negativo de alta densidade/dinâmico ou 'Não aplicável para este motor']
+3. DESCRIÇÃO REDES SOCIAIS (Português): [Legenda curta e cativante conectando sujeito e cena + CTA]
+4. HASHTAGS: [#tags]
+💡 DICA TÉCNICA: {engine_data['dica_tecnica']}
+"""
+
+    # 5. Funde o Core estático com as regras isoladas
+    sys_prompt_dinamico = SYS_MESTRE_CORE + bloco_regras_motor
 
     user_prompt = f"""=== ENTRADA DE SÍNTESE DO COCKPIT ===
 PLATAFORMA DESTINO: {destino}
@@ -668,14 +693,14 @@ NÍVEL DE SENSUALIDADE ESCOLHIDO PELO USUÁRIO: {nivel_sensualidade}
 
 Gere o prompt final aplicando rigidamente o protocolo anti-fluff, hard anchoring do sujeito e a sintaxe exigida pelo motor {destino}."""
 
-    return _chamar_provedor_ia(SYS_MESTRE_SINTETIZADOR, user_prompt, modelo_gemini, temperature=0.25)
-    
+    return _chamar_provedor_ia(sys_prompt_dinamico, user_prompt, modelo_gemini, temperature=0.25)
+
+
 def processar_imagem_visao(arquivo_imagem, modo_leitura, modelo_gemini):
     """Extrai a engenharia reversa da imagem forçando a engine do Gemini."""
     email = st.session_state.get("user_email", "")
     config = carregar_config(email)
     
-    # Força uso da chave Gemini independente do fallback
     gemini_key = st.session_state.get("input_key_1", "").strip() or config.get("chaves", {}).get("Chave 1", "")
     if not gemini_key or genai is None:
         raise RuntimeError("⚠️ Chave do Google Gemini ausente ou SDK não carregado. O detalhador de imagem exige o motor Gemini.")
@@ -692,7 +717,7 @@ def processar_imagem_visao(arquivo_imagem, modo_leitura, modelo_gemini):
         contents=[img_pil, user_prompt],
         config=types.GenerateContentConfig(
             system_instruction=sys_prompt,
-            temperature=0.2 # Baixa temperatura = mais precisão técnica
+            temperature=0.2 
         )
     )
     
@@ -703,13 +728,11 @@ def processar_imagem_visao(arquivo_imagem, modo_leitura, modelo_gemini):
     
     if is_parametrico:
         try:
-            # Usa limpeza segura via strip para evitar erro de aspas do markdown
             limpo = texto_resposta.strip().strip("`")
             if limpo.lower().startswith("json"):
                 limpo = limpo[4:].strip()
             dados = json.loads(limpo)
             
-            # Monta o HTML colorido para exibição rica
             html_colorido = f"""
             <div style="background: #ffffff; border: 1px solid var(--ps-line); border-radius: 12px; padding: 1.25rem; font-size: 1.02rem; line-height: 1.6; margin-bottom: 1.2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
                 <div style="font-size: 0.8rem; font-weight: bold; color: var(--ps-muted); margin-bottom: 8px; text-transform: uppercase;">Leitura Paramétrica Concluída:</div>
@@ -720,12 +743,10 @@ def processar_imagem_visao(arquivo_imagem, modo_leitura, modelo_gemini):
                 A captura foi feita com <span style="color:#e11d48; font-weight:600; background-color:#fff1f2; padding:2px 4px; border-radius:4px;">{dados.get('estilo_camera', '')}</span>.
             </div>
             """
-            # Monta o texto limpo para jogar na caixa de edição
             texto_plano = f"A imagem mostra {dados.get('sujeito', '')}, que está {dados.get('acao', '')}. O ambiente é {dados.get('cenario', '')}. A iluminação é {dados.get('iluminacao', '')}. A captura foi feita com {dados.get('estilo_camera', '')}."
             
             return {"tipo": "html", "html": html_colorido, "texto": texto_plano}
         except Exception:
-            # Fallback se o JSON falhar
             return {"tipo": "texto", "texto": texto_resposta}
     else:
         return {"tipo": "texto", "texto": texto_resposta}
@@ -766,7 +787,6 @@ def renderizar_cockpit():
             )
             btn_ler_imagem = st.button("👁️ Extrair Prompt da Imagem", type="secondary", use_container_width=True)
 
-        # Lógica de Leitura da Imagem
         if btn_ler_imagem:
             if not img_file:
                 st.warning("Selecione uma imagem primeiro.")
@@ -782,25 +802,21 @@ def renderizar_cockpit():
                         else:
                             st.session_state.pop("ck_img_html", None)
                         
-                        # A MÁGICA ACONTECE AQUI: Atualizamos não só a ideia, mas a CHAVE visual da caixa de texto
                         st.session_state["ck_ideia"] = texto_extraido
                         st.session_state["ck_ideia_input"] = texto_extraido
                         
-                        # Limpa os passos seguintes para forçar reavaliação
                         st.session_state.pop("ck_preprompt", None)
                         st.session_state.pop("ck_diagnostico", None)
                         st.rerun()
                     except Exception as e:
                         st.error(f"Erro na visão: {e}")
 
-        # Se houver leitura paramétrica salva, exibe a caixinha colorida Rica
         if st.session_state.get("ck_img_html"):
             st.markdown(st.session_state["ck_img_html"], unsafe_allow_html=True)
         
         st.markdown("---")
         st.markdown("### 💡 O que você quer criar?")
         
-        # O campo de texto agora pega o "ck_ideia" dinamicamente se a imagem foi lida
         ideia_input = st.text_area(
             "Descreva sua cena (ou edite a extração da imagem acima):",
             value=st.session_state.get("ck_ideia", ""),
@@ -841,11 +857,9 @@ def renderizar_cockpit():
                     st.session_state["ck_ideia"] = ideia_input.strip()
                     st.session_state["ck_preprompt"] = pre_texto
                     st.session_state["ck_diagnostico"] = diag
-                    # Limpa checkboxes de sugestões anteriores
                     for k in list(st.session_state.keys()):
                         if k.startswith("sug_chk_"):
                             st.session_state.pop(k, None)
-                    # Pré-posiciona o slider se detectado pelo compositômetro
                     if diag:
                         sug_lvl = diag.get("nivel_sensualidade_sugerido", 1)
                         if 1 <= sug_lvl <= 6:
@@ -881,7 +895,6 @@ def renderizar_cockpit():
             st.markdown("### 🎨 Pré-prompt (Direção Visual Ajustada)")
             st.caption("Visualização da composição desenvolvida em português antes da tradução técnica para o motor de imagem.")
             
-            # Legenda indicando quem escreveu o que
             st.markdown(
                 "<div class='ps-legend'>"
                 "<span><span class='ps-user-word'>Sua Ideia</span> (Inserção do Usuário)</span>"
@@ -891,14 +904,12 @@ def renderizar_cockpit():
                 unsafe_allow_html=True
             )
 
-            # Texto com marcação colorida
             markup = _ps_markup_origin(
                 st.session_state["ck_preprompt"],
                 st.session_state.get("ck_ideia", "")
             )
             st.markdown(f"<div class='ps-preprompt'>{markup}</div>", unsafe_allow_html=True)
 
-            # Campo editável para ajustes finos
             preprompt_editado = st.text_area(
                 "Ajustar o Pré-prompt se desejar (o texto abaixo será a base da compilação técnica):",
                 value=st.session_state["ck_preprompt"],
@@ -916,7 +927,6 @@ def renderizar_cockpit():
         with st.container(border=True):
             st.markdown("#### 📊 Raio-X do Compositômetro")
             
-            # Badges de Status
             col_stat1, col_stat2, col_stat3, col_stat4, col_stat5 = st.columns(5)
             
             def badge_cor(status):
@@ -947,7 +957,6 @@ def renderizar_cockpit():
             if diag_atual.get("diagnostico_texto"):
                 st.caption(f"ℹ️ **Diagnóstico:** {diag_atual.get('diagnostico_texto')}")
 
-            # Checkboxes de Apoio Dinâmico (1.1)
             sugestoes = diag_atual.get("sugestoes_cirurgicas", [])
             if sugestoes:
                 st.markdown("##### ✨ Sugestões Cirúrgicas Opcionais (Marque para incorporar):")
@@ -976,7 +985,6 @@ def renderizar_cockpit():
 
         num_nivel = int(sens_escolhida[0]) if sens_escolhida and sens_escolhida[0].isdigit() else 1
 
-        # Legenda Dinâmica de Risco (Transparência Técnica sem Paternalismo)
         if num_nivel in [1, 2]:
             st.markdown(
                 "<div class='risk-banner risk-green'>"
@@ -1024,7 +1032,7 @@ def renderizar_cockpit():
         else:
             real_dest = destino_selecionado
             if real_dest == "Recomendado automaticamente":
-                real_dest = "ComfyUI / Pony SDXL" if num_nivel >= 4 else "Midjourney v6.1"
+                real_dest = "ComfyUI / Pony SDXL" if num_nivel >= 4 else "Midjourney v6.1+"
 
             sug_aceitas = st.session_state.get("ck_sugestoes_marcadas", [])
 
