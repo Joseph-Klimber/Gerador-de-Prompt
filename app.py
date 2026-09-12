@@ -2,7 +2,7 @@
 """
 Prompt Studio Cockpit — Interface Minimalista de Alta Precisão
 Atrito zero para o usuário: Entrada livre de ideias + Compositômetro inteligente +
-Agentes Modificadores Unificados (Shift-Left Architecture).
+Agentes Modificadores Unificados (Shift-Left Architecture) + Roteamento de Carga Distribuída.
 """
 
 import os
@@ -304,6 +304,7 @@ def carregar_config(email=None):
         "cloudflare_api_token": "",
         "provedor_ia": "Gemini",
         "fallback_automatico": True,
+        "gemini_so_visao": False, # NOVA REGRA: Carga Distribuída
         "modelo_groq": "openai/gpt-oss-120b",
         "modelo_cloudflare": "@cf/openai/gpt-oss-120b",
         "modelo_padrao": "gemini-3.8-flash",
@@ -331,7 +332,7 @@ def carregar_config(email=None):
 
 def salvar_config(chaves_dict, modelo_padrao, usar_busca_web=False, email=None,
                   groq_api_key="", cloudflare_account_id="", cloudflare_api_token="",
-                  provedor_ia="Gemini", fallback_automatico=True,
+                  provedor_ia="Gemini", fallback_automatico=True, gemini_so_visao=False,
                   modelo_groq="openai/gpt-oss-120b", modelo_cloudflare="@cf/openai/gpt-oss-120b"):
     dados = {
         "chaves": chaves_dict,
@@ -340,6 +341,7 @@ def salvar_config(chaves_dict, modelo_padrao, usar_busca_web=False, email=None,
         "cloudflare_api_token": cloudflare_api_token,
         "provedor_ia": provedor_ia,
         "fallback_automatico": fallback_automatico,
+        "gemini_so_visao": gemini_so_visao, # NOVA REGRA: Carga Distribuída
         "modelo_groq": modelo_groq,
         "modelo_cloudflare": modelo_cloudflare,
         "modelo_padrao": modelo_padrao,
@@ -387,6 +389,9 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-fl
     config = carregar_config(email)
     provedor_preferido = st.session_state.get("ps_provedor_manual", "Automático")
     fallback = st.session_state.get("fallback_automatico", config.get("fallback_automatico", True))
+    
+    # NOVA REGRA: Leitura da opção de Carga Distribuída
+    gemini_so_visao = st.session_state.get("gemini_so_visao", config.get("gemini_so_visao", False))
 
     provedores = []
     gemini_key = st.session_state.get("input_key_1", "").strip() or config.get("chaves", {}).get("Chave 1", "") or config.get("chaves", {}).get("Chave 2", "")
@@ -407,6 +412,13 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-fl
 
     if provedor_preferido != "Automático":
         provedores = sorted(provedores, key=lambda x: 0 if x[0] == provedor_preferido else 1)
+
+    # LÓGICA DE ECONOMIA: Se marcado, o Gemini vai para o final da fila para processamento de texto.
+    if gemini_so_visao:
+        gemini_items = [p for p in provedores if p[0] == "Gemini"]
+        outros_items = [p for p in provedores if p[0] != "Gemini"]
+        if outros_items:
+            provedores = outros_items + gemini_items
 
     if not fallback:
         provedores = provedores[:1]
@@ -1055,6 +1067,10 @@ def renderizar_sidebar():
         cf_tok = st.text_input("Cloudflare Token", value=config.get("cloudflare_api_token", ""), type="password", key="input_cloudflare_token")
         fallback_chk = st.checkbox("Fallback Automático", value=config.get("fallback_automatico", True), key="fallback_automatico")
         web_search_chk = st.checkbox("Busca Web Ativa", value=config.get("usar_busca_web", False), key="usar_busca_web")
+        
+        # NOVA REGRA: Opção de Economia de Cota do Gemini
+        st.markdown("---")
+        gemini_so_visao_chk = st.checkbox("🛡️ Economia de API (Groq/CF p/ Texto, Gemini só Visão)", value=config.get("gemini_so_visao", False), key="gemini_so_visao")
 
         if st.button("💾 Salvar Configurações", type="primary", use_container_width=True):
             salvar_config(
@@ -1066,7 +1082,8 @@ def renderizar_sidebar():
                 cloudflare_account_id=cf_acc,
                 cloudflare_api_token=cf_tok,
                 provedor_ia=st.session_state.get("ps_provedor_manual", "Gemini"),
-                fallback_automatico=fallback_chk
+                fallback_automatico=fallback_chk,
+                gemini_so_visao=gemini_so_visao_chk # Passa o parâmetro pra salvar
             )
             st.sidebar.success("✅ Configurações salvas com sucesso!")
 
