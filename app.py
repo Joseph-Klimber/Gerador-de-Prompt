@@ -83,9 +83,9 @@ st.markdown(
 # 2. CONSTANTES E DICIONÁRIO DE TRADUÇÃO JURAMENTADA
 # ==============================================================================
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyLlqkhYChBHM6K08DnNP67C9t7E2kRS3N0pINa65oYa81--Cv4amoJm3OZ_v_MSDA7/exec"
-LINK_KIWIFY_15_DIAS = "[https://pay.kiwify.com.br/MXVL98k](https://pay.kiwify.com.br/MXVL98k)"
-LINK_KIWIFY_30_DIAS = "[https://pay.kiwify.com.br/dyfEGe5](https://pay.kiwify.com.br/dyfEGe5)"
-LINK_KIWIFY_90_DIAS = "[https://pay.kiwify.com.br/xo0m3rF](https://pay.kiwify.com.br/xo0m3rF)"
+LINK_KIWIFY_15_DIAS = "https://pay.kiwify.com.br/MXVL98k"
+LINK_KIWIFY_30_DIAS = "https://pay.kiwify.com.br/dyfEGe5"
+LINK_KIWIFY_90_DIAS = "https://pay.kiwify.com.br/xo0m3rF"
 
 PASTA_CONFIGS = "configs_usuarios"
 PASTA_RESULTADOS = "resultados"
@@ -163,7 +163,7 @@ def _slug_usuario(email):
 
 def verificar_acesso_sheets(email):
     try:
-        response = requests.get(APPS_SCRIPT_URL, params={"email": (email or "").strip().lower()}, timeout=15, allow_redirects=True)
+        response = requests.get(APPS_SCRIPT_URL.strip(), params={"email": (email or "").strip().lower()}, timeout=15, allow_redirects=True)
         if response.status_code == 200:
             dados = response.json()
             if not dados.get("encontrado", False):
@@ -186,8 +186,8 @@ def carregar_config(email=None):
     config = {
         "chaves": {"Chave 1": ""}, "groq_api_key": "", "cloudflare_account_id": "",
         "cloudflare_api_token": "", "provedor_ia": "Gemini", "fallback_automatico": True,
-        "gemini_so_visao": False, "modelo_groq": "openai/gpt-oss-120b",
-        "modelo_cloudflare": "@cf/openai/gpt-oss-120b", "modelo_padrao": "gemini-3.8-flash"
+        "gemini_so_visao": False, "modelo_groq": "llama3-70b-8192",
+        "modelo_cloudflare": "@cf/meta/llama-3-8b-instruct", "modelo_padrao": "gemini-3.8-flash"
     }
     caminho = os.path.join(PASTA_CONFIGS, f"config_{_slug_usuario(email)}.json")
     if os.path.exists(caminho):
@@ -249,17 +249,15 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-fl
     for nome, cred in provedores:
         try:
             if nome == "Gemini":
-                # FIX: Separar a criação do cliente evita o bug "client has been closed" do Google
                 client = genai.Client(api_key=cred)
                 cfg = types.GenerateContentConfig(system_instruction=sys_final, temperature=temperature) if types else {"system_instruction": sys_final, "temperature": temperature}
                 resp = client.models.generate_content(model=modelo_gemini, contents=user_prompt, config=cfg)
                 texto = getattr(resp, "text", "")
                 
             elif nome == "Groq":
-                # FIX: .strip() blinda a URL contra quebras de linha acidentais do seu editor
                 url_groq = "https://api.groq.com/openai/v1/chat/completions".strip()
                 payload = {
-                    "model": st.session_state.get("modelo_groq", "openai/gpt-oss-120b"), 
+                    "model": st.session_state.get("modelo_groq", "llama3-70b-8192"), 
                     "messages": [{"role": "system", "content": sys_final}, {"role": "user", "content": user_prompt}], 
                     "temperature": temperature
                 }
@@ -268,8 +266,7 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-fl
                 texto = _extrair_texto_resposta(resp.json())
                 
             elif nome == "Cloudflare":
-                # FIX: .strip() blinda a URL do Cloudflare
-                cf_modelo = st.session_state.get('modelo_cloudflare', '@cf/openai/gpt-oss-120b').strip()
+                cf_modelo = st.session_state.get('modelo_cloudflare', '@cf/meta/llama-3-8b-instruct').strip()
                 url_cf = f"https://api.cloudflare.com/client/v4/accounts/{cred[1].strip()}/ai/run/{cf_modelo}".strip()
                 payload = {
                     "messages": [{"role": "system", "content": sys_final}, {"role": "user", "content": user_prompt}], 
@@ -347,7 +344,6 @@ def processar_imagem_visao(arquivo_imagem, estilo_conversao, nivel_sensualidade,
     if "Fotorrealismo" in estilo_conversao: user_prompt += "\n[MODIFICADOR 1: ESTILO]: Traduza a cena inteira para o MUNDO REAL fotorrealista (proibido anime/3d)."
     elif "Anime" in estilo_conversao: user_prompt += "\n[MODIFICADOR 1: ESTILO]: Traduza a cena para ILUSTRAÇÃO 2D ANIME (proibido poros/fotorrealismo)."
 
-    # FIX: Instanciação isolada do Cliente Google GenAI
     client = genai.Client(api_key=gemini_key)
     cfg = types.GenerateContentConfig(system_instruction=SYS_LEITOR_PARAMETRICO, temperature=0.2)
     resp = client.models.generate_content(model=modelo_gemini, contents=[img_pil, user_prompt], config=cfg)
@@ -360,7 +356,7 @@ def processar_imagem_visao(arquivo_imagem, estilo_conversao, nivel_sensualidade,
         if limpo.lower().startswith("json"): limpo = limpo[4:].strip() 
         dados = json.loads(limpo)
         
-        html_color = f"<div style='background:#ffffff; color:#0f172a; border:1px solid var(--ps-line); border-radius:12px; padding:1.25rem; font-size:1.02rem; margin-bottom:1.2rem; box-shadow:0 1px 3px rgba(0,0,0,0.05);'><div style='font-size:0.8rem; font-weight:bold; color:var(--ps-muted); margin-bottom:8px;'>LEITURA PARAMÉTRICA CONCLUÍDA:</div>A imagem mostra <span style='color:#2563eb; font-weight:600; background:#eff6ff; padding:2px 4px; border-radius:4px;'>{dados.get('sujeito','')}</span>, que está <span style='color:#059669; font-weight:600; background:#ecfdf5; padding:2px 4px; border-radius:4px;'>{dados.get('acao','')}</span>. O ambiente é <span style='color:#b45309; font-weight:600; background:#fffbeb; padding:2px 4px; border-radius:4px;'>{dados.get('cenario','')}</span>. A iluminação é <span style='color:#d97706; font-weight:600; background:#fffbeb; padding:2px 4px; border-radius:4px;'>{dados.get('iluminacao','')}</span>. Estilo: <span style='color:#e11d48; font-weight:600; background:#fff1f2; padding:2px 4px; border-radius:4px;'>{dados.get('estilo_camera','')}</span>.</div>"
+        html_color = f"<div style='background:var(--secondary-background-color); color:var(--text-color); border:1px solid rgba(128,128,128,0.2); border-radius:12px; padding:1.25rem; font-size:1.02rem; margin-bottom:1.2rem; box-shadow:0 1px 3px rgba(0,0,0,0.05);'><div style='font-size:0.8rem; font-weight:bold; opacity:0.7; margin-bottom:8px;'>LEITURA PARAMÉTRICA CONCLUÍDA:</div>A imagem mostra <span style='color:#2563eb; font-weight:600; background:rgba(37,99,235,0.1); padding:2px 4px; border-radius:4px;'>{dados.get('sujeito','')}</span>, que está <span style='color:#10b981; font-weight:600; background:rgba(16,185,129,0.1); padding:2px 4px; border-radius:4px;'>{dados.get('acao','')}</span>. O ambiente é <span style='color:#f59e0b; font-weight:600; background:rgba(245,158,11,0.1); padding:2px 4px; border-radius:4px;'>{dados.get('cenario','')}</span>. A iluminação é <span style='color:#f59e0b; font-weight:600; background:rgba(245,158,11,0.1); padding:2px 4px; border-radius:4px;'>{dados.get('iluminacao','')}</span>. Estilo: <span style='color:#e11d48; font-weight:600; background:rgba(225,29,72,0.1); padding:2px 4px; border-radius:4px;'>{dados.get('estilo_camera','')}</span>.</div>"
         return {"tipo": "html", "html": html_color, "texto": f"A imagem mostra {dados.get('sujeito','')}, que está {dados.get('acao','')}. O ambiente é {dados.get('cenario','')}. Iluminação: {dados.get('iluminacao','')}. Estilo: {dados.get('estilo_camera','')}."}
     except Exception: return {"tipo": "texto", "texto": texto}
 
@@ -400,7 +396,7 @@ def renderizar_sidebar():
             "cloudflare_account_id": cf_acc, "cloudflare_api_token": cf_tok,
             "provedor_ia": st.session_state.get("ps_provedor_manual", "Automático"),
             "fallback_automatico": fallback_chk, "gemini_so_visao": gemini_so_visao_chk,
-            "modelo_groq": "openai/gpt-oss-120b", "modelo_cloudflare": "@cf/openai/gpt-oss-120b",
+            "modelo_groq": "llama3-70b-8192", "modelo_cloudflare": "@cf/meta/llama-3-8b-instruct",
             "modelo_padrao": "gemini-3.8-flash", "usar_busca_web": False
         }
         salvar_config(dados_salvos, st.session_state.get("user_email", ""))
@@ -432,7 +428,7 @@ def renderizar_cockpit():
             else:
                 with st.spinner("Analisando matriz óptica..."):
                     try:
-                        res = processar_imagem_visao(img_file, "Paramétrico", estilo_conversao, sens_escolhida, "gemini-3.8-flash")
+                        res = processar_imagem_visao(img_file, estilo_conversao, sens_escolhida, "gemini-3.8-flash")
                         if res["tipo"] == "html": st.session_state["ck_img_html"] = res["html"]
                         st.session_state["ck_ideia_input"] = res["texto"]
                         st.session_state.pop("ck_preprompt", None)
@@ -450,9 +446,8 @@ def renderizar_cockpit():
         with col_b2: btn_ava = st.button("🔍 Auditar no Compositômetro", use_container_width=True)
         with col_b3:
             if st.button("🗑️ Limpar Tudo", use_container_width=True):
-                # AUDITORIA FIX 3: Esvaziar input de forma segura
                 st.session_state["ck_ideia_input"] = "" 
-                for k in ["ck_img_html","ck_preprompt","ck_preprompt_editado","ck_diagnostico","ck_prompt_final"]: st.session_state.pop(k, None)
+                for k in ["ck_img_html","ck_preprompt","ck_preprompt_editado","ck_diagnostico","ck_prompt_final", "ck_sugestoes_marcadas"]: st.session_state.pop(k, None)
                 st.rerun()
 
     if btn_pre:
@@ -475,7 +470,7 @@ def renderizar_cockpit():
                 try:
                     txt, prov = _chamar_provedor_ia(SYS_COMPOSITOMETRO, f"AVALIE:\n{ideia_input.strip()}")
                     limpo = txt.strip().strip("`")
-                    if limpo.lower().startswith("json"): limpo = limpo[4:].strip() # AUDITORIA FIX 1: Parse seguro
+                    if limpo.lower().startswith("json"): limpo = limpo[4:].strip() 
                     st.session_state["ck_diagnostico"] = json.loads(limpo)
                     st.rerun()
                 except Exception as e: st.error(f"🔌 Motor Desligado: {str(e)}")
@@ -496,8 +491,23 @@ def renderizar_cockpit():
             def _bdg(s): return ("comp-green","✓") if s in ["Definido","Presente"] else ("comp-amber","!") if s in ["Vago","Estática"] else ("comp-blue","⚙️")
             for col, key, label in zip([c1,c2,c3,c4,c5], ["sujeito_status","acao_status","cenario_status","iluminacao_status","camera_status"], ["Sujeito","Ação","Cenário","Luz","Câmera"]):
                 cl, ic = _bdg(diag.get(key, ""))
-                # AUDITORIA FIX 4: Valor padrão seguro se faltar chave
                 col.markdown(f"<div class='comp-badge {cl}'>{ic} {label}: {diag.get(key, 'Pendente')}</div>", unsafe_allow_html=True) 
+            
+            # BLOCO RESTAURADO: DIAGNÓSTICO E SUGESTÕES
+            st.write("")
+            if diag.get("diagnostico_texto"):
+                st.caption(f"ℹ️ **Diagnóstico:** {diag.get('diagnostico_texto')}")
+
+            sugestoes = diag.get("sugestoes_cirurgicas", [])
+            if sugestoes:
+                st.markdown("##### ✨ Sugestões Cirúrgicas Opcionais (Marque para incorporar):")
+                selecionadas = []
+                for idx, sug in enumerate(sugestoes):
+                    if st.checkbox(sug, key=f"sug_chk_{idx}"):
+                        selecionadas.append(sug)
+                st.session_state["ck_sugestoes_marcadas"] = selecionadas
+            else:
+                st.session_state["ck_sugestoes_marcadas"] = []
 
     st.write("")
     col_dest1, col_dest2 = st.columns([7, 3])
@@ -515,8 +525,15 @@ def renderizar_cockpit():
                 try:
                     eng = BANCO_DE_MOTORES[dest_sel]
                     bloco = f"\n\n======================================\n3. SINTAXE NATIVA: {dest_sel}\n======================================\n- POSITIVO: {eng['regra_positivo']}\n- NEGATIVO: {eng.get('regra_negativo', 'N/A')}\n\nSAÍDA OBRIGATÓRIA:\n1. PROMPT (Inglês)\n2. NEGATIVO\n3. LEGENDA (Português)\n4. HASHTAGS\n💡 DICA TÉCNICA: {eng['dica_tecnica']}"
+                    
                     txt_b = st.session_state.get("ck_preprompt", ideia_input.strip())
-                    p = f"DESTINO: {dest_sel}\nRATING: {sens_escolhida}\n\n1. NARRATIVA VISUAL (TRADUZA ISSO INTEGRALMENTE):\n{txt_b}\n\nGere o prompt garantindo a ancoragem de Sujeito."
+                    
+                    # BLOCO RESTAURADO: INJEÇÃO DE SUGESTÕES
+                    sug_aceitas = st.session_state.get("ck_sugestoes_marcadas", [])
+                    sug_str = "\n".join(f"- {s}" for s in sug_aceitas) if sug_aceitas else "Nenhuma sugestão adicional marcada."
+                    
+                    p = f"DESTINO: {dest_sel}\nRATING: {sens_escolhida}\n\n1. NARRATIVA VISUAL (TRADUZA ISSO INTEGRALMENTE):\n{txt_b}\n\n2. SUGESTÕES CIRÚRGICAS INCORPORADAS:\n{sug_str}\n\nGere o prompt garantindo a ancoragem de Sujeito."
+                    
                     res, prov = _chamar_provedor_ia(SYS_MESTRE_CORE + bloco, p)
                     st.session_state["ck_prompt_final"] = res
                     st.session_state["ck_prov_usado"] = prov
@@ -562,12 +579,10 @@ if not st.session_state.autenticado:
         st.markdown(f"<div class='label-prompt'>A Engenharia do Cockpit (Motor: {vit['mt']})</div>", unsafe_allow_html=True)
         st.markdown(f"<div class='code-prompt'>{vit['pr']}</div>", unsafe_allow_html=True)
     with c2: 
-        # Carrega perfeitamente as imagens que estão na pasta do seu projeto!
         st.image(vit['im'], use_container_width=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
     c_l1, c_l2, c_l3 = st.columns([1, 4, 1])
-    # ... (o resto do código de login abaixo permanece igual)
     with c_l2:
         st.markdown("<div class='plan-container'>", unsafe_allow_html=True)
         st.markdown("<div class='byok-badge'>🔒 Modelo BYOK: Conecte sua própria chave API (Gemini/Groq) após assinar.</div>", unsafe_allow_html=True)
