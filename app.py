@@ -256,12 +256,12 @@ def _req_apps_script(params, timeout=20):
         return {"ok": False, "erro": f"Falha de conexão com o serviço de dados: {e}"}
 
 def carregar_config(email=None):
-    """Carrega config do usuário: tenta Sheets primeiro; fallback p/ arquivo local."""
-    config = {
+    # Carrega as chaves da aba 'Configs' no Google Sheets em vez de arquivo local
+    config_padrao = {
         "chaves": {"Chave 1": ""}, "groq_api_key": "", "cloudflare_account_id": "",
         "cloudflare_api_token": "", "provedor_ia": "Gemini", "fallback_automatico": True,
-        "gemini_so_visao": False, "modelo_groq": "llama3-70b-8192",
-        "modelo_cloudflare": "@cf/meta/llama-3-8b-instruct", "modelo_padrao": "gemini-3.8-flash"
+        "gemini_so_visao": True, "modelo_groq": "llama-3.1-70b-versatile",
+        "modelo_cloudflare": "@cf/meta/llama-3.1-8b-instruct", "modelo_padrao": "gemini-3.8-flash"
     }
     dados = _req_apps_script({"acao": "carregar_config", "email": (email or "").strip().lower()})
     if dados and dados.get("ok") and dados.get("config"):
@@ -500,8 +500,7 @@ def processar_imagem_visao(arquivo_imagem, estilo_conversao, nivel_sensualidade,
     
     dados = parse_json_ia(texto)
     if dados:
-        html_color = f"<div style='background:var(--secondary-background-color); color:var(--text-color); border:1px solid rgba(128,128,128,0.2); border-radius:12px; padding:1.25rem; font-size:1.02rem; margin-bottom:1.2rem; box-shadow:0 1px 3px rgba(0,0,0,0.05);'><div style='font-size:0.8rem; font-weight:bold; opacity:0.7; margin-bottom:8px;'>LEITURA PARAMÉTRICA CONCLUÍDA:</div>A imagem mostra <span style='color:#2563eb; font-weight:600; background:rgba(37,99,235,0.1); padding:2px 4px; border-radius:4px;'>{dados.get('sujeito','')}</span>, que está <span style='color:#10b981; font-weight:600; background:rgba(16,185,129,0.1); padding:2px 4px; border-radius:4px;'>{dados.get('acao','')}</span>. O ambiente é <span style='color:#f59e0b; font-weight:600; background:rgba(245,158,11,0.1); padding:2px 4px; border-radius:4px;'>{dados.get('cenario','')}</span>. A iluminação é <span style='color:#f59e0b; font-weight:600; background:rgba(245,158,11,0.1); padding:2px 4px; border-radius:4px;'>{dados.get('iluminacao','')}</span>. Estilo: <span style='color:#e11d48; font-weight:600; background:rgba(225,29,72,0.1); padding:2px 4px; border-radius:4px;'>{dados.get('estilo_camera','')}</span>.</div>"
-        return {"tipo": "html", "html": html_color, "texto": f"A imagem mostra {dados.get('sujeito','')}, que está {dados.get('acao','')}. O ambiente é {dados.get('cenario','')}. Iluminação: {dados.get('iluminacao','')}. Estilo: {dados.get('estilo_camera','')}."}
+        return {"tipo": "json", "dados": dados}
     return {"tipo": "texto", "texto": texto}
 
 # ==============================================================================
@@ -531,7 +530,7 @@ def renderizar_sidebar():
         st.selectbox("Provedor Prioritário", ["Automático", "Gemini", "Groq", "Cloudflare"], key="ps_provedor_manual")
         cf_acc = st.text_input("Cloudflare Account ID", value=config.get("cloudflare_account_id", ""), key="input_cloudflare_account")
         cf_tok = st.text_input("Cloudflare Token", value=config.get("cloudflare_api_token", ""), type="password", key="input_cloudflare_token")
-        gemini_so_visao_chk = st.checkbox("🛡️ Economia Gemini (Groq p/ Texto, Gemini só Visão)", value=config.get("gemini_so_visao", False), key="gemini_so_visao")
+        gemini_so_visao_chk = st.checkbox("🛡️ Economia Gemini (Groq p/ Texto, Gemini só Visão)", value=config.get("gemini_so_visao", True), key="gemini_so_visao")
         fallback_chk = st.checkbox("Fallback Automático", value=config.get("fallback_automatico", True), key="fallback_automatico")
 
     if st.sidebar.button("💾 Conectar Motores", type="primary", use_container_width=True):
@@ -599,39 +598,61 @@ def renderizar_cockpit():
         with col_m2: sens_escolhida = st.select_slider("Nível de Sensualidade & Modéstia:", options=OPCOES_SENSUALIDADE, key="ck_sens_slider", value=st.session_state.get("ck_sens_slider", OPCOES_SENSUALIDADE[1]))
 
     with st.container(border=True):
-        st.markdown("### 🖼️ Extração Pericial de Imagem (Visão)")
-        col_img1, col_img2 = st.columns([4, 6])
-        with col_img1: img_file = st.file_uploader("Upload de Referência", type=["png", "jpg", "jpeg", "webp"], key="ck_img_uploader", label_visibility="collapsed")
-        with col_img2:
-            st.write("Aplica as regras globais de figurino e estilo na leitura.")
-            btn_ler = st.button("👁️ Extrair Prompt da Imagem", use_container_width=True)
+    st.markdown("### 🖼️ Extração Pericial de Imagem (Visão)")
+    col_img1, col_img2 = st.columns([4, 6])
+    with col_img1: img_file = st.file_uploader("Upload de Referência", type=["png", "jpg", "jpeg", "webp"], key="ck_img_uploader", label_visibility="collapsed")
+    with col_img2:
+        st.write("Aplica as regras globais de figurino e estilo na leitura.")
+        btn_ler = st.button("👁️ Extrair Prompt da Imagem", use_container_width=True)
 
-        if btn_ler:
-            if not img_file: st.warning("Selecione uma imagem primeiro.")
-            else:
-                with st.spinner("Analisando matriz óptica..."):
-                    try:
-                        res = processar_imagem_visao(img_file, estilo_conversao, sens_escolhida, "gemini-3.8-flash")
-                        if res["tipo"] == "html": st.session_state["ck_img_html"] = res["html"]
+    if btn_ler:
+        if not img_file: st.warning("Selecione uma imagem primeiro.")
+        else:
+            with st.spinner("Analisando matriz óptica..."):
+                try:
+                    res = processar_imagem_visao(img_file, estilo_conversao, sens_escolhida, "gemini-3.8-flash")
+                    if res["tipo"] == "json":
+                        st.session_state["ck_img_parametros"] = res["dados"]
+                        # Já monta uma narrativa básica inicial
+                        st.session_state["ck_ideia_input"] = f"{res['dados'].get('sujeito','')}, {res['dados'].get('acao','')}. Cenário: {res['dados'].get('cenario','')}. Iluminação: {res['dados'].get('iluminacao','')}. Estilo: {res['dados'].get('estilo_camera','')}."
+                    else:
                         st.session_state["ck_ideia_input"] = res["texto"]
-                        st.session_state.pop("ck_preprompt", None)
-                        st.rerun()
-                    except Exception as e: st.error(_msg_erro_amigavel(e))
+                        st.session_state.pop("ck_img_parametros", None)
+                    st.session_state.pop("ck_preprompt", None)
+                    st.rerun()
+                except Exception as e: st.error(_msg_erro_amigavel(e))
 
-        if st.session_state.get("ck_img_html"): st.markdown(st.session_state["ck_img_html"], unsafe_allow_html=True)
-        
-        st.markdown("---")
-        st.markdown("### 💡 Qual é a NARRATIVA VISUAL do seu prompt?")
-        ideia_input = st.text_area("Descreva ou edite a cena:", key="ck_ideia_input", height=140)
-
-        col_b1, col_b2, col_b3 = st.columns([4, 4, 2])
-        with col_b1: btn_pre = st.button("👁️ Rascunhar Cena (Pré-prompt)", type="primary", use_container_width=True)
-        with col_b2: btn_ava = st.button("🔍 Auditar no Compositômetro", use_container_width=True)
-        with col_b3:
-            if st.button("🗑️ Limpar Tudo", use_container_width=True):
-                st.session_state["ck_ideia_input"] = "" 
-                for k in ["ck_img_html","ck_preprompt","ck_preprompt_editado","ck_diagnostico","ck_prompt_final", "ck_sugestoes_marcadas"]: st.session_state.pop(k, None)
+    # --- NOVO DETALHADOR EDITÁVEL ---
+    parametros = st.session_state.get("ck_img_parametros")
+    if parametros:
+        with st.expander("🔬 Detalhador Pericial de Imagem (Editável)", expanded=True):
+            st.caption("Ajuste os parâmetros extraídos da imagem. Ao terminar, clique no botão abaixo para atualizar a Narrativa Visual.")
+            c1, c2 = st.columns(2)
+            with c1:
+                p_suj = st.text_area("👤 Sujeito (Biotipo/Roupas):", value=parametros.get("sujeito", ""), height=90)
+                p_cen = st.text_area("🏞️ Cenário:", value=parametros.get("cenario", ""), height=90)
+            with c2:
+                p_act = st.text_area("🏃 Ação / Pose:", value=parametros.get("acao", ""), height=90)
+                p_ilu = st.text_input("💡 Iluminação:", value=parametros.get("iluminacao", ""))
+                p_est = st.text_input("📷 Estilo / Câmera:", value=parametros.get("estilo_camera", ""))
+            
+            if st.button("🔄 Atualizar Narrativa Visual", use_container_width=True):
+                st.session_state["ck_ideia_input"] = f"{p_suj}, {p_act}. Cenário: {p_cen}. Iluminação: {p_ilu}. Estilo: {p_est}."
+                st.session_state["ck_img_parametros"] = {"sujeito": p_suj, "acao": p_act, "cenario": p_cen, "iluminacao": p_ilu, "estilo_camera": p_est}
                 st.rerun()
+
+    st.markdown("---")
+    st.markdown("### 💡 Qual é a NARRATIVA VISUAL do seu prompt?")
+    ideia_input = st.text_area("Descreva ou edite a cena:", key="ck_ideia_input", height=140)
+
+    col_b1, col_b2, col_b3 = st.columns([4, 4, 2])
+    with col_b1: btn_pre = st.button("👁️ Rascunhar Cena (Pré-prompt)", type="primary", use_container_width=True)
+    with col_b2: btn_ava = st.button("🔍 Auditar no Compositômetro", use_container_width=True)
+    with col_b3:
+        if st.button("🗑️ Limpar Tudo", use_container_width=True):
+            st.session_state["ck_ideia_input"] = "" 
+            for k in ["ck_img_parametros","ck_preprompt","ck_preprompt_editado","ck_diagnostico","ck_prompt_final", "ck_sugestoes_marcadas"]: st.session_state.pop(k, None)
+            st.rerun()
 
     if btn_pre:
         if not ideia_input.strip(): st.warning("Escreva sua ideia antes.")
