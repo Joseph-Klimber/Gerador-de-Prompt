@@ -254,7 +254,7 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-fl
                 resp = client.models.generate_content(model=modelo_gemini, contents=user_prompt, config=cfg)
                 texto = getattr(resp, "text", "")
                 
-            elif nome == "Groq":
+        elif nome == "Groq":
             url_groq = "https://api.groq.com/openai/v1/chat/completions".strip()
             payload = {
                 "model": "llama-3.1-70b-versatile", # Modelo atualizado, ignorando cache antigo
