@@ -520,8 +520,8 @@ if "autenticado" not in st.session_state: st.session_state.autenticado = False
 
 if not st.session_state.autenticado:
     vitrines = [
-        {"id": "Uma mulher elfa em uma floresta mágica.", "pr": "masterpiece, best quality, ultra-detailed, 1girl, solo, stunning elf warrior, intricate silver filigree armor, glowing emerald eyes, deep enchanted ancient forest background, bioluminescent glowing plants, volumetric god rays, 8k resolution, cinematic lighting.", "mt": "ComfyUI / Illustrious", "im": "[https://images.unsplash.com/photo-1605806616949-1e87b487cb2a?q=80&w=800&auto=format&fit=crop](https://images.unsplash.com/photo-1605806616949-1e87b487cb2a?q=80&w=800&auto=format&fit=crop)"},
-        {"id": "Um carro de corrida na chuva à noite.", "pr": "A breathtaking highly detailed photograph of a sleek cyberpunk racing car, drifting aggressively on a wet asphalt street in Neo-Tokyo. Dramatic night cinematic lighting, heavy rain reflecting vibrant neon pink and cyan signs. Shot on 35mm lens, motion blur, 8k, photorealistic --ar 16:9 --v 6.1 --stylize 250", "mt": "Midjourney v6.1+", "im": "[https://images.unsplash.com/photo-1517581177682-a085bb7ffb15?q=80&w=800&auto=format&fit=crop](https://images.unsplash.com/photo-1517581177682-a085bb7ffb15?q=80&w=800&auto=format&fit=crop)"}
+        {"id": "Uma mulher elfa em uma floresta mágica.", "pr": "masterpiece, best quality...", "mt": "ComfyUI / Illustrious", "im": "elfa.jpg"},
+        {"id": "Um carro de corrida na chuva à noite.", "pr": "A breathtaking highly detailed...", "mt": "Midjourney v6.1+", "im": "carro.jpg"}
     ]
     vit = random.choice(vitrines)
 
@@ -537,10 +537,7 @@ if not st.session_state.autenticado:
         st.markdown(f"<div class='code-prompt'>{vit['pr']}</div>", unsafe_allow_html=True)
     
     with c2: 
-        st.markdown(
-            f"<img src='{vit['im']}' style='width: 100%; border-radius: 8px; object-fit: cover; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);'>", 
-            unsafe_allow_html=True
-        )
+        st.image(vit['im'], use_container_width=True)
         
     st.markdown("</div>", unsafe_allow_html=True)
 
