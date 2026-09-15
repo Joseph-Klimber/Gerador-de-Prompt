@@ -255,27 +255,27 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-fl
                 texto = getattr(resp, "text", "")
                 
             elif nome == "Groq":
-                url_groq = "https://api.groq.com/openai/v1/chat/completions".strip()
-                payload = {
-                    "model": st.session_state.get("modelo_groq", "llama3-70b-8192"), 
-                    "messages": [{"role": "system", "content": sys_final}, {"role": "user", "content": user_prompt}], 
-                    "temperature": temperature
-                }
-                resp = requests.post(url_groq, headers={"Authorization": f"Bearer {cred}"}, json=payload, timeout=90)
-                resp.raise_for_status()
-                texto = _extrair_texto_resposta(resp.json())
-                
-            elif nome == "Cloudflare":
-                cf_modelo = st.session_state.get('modelo_cloudflare', '@cf/meta/llama-3-8b-instruct').strip()
-                url_cf = f"https://api.cloudflare.com/client/v4/accounts/{cred[1].strip()}/ai/run/{cf_modelo}".strip()
-                payload = {
-                    "messages": [{"role": "system", "content": sys_final}, {"role": "user", "content": user_prompt}], 
-                    "temperature": temperature, 
-                    "max_tokens": 4096
-                }
-                resp = requests.post(url_cf, headers={"Authorization": f"Bearer {cred[0]}"}, json=payload, timeout=90)
-                resp.raise_for_status()
-                texto = _extrair_texto_resposta(resp.json())
+            url_groq = "https://api.groq.com/openai/v1/chat/completions".strip()
+            payload = {
+                "model": "llama-3.1-70b-versatile", # Modelo atualizado, ignorando cache antigo
+                "messages": [{"role": "system", "content": sys_final}, {"role": "user", "content": user_prompt}], 
+                "temperature": temperature
+            }
+            resp = requests.post(url_groq, headers={"Authorization": f"Bearer {cred}"}, json=payload, timeout=90)
+            resp.raise_for_status()
+            texto = _extrair_texto_resposta(resp.json())
+            
+        elif nome == "Cloudflare":
+            cf_modelo = "@cf/meta/llama-3.1-8b-instruct" # Modelo novo oficial da Cloudflare
+            url_cf = f"https://api.cloudflare.com/client/v4/accounts/{cred[1].strip()}/ai/run/{cf_modelo}".strip()
+            payload = {
+                "messages": [{"role": "system", "content": sys_final}, {"role": "user", "content": user_prompt}], 
+                "temperature": temperature, 
+                "max_tokens": 4096
+            }
+            resp = requests.post(url_cf, headers={"Authorization": f"Bearer {cred[0]}"}, json=payload, timeout=90)
+            resp.raise_for_status()
+            texto = _extrair_texto_resposta(resp.json())
             
             texto = str(texto or "").strip()
             if texto and "[REF-VERIF:" not in texto: return texto, nome
