@@ -598,6 +598,7 @@ def renderizar_cockpit():
         with col_m2: sens_escolhida = st.select_slider("Nível de Sensualidade & Modéstia:", options=OPCOES_SENSUALIDADE, key="ck_sens_slider", value=st.session_state.get("ck_sens_slider", OPCOES_SENSUALIDADE[1]))
 
     with st.container(border=True):
+      
     st.markdown("### 🖼️ Extração Pericial de Imagem (Visão)")
     col_img1, col_img2 = st.columns([4, 6])
     with col_img1: img_file = st.file_uploader("Upload de Referência", type=["png", "jpg", "jpeg", "webp"], key="ck_img_uploader", label_visibility="collapsed")
