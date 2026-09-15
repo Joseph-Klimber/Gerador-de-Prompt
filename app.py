@@ -537,7 +537,10 @@ if not st.session_state.autenticado:
         st.markdown(f"<div class='code-prompt'>{vit['pr']}</div>", unsafe_allow_html=True)
     
     with c2: 
-        st.image(vit['im'], use_container_width=True)
+        st.markdown(
+            f"<img src='{vit['im']}' style='width: 100%; border-radius: 8px; object-fit: cover; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);'>", 
+            unsafe_allow_html=True
+        )
         
     st.markdown("</div>", unsafe_allow_html=True)
 
