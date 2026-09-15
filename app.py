@@ -82,7 +82,7 @@ st.markdown(
 # ==============================================================================
 # 2. CONSTANTES E DICIONÁRIO DE TRADUÇÃO JURAMENTADA
 # ==============================================================================
-APPS_SCRIPT_URL = "[https://script.google.com/macros/s/AKfycbyLlqkhYChBHM6K08DnNP67C9t7E2kRS3N0pINa65oYa81--Cv4amoJm3OZ_v_MSDA7/exec](https://script.google.com/macros/s/AKfycbyLlqkhYChBHM6K08DnNP67C9t7E2kRS3N0pINa65oYa81--Cv4amoJm3OZ_v_MSDA7/exec)"
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyLlqkhYChBHM6K08DnNP67C9t7E2kRS3N0pINa65oYa81--Cv4amoJm3OZ_v_MSDA7/exec"
 LINK_KIWIFY_15_DIAS = "[https://pay.kiwify.com.br/MXVL98k](https://pay.kiwify.com.br/MXVL98k)"
 LINK_KIWIFY_30_DIAS = "[https://pay.kiwify.com.br/dyfEGe5](https://pay.kiwify.com.br/dyfEGe5)"
 LINK_KIWIFY_90_DIAS = "[https://pay.kiwify.com.br/xo0m3rF](https://pay.kiwify.com.br/xo0m3rF)"
