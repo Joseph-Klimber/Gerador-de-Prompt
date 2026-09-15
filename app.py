@@ -227,7 +227,8 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-fl
     gr_key = st.session_state.get("input_groq_api", "").strip() or config.get("groq_api_key", "")
     if gr_key: provedores.append(("Groq", gr_key))
     
-    cf_t, cf_a = st.session_state.get("input_cloudflare_token", "").strip() or config.get("cloudflare_api_token", ""), st.session_state.get("input_cloudflare_account", "").strip() or config.get("cloudflare_account_id", "")
+    cf_t = st.session_state.get("input_cloudflare_token", "").strip() or config.get("cloudflare_api_token", "")
+    cf_a = st.session_state.get("input_cloudflare_account", "").strip() or config.get("cloudflare_account_id", "")
     if cf_t and cf_a: provedores.append(("Cloudflare", (cf_t, cf_a)))
 
     if not provedores:
@@ -248,24 +249,41 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-fl
     for nome, cred in provedores:
         try:
             if nome == "Gemini":
-                resp = genai.Client(api_key=cred).models.generate_content(
-                    model=modelo_gemini, contents=user_prompt,
-                    config=types.GenerateContentConfig(system_instruction=sys_final, temperature=temperature) if types else {"system_instruction": sys_final, "temperature": temperature}
-                )
+                # FIX: Separar a criação do cliente evita o bug "client has been closed" do Google
+                client = genai.Client(api_key=cred)
+                cfg = types.GenerateContentConfig(system_instruction=sys_final, temperature=temperature) if types else {"system_instruction": sys_final, "temperature": temperature}
+                resp = client.models.generate_content(model=modelo_gemini, contents=user_prompt, config=cfg)
                 texto = getattr(resp, "text", "")
+                
             elif nome == "Groq":
-                resp = requests.post("[https://api.groq.com/openai/v1/chat/completions](https://api.groq.com/openai/v1/chat/completions)", headers={"Authorization": f"Bearer {cred}"}, json={"model": st.session_state.get("modelo_groq", "openai/gpt-oss-120b"), "messages": [{"role": "system", "content": sys_final}, {"role": "user", "content": user_prompt}], "temperature": temperature}, timeout=90)
+                # FIX: .strip() blinda a URL contra quebras de linha acidentais do seu editor
+                url_groq = "https://api.groq.com/openai/v1/chat/completions".strip()
+                payload = {
+                    "model": st.session_state.get("modelo_groq", "openai/gpt-oss-120b"), 
+                    "messages": [{"role": "system", "content": sys_final}, {"role": "user", "content": user_prompt}], 
+                    "temperature": temperature
+                }
+                resp = requests.post(url_groq, headers={"Authorization": f"Bearer {cred}"}, json=payload, timeout=90)
                 resp.raise_for_status()
                 texto = _extrair_texto_resposta(resp.json())
+                
             elif nome == "Cloudflare":
-                resp = requests.post(f"[https://api.cloudflare.com/client/v4/accounts/](https://api.cloudflare.com/client/v4/accounts/){cred[1]}/ai/run/{st.session_state.get('modelo_cloudflare', '@cf/openai/gpt-oss-120b')}", headers={"Authorization": f"Bearer {cred[0]}"}, json={"messages": [{"role": "system", "content": sys_final}, {"role": "user", "content": user_prompt}], "temperature": temperature, "max_tokens": 4096}, timeout=90)
+                # FIX: .strip() blinda a URL do Cloudflare
+                cf_modelo = st.session_state.get('modelo_cloudflare', '@cf/openai/gpt-oss-120b').strip()
+                url_cf = f"https://api.cloudflare.com/client/v4/accounts/{cred[1].strip()}/ai/run/{cf_modelo}".strip()
+                payload = {
+                    "messages": [{"role": "system", "content": sys_final}, {"role": "user", "content": user_prompt}], 
+                    "temperature": temperature, 
+                    "max_tokens": 4096
+                }
+                resp = requests.post(url_cf, headers={"Authorization": f"Bearer {cred[0]}"}, json=payload, timeout=90)
                 resp.raise_for_status()
                 texto = _extrair_texto_resposta(resp.json())
             
             texto = str(texto or "").strip()
             if texto and "[REF-VERIF:" not in texto: return texto, nome
         except Exception as e: 
-            erros.append(f"{nome}: {str(e)}") # AUDITORIA FIX 2: Mostra o erro real
+            erros.append(f"{nome}: {str(e)}")
 
     raise RuntimeError("Falha de Comunicação com as APIs. Detalhes: " + " | ".join(erros))
 
@@ -329,13 +347,17 @@ def processar_imagem_visao(arquivo_imagem, estilo_conversao, nivel_sensualidade,
     if "Fotorrealismo" in estilo_conversao: user_prompt += "\n[MODIFICADOR 1: ESTILO]: Traduza a cena inteira para o MUNDO REAL fotorrealista (proibido anime/3d)."
     elif "Anime" in estilo_conversao: user_prompt += "\n[MODIFICADOR 1: ESTILO]: Traduza a cena para ILUSTRAÇÃO 2D ANIME (proibido poros/fotorrealismo)."
 
-    resp = genai.Client(api_key=gemini_key).models.generate_content(model=modelo_gemini, contents=[img_pil, user_prompt], config=types.GenerateContentConfig(system_instruction=SYS_LEITOR_PARAMETRICO, temperature=0.2))
+    # FIX: Instanciação isolada do Cliente Google GenAI
+    client = genai.Client(api_key=gemini_key)
+    cfg = types.GenerateContentConfig(system_instruction=SYS_LEITOR_PARAMETRICO, temperature=0.2)
+    resp = client.models.generate_content(model=modelo_gemini, contents=[img_pil, user_prompt], config=cfg)
+    
     texto = getattr(resp, "text", "") or ""
     if not texto.strip(): raise RuntimeError("A IA bloqueou o retorno da imagem.")
     
     try:
         limpo = texto.strip().strip("`")
-        if limpo.lower().startswith("json"): limpo = limpo[4:].strip() # AUDITORIA FIX 1: Parse seguro
+        if limpo.lower().startswith("json"): limpo = limpo[4:].strip() 
         dados = json.loads(limpo)
         
         html_color = f"<div style='background:#ffffff; color:#0f172a; border:1px solid var(--ps-line); border-radius:12px; padding:1.25rem; font-size:1.02rem; margin-bottom:1.2rem; box-shadow:0 1px 3px rgba(0,0,0,0.05);'><div style='font-size:0.8rem; font-weight:bold; color:var(--ps-muted); margin-bottom:8px;'>LEITURA PARAMÉTRICA CONCLUÍDA:</div>A imagem mostra <span style='color:#2563eb; font-weight:600; background:#eff6ff; padding:2px 4px; border-radius:4px;'>{dados.get('sujeito','')}</span>, que está <span style='color:#059669; font-weight:600; background:#ecfdf5; padding:2px 4px; border-radius:4px;'>{dados.get('acao','')}</span>. O ambiente é <span style='color:#b45309; font-weight:600; background:#fffbeb; padding:2px 4px; border-radius:4px;'>{dados.get('cenario','')}</span>. A iluminação é <span style='color:#d97706; font-weight:600; background:#fffbeb; padding:2px 4px; border-radius:4px;'>{dados.get('iluminacao','')}</span>. Estilo: <span style='color:#e11d48; font-weight:600; background:#fff1f2; padding:2px 4px; border-radius:4px;'>{dados.get('estilo_camera','')}</span>.</div>"
