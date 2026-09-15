@@ -598,62 +598,61 @@ def renderizar_cockpit():
         with col_m2: sens_escolhida = st.select_slider("Nível de Sensualidade & Modéstia:", options=OPCOES_SENSUALIDADE, key="ck_sens_slider", value=st.session_state.get("ck_sens_slider", OPCOES_SENSUALIDADE[1]))
 
     with st.container(border=True):
-      
-    st.markdown("### 🖼️ Extração Pericial de Imagem (Visão)")
-    col_img1, col_img2 = st.columns([4, 6])
-    with col_img1: img_file = st.file_uploader("Upload de Referência", type=["png", "jpg", "jpeg", "webp"], key="ck_img_uploader", label_visibility="collapsed")
-    with col_img2:
-        st.write("Aplica as regras globais de figurino e estilo na leitura.")
-        btn_ler = st.button("👁️ Extrair Prompt da Imagem", use_container_width=True)
+        st.markdown("### 🖼️ Extração Pericial de Imagem (Visão)")
+        col_img1, col_img2 = st.columns([4, 6])
+        with col_img1: img_file = st.file_uploader("Upload de Referência", type=["png", "jpg", "jpeg", "webp"], key="ck_img_uploader", label_visibility="collapsed")
+        with col_img2:
+            st.write("Aplica as regras globais de figurino e estilo na leitura.")
+            btn_ler = st.button("👁️ Extrair Prompt da Imagem", use_container_width=True)
 
-    if btn_ler:
-        if not img_file: st.warning("Selecione uma imagem primeiro.")
-        else:
-            with st.spinner("Analisando matriz óptica..."):
-                try:
-                    res = processar_imagem_visao(img_file, estilo_conversao, sens_escolhida, "gemini-3.8-flash")
-                    if res["tipo"] == "json":
-                        st.session_state["ck_img_parametros"] = res["dados"]
-                        # Já monta uma narrativa básica inicial
-                        st.session_state["ck_ideia_input"] = f"{res['dados'].get('sujeito','')}, {res['dados'].get('acao','')}. Cenário: {res['dados'].get('cenario','')}. Iluminação: {res['dados'].get('iluminacao','')}. Estilo: {res['dados'].get('estilo_camera','')}."
-                    else:
-                        st.session_state["ck_ideia_input"] = res["texto"]
-                        st.session_state.pop("ck_img_parametros", None)
-                    st.session_state.pop("ck_preprompt", None)
+        if btn_ler:
+            if not img_file: st.warning("Selecione uma imagem primeiro.")
+            else:
+                with st.spinner("Analisando matriz óptica..."):
+                    try:
+                        res = processar_imagem_visao(img_file, estilo_conversao, sens_escolhida, "gemini-3.8-flash")
+                        if res["tipo"] == "json":
+                            st.session_state["ck_img_parametros"] = res["dados"]
+                            # Já monta uma narrativa básica inicial
+                            st.session_state["ck_ideia_input"] = f"{res['dados'].get('sujeito','')}, {res['dados'].get('acao','')}. Cenário: {res['dados'].get('cenario','')}. Iluminação: {res['dados'].get('iluminacao','')}. Estilo: {res['dados'].get('estilo_camera','')}."
+                        else:
+                            st.session_state["ck_ideia_input"] = res["texto"]
+                            st.session_state.pop("ck_img_parametros", None)
+                        st.session_state.pop("ck_preprompt", None)
+                        st.rerun()
+                    except Exception as e: st.error(_msg_erro_amigavel(e))
+
+        # --- NOVO DETALHADOR EDITÁVEL ---
+        parametros = st.session_state.get("ck_img_parametros")
+        if parametros:
+            with st.expander("🔬 Detalhador Pericial de Imagem (Editável)", expanded=True):
+                st.caption("Ajuste os parâmetros extraídos da imagem. Ao terminar, clique no botão abaixo para atualizar a Narrativa Visual.")
+                c1, c2 = st.columns(2)
+                with c1:
+                    p_suj = st.text_area("👤 Sujeito (Biotipo/Roupas):", value=parametros.get("sujeito", ""), height=90)
+                    p_cen = st.text_area("🏞️ Cenário:", value=parametros.get("cenario", ""), height=90)
+                with c2:
+                    p_act = st.text_area("🏃 Ação / Pose:", value=parametros.get("acao", ""), height=90)
+                    p_ilu = st.text_input("💡 Iluminação:", value=parametros.get("iluminacao", ""))
+                    p_est = st.text_input("📷 Estilo / Câmera:", value=parametros.get("estilo_camera", ""))
+                
+                if st.button("🔄 Atualizar Narrativa Visual", use_container_width=True):
+                    st.session_state["ck_ideia_input"] = f"{p_suj}, {p_act}. Cenário: {p_cen}. Iluminação: {p_ilu}. Estilo: {p_est}."
+                    st.session_state["ck_img_parametros"] = {"sujeito": p_suj, "acao": p_act, "cenario": p_cen, "iluminacao": p_ilu, "estilo_camera": p_est}
                     st.rerun()
-                except Exception as e: st.error(_msg_erro_amigavel(e))
 
-    # --- NOVO DETALHADOR EDITÁVEL ---
-    parametros = st.session_state.get("ck_img_parametros")
-    if parametros:
-        with st.expander("🔬 Detalhador Pericial de Imagem (Editável)", expanded=True):
-            st.caption("Ajuste os parâmetros extraídos da imagem. Ao terminar, clique no botão abaixo para atualizar a Narrativa Visual.")
-            c1, c2 = st.columns(2)
-            with c1:
-                p_suj = st.text_area("👤 Sujeito (Biotipo/Roupas):", value=parametros.get("sujeito", ""), height=90)
-                p_cen = st.text_area("🏞️ Cenário:", value=parametros.get("cenario", ""), height=90)
-            with c2:
-                p_act = st.text_area("🏃 Ação / Pose:", value=parametros.get("acao", ""), height=90)
-                p_ilu = st.text_input("💡 Iluminação:", value=parametros.get("iluminacao", ""))
-                p_est = st.text_input("📷 Estilo / Câmera:", value=parametros.get("estilo_camera", ""))
-            
-            if st.button("🔄 Atualizar Narrativa Visual", use_container_width=True):
-                st.session_state["ck_ideia_input"] = f"{p_suj}, {p_act}. Cenário: {p_cen}. Iluminação: {p_ilu}. Estilo: {p_est}."
-                st.session_state["ck_img_parametros"] = {"sujeito": p_suj, "acao": p_act, "cenario": p_cen, "iluminacao": p_ilu, "estilo_camera": p_est}
+        st.markdown("---")
+        st.markdown("### 💡 Qual é a NARRATIVA VISUAL do seu prompt?")
+        ideia_input = st.text_area("Descreva ou edite a cena:", key="ck_ideia_input", height=140)
+
+        col_b1, col_b2, col_b3 = st.columns([4, 4, 2])
+        with col_b1: btn_pre = st.button("👁️ Rascunhar Cena (Pré-prompt)", type="primary", use_container_width=True)
+        with col_b2: btn_ava = st.button("🔍 Auditar no Compositômetro", use_container_width=True)
+        with col_b3:
+            if st.button("🗑️ Limpar Tudo", use_container_width=True):
+                st.session_state["ck_ideia_input"] = "" 
+                for k in ["ck_img_parametros","ck_preprompt","ck_preprompt_editado","ck_diagnostico","ck_prompt_final", "ck_sugestoes_marcadas"]: st.session_state.pop(k, None)
                 st.rerun()
-
-    st.markdown("---")
-    st.markdown("### 💡 Qual é a NARRATIVA VISUAL do seu prompt?")
-    ideia_input = st.text_area("Descreva ou edite a cena:", key="ck_ideia_input", height=140)
-
-    col_b1, col_b2, col_b3 = st.columns([4, 4, 2])
-    with col_b1: btn_pre = st.button("👁️ Rascunhar Cena (Pré-prompt)", type="primary", use_container_width=True)
-    with col_b2: btn_ava = st.button("🔍 Auditar no Compositômetro", use_container_width=True)
-    with col_b3:
-        if st.button("🗑️ Limpar Tudo", use_container_width=True):
-            st.session_state["ck_ideia_input"] = "" 
-            for k in ["ck_img_parametros","ck_preprompt","ck_preprompt_editado","ck_diagnostico","ck_prompt_final", "ck_sugestoes_marcadas"]: st.session_state.pop(k, None)
-            st.rerun()
 
     if btn_pre:
         if not ideia_input.strip(): st.warning("Escreva sua ideia antes.")
@@ -689,7 +688,6 @@ def renderizar_cockpit():
             st.markdown("<div class='ps-legend'><span><span class='ps-user-word'>Ideia Original</span></span> • <span><span class='ps-ai-word'>Desenvolvimento da IA</span></span></div>", unsafe_allow_html=True)
             st.markdown(f"<div class='ps-preprompt'>{_ps_markup_origin(st.session_state['ck_preprompt'], st.session_state.get('ck_ideia', ''))}</div>", unsafe_allow_html=True)
             pre_ed = st.text_area("Ajuste fino manual (Esta caixa será enviada ao Sintetizador):", height=130, key="ck_preprompt_editado")
-            # Atualiza o valor "atual" apenas se o usuário realmente editou (evita sobrescrever em reruns)
             if pre_ed != st.session_state.get("ck_preprompt") and not st.session_state.get("ck_preprompt_dirty", False):
                 st.session_state["ck_preprompt"] = pre_ed
                 st.session_state["ck_preprompt_dirty"] = True
@@ -760,7 +758,6 @@ def renderizar_cockpit():
                 ok_hist, erro_hist = _historico_sheets(st.session_state.get("user_email", ""), st.session_state["ck_prompt_final"], acao="adicionar")
                 if ok_hist: st.success("✅ Prompt salvo no histórico!")
                 else: st.warning(f"⚠️ {erro_hist or 'Não foi possível salvar.'}")
-
 # ==============================================================================
 # 9. PONTO DE ENTRADA (VITRINE DINÂMICA E LOGIN)
 # ==============================================================================
