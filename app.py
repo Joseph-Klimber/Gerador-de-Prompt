@@ -535,7 +535,10 @@ if not st.session_state.autenticado:
         st.markdown(f"<div class='text-ideia'>\"{vit['id']}\"</div>", unsafe_allow_html=True)
         st.markdown(f"<div class='label-prompt'>A Engenharia do Cockpit (Motor: {vit['mt']})</div>", unsafe_allow_html=True)
         st.markdown(f"<div class='code-prompt'>{vit['pr']}</div>", unsafe_allow_html=True)
-    with c2: st.image(vit['im'], use_column_width=True)
+    
+    with c2: 
+        st.image(vit['im'], use_container_width=True)
+        
     st.markdown("</div>", unsafe_allow_html=True)
 
     c_l1, c_l2, c_l3 = st.columns([1, 4, 1])
