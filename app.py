@@ -603,4 +603,221 @@ def renderizar_cockpit():
         col_img1, col_img2 = st.columns([4, 6])
         with col_img1: img_file = st.file_uploader("Upload de Referência", type=["png", "jpg", "jpeg", "webp"], key="ck_img_uploader", label_visibility="collapsed")
         with col_img2:
-            st.
+            st.write("Aplica as regras globais de figurino e estilo na leitura.")
+            btn_ler = st.button("👁️ Extrair Prompt da Imagem", use_container_width=True)
+
+        if btn_ler:
+            if not img_file: st.warning("Selecione uma imagem primeiro.")
+            else:
+                with st.spinner("Analisando matriz óptica..."):
+                    try:
+                        res = processar_imagem_visao(img_file, estilo_conversao, sens_escolhida, "gemini-3.8-flash")
+                        if res["tipo"] == "json":
+                            st.session_state["ck_img_parametros"] = res["dados"]
+                            # Já monta uma narrativa básica inicial
+                            st.session_state["ck_ideia_input"] = f"{res['dados'].get('sujeito','')}, {res['dados'].get('acao','')}. Cenário: {res['dados'].get('cenario','')}. Iluminação: {res['dados'].get('iluminacao','')}. Estilo: {res['dados'].get('estilo_camera','')}."
+                        else:
+                            st.session_state["ck_ideia_input"] = res["texto"]
+                            st.session_state.pop("ck_img_parametros", None)
+                        st.session_state.pop("ck_preprompt", None)
+                        st.rerun()
+                    except Exception as e: st.error(_msg_erro_amigavel(e))
+
+        # --- NOVO DETALHADOR EDITÁVEL ---
+        parametros = st.session_state.get("ck_img_parametros")
+        if parametros:
+            with st.expander("🔬 Detalhador Pericial de Imagem (Editável)", expanded=True):
+                st.caption("Ajuste os parâmetros extraídos da imagem. Ao terminar, clique no botão abaixo para atualizar a Narrativa Visual.")
+                c1, c2 = st.columns(2)
+                with c1:
+                    p_suj = st.text_area("👤 Sujeito (Biotipo/Roupas):", value=parametros.get("sujeito", ""), height=90)
+                    p_cen = st.text_area("🏞️ Cenário:", value=parametros.get("cenario", ""), height=90)
+                with c2:
+                    p_act = st.text_area("🏃 Ação / Pose:", value=parametros.get("acao", ""), height=90)
+                    p_ilu = st.text_input("💡 Iluminação:", value=parametros.get("iluminacao", ""))
+                    p_est = st.text_input("📷 Estilo / Câmera:", value=parametros.get("estilo_camera", ""))
+                
+                if st.button("🔄 Atualizar Narrativa Visual", use_container_width=True):
+                    st.session_state["ck_ideia_input"] = f"{p_suj}, {p_act}. Cenário: {p_cen}. Iluminação: {p_ilu}. Estilo: {p_est}."
+                    st.session_state["ck_img_parametros"] = {"sujeito": p_suj, "acao": p_act, "cenario": p_cen, "iluminacao": p_ilu, "estilo_camera": p_est}
+                    st.rerun()
+
+        st.markdown("---")
+        st.markdown("### 💡 Qual é a NARRATIVA VISUAL do seu prompt?")
+        ideia_input = st.text_area("Descreva ou edite a cena:", key="ck_ideia_input", height=140)
+
+        col_b1, col_b2, col_b3 = st.columns([4, 4, 2])
+        with col_b1: btn_pre = st.button("👁️ Rascunhar Cena (Pré-prompt)", type="primary", use_container_width=True)
+        with col_b2: btn_ava = st.button("🔍 Auditar no Compositômetro", use_container_width=True)
+        with col_b3:
+            if st.button("🗑️ Limpar Tudo", use_container_width=True):
+                st.session_state["ck_ideia_input"] = "" 
+                for k in ["ck_img_parametros","ck_preprompt","ck_preprompt_editado","ck_diagnostico","ck_prompt_final", "ck_sugestoes_marcadas"]: st.session_state.pop(k, None)
+                st.rerun()
+
+    if btn_pre:
+        if not ideia_input.strip(): st.warning("Escreva sua ideia antes.")
+        else:
+            with st.spinner("Desenhando a cena..."):
+                try:
+                    p = f"IDEIA:\n{ideia_input.strip()}\n\n[AGENTE: SENSUALIDADE NÍVEL '{sens_escolhida}']: Aplique roupas/pose relativas a este nível substituindo a roupa do usuário se explícito."
+                    txt, prov = _chamar_provedor_ia(SYS_GERADOR_PREPROMPT, p)
+                    st.session_state["ck_ideia"] = ideia_input.strip()
+                    st.session_state["ck_preprompt"] = txt
+                    st.session_state["ck_preprompt_editado"] = txt
+                    st.session_state["ck_preprompt_dirty"] = False
+                    st.rerun()
+                except Exception as e: st.error(_msg_erro_amigavel(e))
+
+    if btn_ava:
+        if not ideia_input.strip(): st.warning("Escreva sua ideia antes.")
+        else:
+            with st.spinner("Raio-X em andamento..."):
+                try:
+                    txt, prov = _chamar_provedor_ia(SYS_COMPOSITOMETRO, f"AVALIE:\n{ideia_input.strip()}")
+                    diag = parse_json_ia(txt)
+                    if not diag:
+                        st.error("⚠️ O Compositômetro retornou um formato inesperado. Tente novamente.")
+                    else:
+                        st.session_state["ck_diagnostico"] = diag
+                        st.rerun()
+                except Exception as e: st.error(_msg_erro_amigavel(e))
+
+    if st.session_state.get("ck_preprompt"):
+        with st.container(border=True):
+            st.markdown("### 🎨 Pré-prompt (Cena Traduzida)")
+            st.markdown("<div class='ps-legend'><span><span class='ps-user-word'>Ideia Original</span></span> • <span><span class='ps-ai-word'>Desenvolvimento da IA</span></span></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='ps-preprompt'>{_ps_markup_origin(st.session_state['ck_preprompt'], st.session_state.get('ck_ideia', ''))}</div>", unsafe_allow_html=True)
+            pre_ed = st.text_area("Ajuste fino manual (Esta caixa será enviada ao Sintetizador):", height=130, key="ck_preprompt_editado")
+            # Atualiza o valor "atual" apenas se o usuário realmente editou (evita sobrescrever em reruns)
+            if pre_ed != st.session_state.get("ck_preprompt") and not st.session_state.get("ck_preprompt_dirty", False):
+                st.session_state["ck_preprompt"] = pre_ed
+                st.session_state["ck_preprompt_dirty"] = True
+
+    diag = st.session_state.get("ck_diagnostico")
+    if diag:
+        with st.container(border=True):
+            st.markdown("#### 📊 Raio-X do Compositômetro")
+            c1, c2, c3, c4, c5 = st.columns(5)
+            def _bdg(s): return ("comp-green","✓") if s in ["Definido","Presente"] else ("comp-amber","!") if s in ["Vago","Estática"] else ("comp-blue","⚙️")
+            for col, key, label in zip([c1,c2,c3,c4,c5], ["sujeito_status","acao_status","cenario_status","iluminacao_status","camera_status"], ["Sujeito","Ação","Cenário","Luz","Câmera"]):
+                cl, ic = _bdg(diag.get(key, ""))
+                col.markdown(f"<div class='comp-badge {cl}'>{ic} {label}: {diag.get(key, 'Pendente')}</div>", unsafe_allow_html=True) 
+            
+            st.write("")
+            if diag.get("diagnostico_texto"):
+                st.caption(f"ℹ️ **Diagnóstico:** {diag.get('diagnostico_texto')}")
+
+            sugestoes = diag.get("sugestoes_cirurgicas", [])
+            if sugestoes:
+                st.markdown("##### ✨ Sugestões Cirúrgicas Opcionais (Marque para incorporar):")
+                selecionadas = []
+                for idx, sug in enumerate(sugestoes):
+                    if st.checkbox(sug, key=f"sug_chk_{idx}"):
+                        selecionadas.append(sug)
+                st.session_state["ck_sugestoes_marcadas"] = selecionadas
+            else:
+                st.session_state["ck_sugestoes_marcadas"] = []
+
+    st.write("")
+    col_dest1, col_dest2 = st.columns([7, 3])
+    with col_dest1: dest_sel = st.selectbox("Plataforma / Motor de Imagem Alvo (OBRIGATÓRIO):", OPCOES_DESTINO, index=0, key="ck_destino_select")
+    with col_dest2: 
+        st.write("")
+        st.write("")
+        btn_exec = st.button("⚡ Gerar Código do Prompt", type="primary", use_container_width=True)
+
+    if btn_exec:
+        if dest_sel == "Selecione o Motor Destino...": st.error("🛑 Pare! Você precisa selecionar para qual motor de IA este prompt será compilado.")
+        elif not ideia_input.strip(): st.warning("Descreva sua ideia antes.")
+        else:
+            with st.spinner(f"Compilando sintaxe para {dest_sel}..."):
+                try:
+                    eng = BANCO_DE_MOTORES[dest_sel]
+                    bloco = f"\n\n======================================\n3. SINTAXE NATIVA: {dest_sel}\n======================================\n- POSITIVO: {eng['regra_positivo']}\n- NEGATIVO: {eng.get('regra_negativo', 'N/A')}\n\nSAÍDA OBRIGATÓRIA:\n1. PROMPT (Inglês)\n2. NEGATIVO\n3. LEGENDA (Português)\n4. HASHTAGS\n💡 DICA TÉCNICA: {eng['dica_tecnica']}"
+                    
+                    txt_b = st.session_state.get("ck_preprompt", ideia_input.strip())
+                    
+                    sug_aceitas = st.session_state.get("ck_sugestoes_marcadas", [])
+                    sug_str = "\n".join(f"- {s}" for s in sug_aceitas) if sug_aceitas else "Nenhuma sugestão adicional marcada."
+                    
+                    p = f"DESTINO: {dest_sel}\nRATING: {sens_escolhida}\n\n1. NARRATIVA VISUAL (TRADUZA ISSO INTEGRALMENTE):\n{txt_b}\n\n2. SUGESTÕES CIRÚRGICAS INCORPORADAS:\n{sug_str}\n\nGere o prompt garantindo a ancoragem de Sujeito."
+                    
+                    res, prov = _chamar_provedor_ia(SYS_MESTRE_CORE + bloco, p)
+                    st.session_state["ck_prompt_final"] = res
+                    st.session_state["ck_prov_usado"] = prov
+                    st.session_state["ck_dest_usado"] = dest_sel
+                    st.rerun()
+                except Exception as e: st.error(_msg_erro_amigavel(e))
+
+    if st.session_state.get("ck_prompt_final"):
+        st.markdown("---")
+        st.markdown(f"### 📋 Prompt Especializado ({st.session_state.get('ck_dest_usado')})")
+        st.code(st.session_state["ck_prompt_final"], language="markdown")
+        c_save1, c_save2 = st.columns(2)
+        with c_save1:
+            if st.button("💾 Salvar no Histórico", use_container_width=True):
+                ok_hist, erro_hist = _historico_sheets(st.session_state.get("user_email", ""), st.session_state["ck_prompt_final"], acao="adicionar")
+                if ok_hist: st.success("✅ Prompt salvo no histórico!")
+                else: st.warning(f"⚠️ {erro_hist or 'Não foi possível salvar.'}")
+
+# ==============================================================================
+# 9. PONTO DE ENTRADA (VITRINE DINÂMICA E LOGIN)
+# ==============================================================================
+if "autenticado" not in st.session_state: st.session_state.autenticado = False
+
+if not st.session_state.autenticado:
+    vitrines = [
+        {
+            "id": "Uma garota de anime com cabelo curto encostada na estante de uma biblioteca perto da janela.", 
+            "pr": "score_9, score_8_up, 1girl, solo, videl (dragon ball), short black hair, blue eyes, white t-shirt, black spandex shorts, green boots, leaning against bookshelf, window, sunlight, library, anime style, high quality, masterpiece.", 
+            "mt": "ComfyUI / Pony SDXL", 
+            "im": "carro.jpg"
+        },
+        {
+            "id": "Uma mulher loira fotorrealista com blusa vermelha curta e saia jeans em uma escadaria de pedra.", 
+            "pr": "A breathtaking highly detailed photograph of a beautiful blonde woman with striking blue eyes, wearing a red long-sleeve crop top and a denim mini skirt. She is standing on ancient outdoor stone steps in a European village. Bright midday sunlight, cinematic lighting, photorealistic, 8k resolution, shot on 35mm lens --ar 4:5 --v 6.1 --stylize 250", 
+            "mt": "Midjourney v6.1+", 
+            "im": "elfa.jpg"
+        }
+    ]
+    vit = random.choice(vitrines)
+
+    st.markdown("<div class='hero-title'>Pare de lutar contra a IA.<br>Retome o controle.</div>", unsafe_allow_html=True)
+    st.markdown("<div class='hero-subtitle'>O Prompt Studio Cockpit é a <b>IDE Profissional</b> (Interface de Desenvolvimento) para criadores de imagem. A porta é nossa, as chaves (BYOK) e o controle criativo são inteiramente seus. Sem filtros ocultos, sem taxas de API surpresa.</div>", unsafe_allow_html=True)
+
+    st.markdown("<div class='showcase-box'>", unsafe_allow_html=True)
+    c1, c2 = st.columns([1.2, 1])
+    with c1:
+        st.markdown("<div class='label-ideia'>A Ideia Simples (Entrada)</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='text-ideia'>\"{vit['id']}\"</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='label-prompt'>A Engenharia do Cockpit (Motor: {vit['mt']})</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='code-prompt'>{vit['pr']}</div>", unsafe_allow_html=True)
+    with c2: 
+        st.image(vit['im'], use_container_width=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    c_l1, c_l2, c_l3 = st.columns([1, 4, 1])
+    with c_l2:
+        st.markdown("<div class='plan-container'>", unsafe_allow_html=True)
+        st.markdown("<div class='byok-badge'>🔒 Modelo BYOK: Conecte sua própria chave API (Gemini/Groq) após assinar.</div>", unsafe_allow_html=True)
+        st.markdown("### 🚀 Acesse o Cockpit Agora")
+        cp1, cp2, cp3 = st.columns(3)
+        with cp1: st.link_button("15 Dias (R$ 14,99)", LINK_KIWIFY_15_DIAS, use_container_width=True)
+        with cp2: st.link_button("30 Dias (R$ 29,99)", LINK_KIWIFY_30_DIAS, use_container_width=True)
+        with cp3: st.link_button("90 Dias (R$ 59,99)", LINK_KIWIFY_90_DIAS, use_container_width=True)
+        st.divider()
+        email_login = st.text_input("E-mail Cadastrado na Kiwify:", key="login_email_cockpit", placeholder="seu-email@exemplo.com")
+        if st.button("Entrar no Sistema", type="primary", use_container_width=True):
+            if not email_login.strip(): st.warning("Digite seu e-mail.")
+            else:
+                ok, exp, erro = verificar_acesso_sheets(email_login)
+                if ok: st.session_state.update({"autenticado": True, "user_email": email_login.strip().lower(), "expiracao": exp}); st.rerun()
+                else: st.error(erro or "Acesso não encontrado.")
+        st.markdown("</div>", unsafe_allow_html=True)
+else:
+    renderizar_sidebar()
+    st.markdown("<div class='ps-brand'>PROMPT STUDIO COCKPIT</div>", unsafe_allow_html=True)
+    st.markdown("<div class='ps-header-note'>IDE Paramétrica de Geração de Prompts (BYOK)</div>", unsafe_allow_html=True)
+    renderizar_cockpit()
+    renderizar_historico()
