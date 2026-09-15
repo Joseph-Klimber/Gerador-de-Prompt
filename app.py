@@ -91,7 +91,7 @@ st.markdown(
 # ==============================================================================
 # 2. CONSTANTES E DICIONÁRIO DE TRADUÇÃO JURAMENTADA
 # ==============================================================================
-APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwSH6rPUbGy17SWku1sBPYrBt0mMX79LAXPud6jTKA-zy0aILNxegIzVwZcwB6hKDvn/exec"
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzgEj3YPwqiUbiueyu8wjZ9ZZK0Rcc6G3kucysRSJ2gNmzRzUdMuLqv_q55N1kSO8PQ/exec"
 LINK_KIWIFY_15_DIAS = "https://pay.kiwify.com.br/MXVL98k"
 LINK_KIWIFY_30_DIAS = "https://pay.kiwify.com.br/dyfEGe5"
 LINK_KIWIFY_90_DIAS = "https://pay.kiwify.com.br/xo0m3rF"
