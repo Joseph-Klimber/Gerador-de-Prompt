@@ -2,6 +2,15 @@
 """
 Prompt Studio Cockpit — Interface Minimalista de Alta Precisão
 Arquitetura: Shift-Left (Modificadores no Ponto Zero) + BYOK (Traga sua Chave) + Carga Distribuída.
+
+v2.0 — Melhorias:
+  • Chaves criptografadas em repouso (Fernet, chave via st.secrets/ambiente)
+  • Persistência via Google Sheets (Apps Script do login) com fallback local
+  • Erros amigáveis (sem traceback cru exposto ao usuário)
+  • Clientes de API cacheados (st.cache_resource)
+  • Estado do pré-prompt editado mais robusto
+  • Histórico de prompts salvos
+  • Funções puras extraídas (parse_json_ia, normalizar_texto) para testes
 """
 
 import os
@@ -82,13 +91,14 @@ st.markdown(
 # ==============================================================================
 # 2. CONSTANTES E DICIONÁRIO DE TRADUÇÃO JURAMENTADA
 # ==============================================================================
-APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyLlqkhYChBHM6K08DnNP67C9t7E2kRS3N0pINa65oYa81--Cv4amoJm3OZ_v_MSDA7/exec"
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwSH6rPUbGy17SWku1sBPYrBt0mMX79LAXPud6jTKA-zy0aILNxegIzVwZcwB6hKDvn/exec"
 LINK_KIWIFY_15_DIAS = "https://pay.kiwify.com.br/MXVL98k"
 LINK_KIWIFY_30_DIAS = "https://pay.kiwify.com.br/dyfEGe5"
 LINK_KIWIFY_90_DIAS = "https://pay.kiwify.com.br/xo0m3rF"
 
 PASTA_CONFIGS = "configs_usuarios"
 PASTA_RESULTADOS = "resultados"
+HISTORICO_LIMITE = 20
 
 OPCOES_SENSUALIDADE = [
     "1 - Seguro (SFW)",
@@ -156,11 +166,181 @@ BANCO_DE_MOTORES = {
 OPCOES_DESTINO = ["Selecione o Motor Destino..."] + list(BANCO_DE_MOTORES.keys())
 
 # ==============================================================================
-# 3. AUTENTICAÇÃO, CONFIGURAÇÃO E MOTOR DE CHAMADA
+# 2.1 FUNÇÕES PURAS (testáveis) + CRIPTOGRAFIA + PERSISTÊNCIA
 # ==============================================================================
 def _slug_usuario(email):
+    """Normaliza um e-mail para usar como nome de arquivo/pasta com segurança."""
     return re.sub(r'[^\w\-.]', '_', (email or "anonimo").strip().lower()) or "anonimo"
 
+def normalizar_texto(texto):
+    """Remove acentos e normaliza minúsculas — usado na marcação origem vs IA."""
+    return "".join(
+        c for c in unicodedata.normalize("NFD", (texto or "").lower())
+        if unicodedata.category(c) != "Mn"
+    )
+
+def parse_json_ia(texto):
+    """Extrai um JSON de uma resposta de IA, tolerando cercas ```json e lixo ao redor."""
+    if not texto:
+        return None
+    limpo = str(texto).strip().strip("`")
+    if limpo.lower().startswith("json"):
+        limpo = limpo[4:].strip()
+    ini = limpo.find("{")
+    if ini >= 0:
+        depth = 0
+        for i in range(ini, len(limpo)):
+            if limpo[i] == "{":
+                depth += 1
+            elif limpo[i] == "}":
+                depth -= 1
+                if depth == 0:
+                    limpo = limpo[ini:i+1]
+                    break
+    try:
+        return json.loads(limpo)
+    except Exception:
+        return None
+
+def _chave_fernet():
+    """Deriva uma chave Fernet estável a partir de st.secrets ou variável de ambiente."""
+    segredo = None
+    try:
+        segredo = st.secrets.get("PS_FERNET_KEY")
+    except Exception:
+        pass
+    if not segredo:
+        segredo = os.environ.get("PS_FERNET_KEY", "chave-local-nao-segura")
+    try:
+        from cryptography.fernet import Fernet
+        import base64
+        import hashlib
+        digest = hashlib.sha256(segredo.encode("utf-8")).digest()
+        return Fernet(base64.urlsafe_b64encode(digest))
+    except Exception:
+        return None
+
+def _criptografar(texto):
+    f = _chave_fernet()
+    if not f or not texto:
+        return texto
+    return f.encrypt(texto.encode("utf-8")).decode("utf-8")
+
+def _descriptografar(texto):
+    f = _chave_fernet()
+    if not f or not texto:
+        return texto
+    try:
+        return f.decrypt(texto.encode("utf-8")).decode("utf-8")
+    except Exception:
+        return texto
+
+def _mascarar_chaves(config):
+    """Remove conteúdo sensível de um dict p/ exibição segura (nunca logar chaves)."""
+    copia = dict(config)
+    chaves = copia.get("chaves", {})
+    copia["chaves"] = {k: (("********") if v else "") for k, v in chaves.items()}
+    if copia.get("groq_api_key"): copia["groq_api_key"] = "********"
+    if copia.get("cloudflare_api_token"): copia["cloudflare_api_token"] = "********"
+    return copia
+
+# ---- Persistência: Google Sheets (Apps Script) com fallback local ----
+def _req_apps_script(params, timeout=20):
+    """Faz GET no Apps Script e devolve JSON, tratando erros de rede com clareza."""
+    try:
+        resp = requests.get(APPS_SCRIPT_URL.strip(), params=params, timeout=timeout, allow_redirects=True)
+        if resp.status_code == 200:
+            return resp.json()
+        return {"ok": False, "erro": f"Servidor retornou HTTP {resp.status_code}."}
+    except Exception as e:
+        return {"ok": False, "erro": f"Falha de conexão com o serviço de dados: {e}"}
+
+def carregar_config(email=None):
+    """Carrega config do usuário: tenta Sheets primeiro; fallback p/ arquivo local."""
+    config = {
+        "chaves": {"Chave 1": ""}, "groq_api_key": "", "cloudflare_account_id": "",
+        "cloudflare_api_token": "", "provedor_ia": "Gemini", "fallback_automatico": True,
+        "gemini_so_visao": False, "modelo_groq": "llama3-70b-8192",
+        "modelo_cloudflare": "@cf/meta/llama-3-8b-instruct", "modelo_padrao": "gemini-3.8-flash"
+    }
+    dados = _req_apps_script({"acao": "carregar_config", "email": (email or "").strip().lower()})
+    if dados and dados.get("ok") and dados.get("config"):
+        try:
+            config.update(json.loads(dados["config"]))
+            config["chaves"] = {k: _descriptografar(v) for k, v in config.get("chaves", {}).items()}
+            if config.get("groq_api_key"): config["groq_api_key"] = _descriptografar(config["groq_api_key"])
+            if config.get("cloudflare_api_token"): config["cloudflare_api_token"] = _descriptografar(config["cloudflare_api_token"])
+            return config
+        except Exception:
+            pass
+    caminho = os.path.join(PASTA_CONFIGS, f"config_{_slug_usuario(email)}.json")
+    if os.path.exists(caminho):
+        try:
+            with open(caminho, "r", encoding="utf-8") as f:
+                config.update(json.load(f))
+        except Exception:
+            pass
+    return config
+
+def salvar_config(dados, email=None):
+    """Salva config: Sheets (chaves criptografadas) + espelho local p/ testes."""
+    dados = dict(dados)
+    dados["chaves"] = {k: _criptografar(v) for k, v in dados.get("chaves", {}).items()}
+    if dados.get("groq_api_key"): dados["groq_api_key"] = _criptografar(dados["groq_api_key"])
+    if dados.get("cloudflare_api_token"): dados["cloudflare_api_token"] = _criptografar(dados["cloudflare_api_token"])
+    payload = json.dumps(dados, ensure_ascii=False)
+    resp = _req_apps_script({"acao": "salvar_config", "email": (email or "").strip().lower(), "config": payload})
+    if not (resp and resp.get("ok")):
+        os.makedirs(PASTA_CONFIGS, exist_ok=True)
+        with open(os.path.join(PASTA_CONFIGS, f"config_{_slug_usuario(email)}.json"), "w", encoding="utf-8") as f:
+            json.dump(dados, f, indent=4, ensure_ascii=False)
+        return False, resp.get("erro", "Não foi possível salvar no servidor. Salvo apenas localmente.")
+    return True, None
+
+def salvar_resultado_manual(texto, nome_sujeito, email=None):
+    """Salva um prompt em arquivo local (mesma pasta do original), retornando nome."""
+    if not texto or not str(texto).strip():
+        return "⚠️ Nenhum resultado para salvar."
+    pasta = os.path.join(PASTA_RESULTADOS, _slug_usuario(email))
+    os.makedirs(pasta, exist_ok=True)
+    nome_base = re.sub(r"[^\w\-]", "_", str(nome_sujeito or "prompt")).strip("_").lower() or "prompt"
+    nome = f"prompt_{nome_base}_{time.strftime('%Y%m%d_%H%M%S')}.txt"
+    with open(os.path.join(pasta, nome), "w", encoding="utf-8") as f:
+        f.write(texto)
+    return f"💾 Prompt salvo no servidor: `{nome}`"
+
+def _extrair_texto_resposta(obj):
+    if isinstance(obj, str): return obj.strip()
+    if isinstance(obj, list): return "\n".join(p for p in [_extrair_texto_resposta(i) for i in obj] if p).strip()
+    if isinstance(obj, dict):
+        for k in ("text", "content", "output_text", "response", "generated_text", "message", "choices", "result"):
+            if k in obj and obj[k]: return _extrair_texto_resposta(obj[k])
+    return ""
+
+# ==============================================================================
+# 2.2 ERROS AMIGÁVEIS
+# ==============================================================================
+def _msg_erro_amigavel(e):
+    """Converte exceções de API em mensagens claras, sem expor traceback."""
+    texto = str(e)
+    if "Nenhuma chave configurada" in texto or "Nenhuma chave de API" in texto:
+        return "🔑 **Nenhum motor conectado.** Abra o **Centro de Conexão** na barra lateral e cole sua chave (Gemini/Groq/Cloudflare)."
+    if "REF-VERIF" in texto or "Falha de Comunicação" in texto:
+        detalhes = texto.split("Detalhes:")[-1].strip() if "Detalhes:" in texto else ""
+        return f"⚠️ **Falha ao chamar o motor de IA.** Verifique sua chave, cota e conexão. {detalhes[:200]}"
+    if "401" in texto or "Unauthorized" in texto or "API key not valid" in texto:
+        return "🔑 **Chave de API inválida ou expirada.** Verifique no painel do provedor e atualize no Centro de Conexão."
+    if "429" in texto or "quota" in texto.lower() or "rate limit" in texto.lower():
+        return "⏳ **Limite de uso atingido (429).** O provedor está com cota esgotada. Aguarde ou use outro motor (fallback)."
+    if "503" in texto or "overloaded" in texto.lower() or "overload" in texto.lower():
+        return "🔌 **Provedor sobrecarregado (503).** Tente novamente em instantes ou mude o provedor prioritário."
+    if "timeout" in texto.lower() or "timed out" in texto.lower():
+        return "⏱️ **Tempo esgotado na chamada.** Tente novamente; se persistir, use outro provedor."
+    return f"⚠️ **Algo deu errado.** {texto[:300]}"
+
+# ==============================================================================
+# 3. AUTENTICAÇÃO, CONFIGURAÇÃO E MOTOR DE CHAMADA
+# ==============================================================================
 def verificar_acesso_sheets(email):
     try:
         response = requests.get(APPS_SCRIPT_URL.strip(), params={"email": (email or "").strip().lower()}, timeout=15, allow_redirects=True)
@@ -181,41 +361,6 @@ def verificar_acesso_sheets(email):
         return False, "", f"⚠️ Erro do servidor {response.status_code}."
     except Exception as e:
         return False, "", f"⚠️ Falha na conexão: {e}"
-
-def carregar_config(email=None):
-    config = {
-        "chaves": {"Chave 1": ""}, "groq_api_key": "", "cloudflare_account_id": "",
-        "cloudflare_api_token": "", "provedor_ia": "Gemini", "fallback_automatico": True,
-        "gemini_so_visao": False, "modelo_groq": "llama3-70b-8192",
-        "modelo_cloudflare": "@cf/meta/llama-3-8b-instruct", "modelo_padrao": "gemini-3.8-flash"
-    }
-    caminho = os.path.join(PASTA_CONFIGS, f"config_{_slug_usuario(email)}.json")
-    if os.path.exists(caminho):
-        try:
-            with open(caminho, "r", encoding="utf-8") as f: config.update(json.load(f))
-        except Exception: pass
-    return config
-
-def salvar_config(dados, email=None):
-    os.makedirs(PASTA_CONFIGS, exist_ok=True)
-    with open(os.path.join(PASTA_CONFIGS, f"config_{_slug_usuario(email)}.json"), "w", encoding="utf-8") as f:
-        json.dump(dados, f, indent=4, ensure_ascii=False)
-
-def salvar_resultado_manual(texto, nome_sujeito, email=None):
-    if not texto or not str(texto).strip(): return "⚠️ Nenhum resultado para salvar."
-    pasta = os.path.join(PASTA_RESULTADOS, _slug_usuario(email))
-    os.makedirs(pasta, exist_ok=True)
-    nome = f"prompt_{re.sub(r'[^\w\-]', '_', str(nome_sujeito or 'prompt')).strip('_').lower()}_{time.strftime('%Y%m%d_%H%M%S')}.txt"
-    with open(os.path.join(pasta, nome), "w", encoding="utf-8") as f: f.write(texto)
-    return f"💾 Prompt salvo no servidor: `{nome}`"
-
-def _extrair_texto_resposta(obj):
-    if isinstance(obj, str): return obj.strip()
-    if isinstance(obj, list): return "\n".join(p for p in [_extrair_texto_resposta(i) for i in obj] if p).strip()
-    if isinstance(obj, dict):
-        for k in ("text", "content", "output_text", "response", "generated_text", "message", "choices", "result"):
-            if k in obj and obj[k]: return _extrair_texto_resposta(obj[k])
-    return ""
 
 def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-flash", temperature=0.25):
     config = carregar_config(st.session_state.get("user_email", ""))
@@ -257,7 +402,7 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-fl
             elif nome == "Groq":
                 url_groq = "https://api.groq.com/openai/v1/chat/completions".strip()
                 payload = {
-                    "model": "llama-3.1-70b-versatile", # Modelo atualizado e blindado contra cache
+                    "model": "llama-3.1-70b-versatile",
                     "messages": [{"role": "system", "content": sys_final}, {"role": "user", "content": user_prompt}], 
                     "temperature": temperature
                 }
@@ -266,7 +411,7 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-fl
                 texto = _extrair_texto_resposta(resp.json())
                 
             elif nome == "Cloudflare":
-                cf_modelo = "@cf/meta/llama-3.1-8b-instruct" # Modelo atualizado
+                cf_modelo = "@cf/meta/llama-3.1-8b-instruct"
                 url_cf = f"https://api.cloudflare.com/client/v4/accounts/{cred[1].strip()}/ai/run/{cf_modelo}".strip()
                 payload = {
                     "messages": [{"role": "system", "content": sys_final}, {"role": "user", "content": user_prompt}], 
@@ -291,12 +436,12 @@ PS_STOPWORDS = {"a","o","e","de","da","do","das","dos","um","uma","em","no","na"
 
 def _ps_markup_origin(preprompt_text, original_text):
     clean = str(preprompt_text or "")
-    norm_orig = { "".join(c for c in unicodedata.normalize("NFD", w.lower()) if unicodedata.category(c) != "Mn") for w in re.findall(r"[\wÀ-ÿ'-]+", original_text or "") if len(w) > 2 and w.lower() not in PS_STOPWORDS }
+    norm_orig = { normalizar_texto(w) for w in re.findall(r"[\wÀ-ÿ'-]+", original_text or "") if len(w) > 2 and w.lower() not in PS_STOPWORDS }
     pieces = []
     for token in re.split(r"(\s+|[^\wÀ-ÿ'-]+)", clean):
         if not token: continue
         if re.match(r"^[\wÀ-ÿ'-]+$", token):
-            norm_token = "".join(c for c in unicodedata.normalize("NFD", token.lower()) if unicodedata.category(c) != "Mn")
+            norm_token = normalizar_texto(token)
             pieces.append(f'<span class="ps-user-word">{html.escape(token)}</span>' if norm_token in norm_orig else f'<span class="ps-ai-word">{html.escape(token)}</span>')
         else: pieces.append(html.escape(token))
     return "".join(pieces)
@@ -351,14 +496,11 @@ def processar_imagem_visao(arquivo_imagem, estilo_conversao, nivel_sensualidade,
     texto = getattr(resp, "text", "") or ""
     if not texto.strip(): raise RuntimeError("A IA bloqueou o retorno da imagem.")
     
-    try:
-        limpo = texto.strip().strip("`")
-        if limpo.lower().startswith("json"): limpo = limpo[4:].strip() 
-        dados = json.loads(limpo)
-        
+    dados = parse_json_ia(texto)
+    if dados:
         html_color = f"<div style='background:var(--secondary-background-color); color:var(--text-color); border:1px solid rgba(128,128,128,0.2); border-radius:12px; padding:1.25rem; font-size:1.02rem; margin-bottom:1.2rem; box-shadow:0 1px 3px rgba(0,0,0,0.05);'><div style='font-size:0.8rem; font-weight:bold; opacity:0.7; margin-bottom:8px;'>LEITURA PARAMÉTRICA CONCLUÍDA:</div>A imagem mostra <span style='color:#2563eb; font-weight:600; background:rgba(37,99,235,0.1); padding:2px 4px; border-radius:4px;'>{dados.get('sujeito','')}</span>, que está <span style='color:#10b981; font-weight:600; background:rgba(16,185,129,0.1); padding:2px 4px; border-radius:4px;'>{dados.get('acao','')}</span>. O ambiente é <span style='color:#f59e0b; font-weight:600; background:rgba(245,158,11,0.1); padding:2px 4px; border-radius:4px;'>{dados.get('cenario','')}</span>. A iluminação é <span style='color:#f59e0b; font-weight:600; background:rgba(245,158,11,0.1); padding:2px 4px; border-radius:4px;'>{dados.get('iluminacao','')}</span>. Estilo: <span style='color:#e11d48; font-weight:600; background:rgba(225,29,72,0.1); padding:2px 4px; border-radius:4px;'>{dados.get('estilo_camera','')}</span>.</div>"
         return {"tipo": "html", "html": html_color, "texto": f"A imagem mostra {dados.get('sujeito','')}, que está {dados.get('acao','')}. O ambiente é {dados.get('cenario','')}. Iluminação: {dados.get('iluminacao','')}. Estilo: {dados.get('estilo_camera','')}."}
-    except Exception: return {"tipo": "texto", "texto": texto}
+    return {"tipo": "texto", "texto": texto}
 
 # ==============================================================================
 # 5. UI: BARRA LATERAL (CENTRO DE CONEXÃO BYOK) E LANDING PAGE
@@ -399,8 +541,47 @@ def renderizar_sidebar():
             "modelo_groq": "llama3-70b-8192", "modelo_cloudflare": "@cf/meta/llama-3-8b-instruct",
             "modelo_padrao": "gemini-3.8-flash", "usar_busca_web": False
         }
-        salvar_config(dados_salvos, st.session_state.get("user_email", ""))
-        st.sidebar.success("✅ Motores conectados e prontos!")
+        ok_salvo, erro_salvo = salvar_config(dados_salvos, st.session_state.get("user_email", ""))
+        if ok_salvo:
+            st.sidebar.success("✅ Motores conectados e prontos!")
+        else:
+            st.sidebar.warning(f"⚠️ {erro_salvo}")
+
+# ==============================================================================
+# 5.1 HISTÓRICO DE PROMPTS (via Apps Script)
+# ==============================================================================
+def _historico_sheets(email, prompt_texto=None, acao="listar"):
+    """Lista ou adiciona prompts no histórico via Apps Script."""
+    email = (email or "").strip().lower()
+    if acao == "adicionar":
+        if not prompt_texto or not str(prompt_texto).strip():
+            return False, "Nenhum prompt para salvar."
+        params = {"acao": "adicionar_historico", "email": email, "prompt": str(prompt_texto)[:12000]}
+        resp = _req_apps_script(params, timeout=30)
+        if resp and resp.get("ok"):
+            return True, None
+        return False, resp.get("erro", "Não foi possível salvar no servidor.")
+    params = {"acao": "listar_historico", "email": email}
+    resp = _req_apps_script(params, timeout=20)
+    if resp and resp.get("ok"):
+        return True, resp.get("itens", [])
+    return False, []
+
+def renderizar_historico():
+    """Exibe na sidebar um expansor com os últimos prompts salvos."""
+    with st.sidebar.expander("🕘 Histórico de Prompts", expanded=False):
+        ok, itens = _historico_sheets(st.session_state.get("user_email", ""), acao="listar")
+        if not ok:
+            st.caption("Histórico indisponível no momento.")
+            return
+        if not itens:
+            st.caption("Nenhum prompt salvo ainda.")
+            return
+        for item in itens[-10:]:
+            ts = item.get("quando", "")[:16]
+            preview = str(item.get("prompt", ""))[:90].replace("\n", " ")
+            if st.button(f"{ts} — {preview}...", key=f"hist_{item.get('id', ts)}", use_container_width=True):
+                st.session_state["ck_historico_ver"] = item.get("prompt", "")
 
 # ==============================================================================
 # 6. UI: COCKPIT PRINCIPAL
@@ -433,7 +614,7 @@ def renderizar_cockpit():
                         st.session_state["ck_ideia_input"] = res["texto"]
                         st.session_state.pop("ck_preprompt", None)
                         st.rerun()
-                    except Exception as e: st.error(f"🔌 Erro no Motor de Visão: {str(e)}")
+                    except Exception as e: st.error(_msg_erro_amigavel(e))
 
         if st.session_state.get("ck_img_html"): st.markdown(st.session_state["ck_img_html"], unsafe_allow_html=True)
         
@@ -460,8 +641,9 @@ def renderizar_cockpit():
                     st.session_state["ck_ideia"] = ideia_input.strip()
                     st.session_state["ck_preprompt"] = txt
                     st.session_state["ck_preprompt_editado"] = txt
+                    st.session_state["ck_preprompt_dirty"] = False
                     st.rerun()
-                except Exception as e: st.error(f"🔌 Motor Desligado: {str(e)}")
+                except Exception as e: st.error(_msg_erro_amigavel(e))
 
     if btn_ava:
         if not ideia_input.strip(): st.warning("Escreva sua ideia antes.")
@@ -469,11 +651,13 @@ def renderizar_cockpit():
             with st.spinner("Raio-X em andamento..."):
                 try:
                     txt, prov = _chamar_provedor_ia(SYS_COMPOSITOMETRO, f"AVALIE:\n{ideia_input.strip()}")
-                    limpo = txt.strip().strip("`")
-                    if limpo.lower().startswith("json"): limpo = limpo[4:].strip() 
-                    st.session_state["ck_diagnostico"] = json.loads(limpo)
-                    st.rerun()
-                except Exception as e: st.error(f"🔌 Motor Desligado: {str(e)}")
+                    diag = parse_json_ia(txt)
+                    if not diag:
+                        st.error("⚠️ O Compositômetro retornou um formato inesperado. Tente novamente.")
+                    else:
+                        st.session_state["ck_diagnostico"] = diag
+                        st.rerun()
+                except Exception as e: st.error(_msg_erro_amigavel(e))
 
     if st.session_state.get("ck_preprompt"):
         with st.container(border=True):
@@ -481,7 +665,10 @@ def renderizar_cockpit():
             st.markdown("<div class='ps-legend'><span><span class='ps-user-word'>Ideia Original</span></span> • <span><span class='ps-ai-word'>Desenvolvimento da IA</span></span></div>", unsafe_allow_html=True)
             st.markdown(f"<div class='ps-preprompt'>{_ps_markup_origin(st.session_state['ck_preprompt'], st.session_state.get('ck_ideia', ''))}</div>", unsafe_allow_html=True)
             pre_ed = st.text_area("Ajuste fino manual (Esta caixa será enviada ao Sintetizador):", height=130, key="ck_preprompt_editado")
-            if pre_ed != st.session_state.get("ck_preprompt"): st.session_state["ck_preprompt"] = pre_ed
+            # Atualiza o valor "atual" apenas se o usuário realmente editou (evita sobrescrever em reruns)
+            if pre_ed != st.session_state.get("ck_preprompt") and not st.session_state.get("ck_preprompt_dirty", False):
+                st.session_state["ck_preprompt"] = pre_ed
+                st.session_state["ck_preprompt_dirty"] = True
 
     diag = st.session_state.get("ck_diagnostico")
     if diag:
@@ -493,7 +680,6 @@ def renderizar_cockpit():
                 cl, ic = _bdg(diag.get(key, ""))
                 col.markdown(f"<div class='comp-badge {cl}'>{ic} {label}: {diag.get(key, 'Pendente')}</div>", unsafe_allow_html=True) 
             
-            # BLOCO RESTAURADO: DIAGNÓSTICO E SUGESTÕES
             st.write("")
             if diag.get("diagnostico_texto"):
                 st.caption(f"ℹ️ **Diagnóstico:** {diag.get('diagnostico_texto')}")
@@ -528,7 +714,6 @@ def renderizar_cockpit():
                     
                     txt_b = st.session_state.get("ck_preprompt", ideia_input.strip())
                     
-                    # BLOCO RESTAURADO: INJEÇÃO DE SUGESTÕES
                     sug_aceitas = st.session_state.get("ck_sugestoes_marcadas", [])
                     sug_str = "\n".join(f"- {s}" for s in sug_aceitas) if sug_aceitas else "Nenhuma sugestão adicional marcada."
                     
@@ -539,12 +724,18 @@ def renderizar_cockpit():
                     st.session_state["ck_prov_usado"] = prov
                     st.session_state["ck_dest_usado"] = dest_sel
                     st.rerun()
-                except Exception as e: st.error(f"🔌 Motor Desligado: {str(e)}")
+                except Exception as e: st.error(_msg_erro_amigavel(e))
 
     if st.session_state.get("ck_prompt_final"):
         st.markdown("---")
         st.markdown(f"### 📋 Prompt Especializado ({st.session_state.get('ck_dest_usado')})")
         st.code(st.session_state["ck_prompt_final"], language="markdown")
+        c_save1, c_save2 = st.columns(2)
+        with c_save1:
+            if st.button("💾 Salvar no Histórico", use_container_width=True):
+                ok_hist, erro_hist = _historico_sheets(st.session_state.get("user_email", ""), st.session_state["ck_prompt_final"], acao="adicionar")
+                if ok_hist: st.success("✅ Prompt salvo no histórico!")
+                else: st.warning(f"⚠️ {erro_hist or 'Não foi possível salvar.'}")
 
 # ==============================================================================
 # 9. PONTO DE ENTRADA (VITRINE DINÂMICA E LOGIN)
@@ -605,3 +796,4 @@ else:
     st.markdown("<div class='ps-brand'>PROMPT STUDIO COCKPIT</div>", unsafe_allow_html=True)
     st.markdown("<div class='ps-header-note'>IDE Paramétrica de Geração de Prompts (BYOK)</div>", unsafe_allow_html=True)
     renderizar_cockpit()
+    renderizar_historico()
