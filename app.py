@@ -256,41 +256,33 @@ def _req_apps_script(params, timeout=20):
         return {"ok": False, "erro": f"Falha de conexão com o serviço de dados: {e}"}
 
 def carregar_config(email=None):
-    """Carrega config do usuário: tenta Sheets primeiro; fallback p/ arquivo local."""
-    config = {
-        "chaves": {"Chave 1": ""}, "groq_api_key": "", "cloudflare_account_id": "",
-        "cloudflare_api_token": "", "provedor_ia": "Gemini", "fallback_automatico": True,
-        "gemini_so_visao": True, "modelo_groq": "llama3-70b-8192",
-        "modelo_cloudflare": "@cf/meta/llama-3-8b-instruct", "modelo_padrao": "gemini-3.8-flash"
-    }
-    dados = _req_apps_script({"acao": "carregar_config", "email": (email or "").strip().lower()})
-    if dados and dados.get("ok") and dados.get("config"):
-        try:
-            config.update(json.loads(dados["config"]))
-            config["chaves"] = {k: _descriptografar(v) for k, v in config.get("chaves", {}).items()}
-            if config.get("groq_api_key"): config["groq_api_key"] = _descriptografar(config["groq_api_key"])
-            if config.get("cloudflare_api_token"): config["cloudflare_api_token"] = _descriptografar(config["cloudflare_api_token"])
-            return config
-        except Exception:
-            pass
-    caminho = os.path.join(PASTA_CONFIGS, f"config_{_slug_usuario(email)}.json")
-    if os.path.exists(caminho):
-        try:
-            with open(caminho, "r", encoding="utf-8") as f:
-                config.update(json.load(f))
-        except Exception:
-            pass
-    return config
-        except Exception:
-            pass
-    caminho = os.path.join(PASTA_CONFIGS, f"config_{_slug_usuario(email)}.json")
-    if os.path.exists(caminho):
-        try:
-            with open(caminho, "r", encoding="utf-8") as f:
-                config.update(json.load(f))
-        except Exception:
-            pass
-    return config
+"""Carrega config do usuário: tenta Sheets primeiro; fallback p/ arquivo local."""
+config = {
+    "chaves": {"Chave 1": ""}, "groq_api_key": "", "cloudflare_account_id": "",
+    "cloudflare_api_token": "", "provedor_ia": "Gemini", "fallback_automatico": True,
+    "gemini_so_visao": True, "modelo_groq": "llama3-70b-8192",
+    "modelo_cloudflare": "@cf/meta/llama-3-8b-instruct", "modelo_padrao": "gemini-3.8-flash"
+}
+dados = _req_apps_script({"acao": "carregar_config", "email": (email or "").strip().lower()})
+if dados and dados.get("ok") and dados.get("config"):
+    try:
+        config.update(json.loads(dados["config"]))
+        config["chaves"] = {k: _descriptografar(v) for k, v in config.get("chaves", {}).items()}
+        if config.get("groq_api_key"): config["groq_api_key"] = _descriptografar(config["groq_api_key"])
+        if config.get("cloudflare_api_token"): config["cloudflare_api_token"] = _descriptografar(config["cloudflare_api_token"])
+        return config
+    except Exception:
+        pass
+        
+caminho = os.path.join(PASTA_CONFIGS, f"config_{_slug_usuario(email)}.json")
+if os.path.exists(caminho):
+    try:
+        with open(caminho, "r", encoding="utf-8") as f:
+            config.update(json.load(f))
+    except Exception:
+        pass
+        
+return config
 
 def salvar_config(dados, email=None):
     """Salva config: Sheets (chaves criptografadas) + espelho local p/ testes."""
