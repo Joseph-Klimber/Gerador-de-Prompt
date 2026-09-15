@@ -343,7 +343,9 @@ def _msg_erro_amigavel(e):
 # ==============================================================================
 def verificar_acesso_sheets(email):
     try:
-        response = requests.get(APPS_SCRIPT_URL.strip(), params={"email": (email or "").strip().lower()}, timeout=15, allow_redirects=True)
+        # CORREÇÃO: Agora o Python envia a 'acao' para o Apps Script saber o que fazer
+        params = {"acao": "verificar_acesso", "email": (email or "").strip().lower()}
+        response = requests.get(APPS_SCRIPT_URL.strip(), params=params, timeout=15, allow_redirects=True)
         if response.status_code == 200:
             dados = response.json()
             if not dados.get("encontrado", False):
