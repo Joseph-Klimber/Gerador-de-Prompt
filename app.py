@@ -38,48 +38,42 @@ st.markdown(
     """
     <style>
     :root {
-        --ps-ink: #0f172a;
-        --ps-muted: #475569;
-        --ps-line: #e2e8f0;
         --ps-blue: #2563eb;
-        --ps-blue-subtle: #eff6ff;
         --ps-gold: #b45309;
         --ps-emerald: #059669;
         --ps-amber: #d97706;
         --ps-rose: #e11d48;
     }
-    .ps-brand { color: var(--ps-ink); font-size: 1.15rem; font-weight: 800; letter-spacing: .15em; margin-top: .2rem; }
-    .ps-header-note { color: var(--ps-muted); font-size: .88rem; margin-bottom: 1.1rem; }
-    .ps-kicker { color: var(--ps-blue); font-size: .75rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; margin-top: .4rem; }
-    .ps-title { color: var(--ps-ink); font-size: clamp(1.8rem, 3.2vw, 2.7rem); line-height: 1.15; margin: .2rem 0 .4rem; font-weight: 800; }
-    .ps-subtitle { color: var(--ps-muted); font-size: 1.02rem; max-width: 820px; margin-bottom: 1.2rem; }
     
-    /* Vitrine Landing Page */
-    .hero-title { font-size: 3.5rem; font-weight: 900; color: #0f172a; line-height: 1.1; margin-bottom: 1rem; text-align: center; letter-spacing: -0.03em; }
-    .hero-subtitle { font-size: 1.2rem; color: #475569; text-align: center; max-width: 700px; margin: 0 auto 3rem auto; line-height: 1.6; }
-    .showcase-box { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 2rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+    /* CSS NATIVO STREAMLIT (ADAPTA AO MODO CLARO E ESCURO) */
+    .ps-brand { color: var(--text-color); font-size: 1.15rem; font-weight: 800; letter-spacing: .15em; margin-top: .2rem; }
+    .ps-header-note { color: var(--text-color); opacity: 0.7; font-size: .88rem; margin-bottom: 1.1rem; }
+    .ps-kicker { color: var(--ps-blue); font-size: .75rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; margin-top: .4rem; }
+    .ps-title { color: var(--text-color); font-size: clamp(1.8rem, 3.2vw, 2.7rem); line-height: 1.15; margin: .2rem 0 .4rem; font-weight: 800; }
+    .ps-subtitle { color: var(--text-color); opacity: 0.8; font-size: 1.02rem; max-width: 820px; margin-bottom: 1.2rem; }
+    
+    /* Vitrine Landing Page Dinâmica */
+    .hero-title { font-size: 3.5rem; font-weight: 900; color: var(--text-color); line-height: 1.1; margin-bottom: 1rem; text-align: center; letter-spacing: -0.03em; }
+    .hero-subtitle { font-size: 1.2rem; color: var(--text-color); opacity: 0.8; text-align: center; max-width: 700px; margin: 0 auto 3rem auto; line-height: 1.6; }
+    .showcase-box { background: var(--secondary-background-color); border: 1px solid rgba(128,128,128,0.2); border-radius: 16px; padding: 2rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
     .label-ideia { font-size: 0.8rem; font-weight: 800; color: #2563eb; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.5rem; }
-    .text-ideia { font-size: 1.1rem; color: #0f172a; font-style: italic; border-left: 4px solid #2563eb; padding-left: 1rem; margin-bottom: 1.5rem; }
+    .text-ideia { font-size: 1.1rem; color: var(--text-color); font-style: italic; border-left: 4px solid #2563eb; padding-left: 1rem; margin-bottom: 1.5rem; }
     .label-prompt { font-size: 0.8rem; font-weight: 800; color: #b45309; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.5rem; }
-    .code-prompt { background: #f8fafc; padding: 1rem; border-radius: 8px; font-family: monospace; font-size: 0.85rem; color: #334155; height: 180px; overflow-y: auto; border: 1px solid #e2e8f0; }
-    .plan-container { text-align: center; background: #f8fafc; padding: 2rem; border-radius: 16px; border: 1px solid #e2e8f0; margin-top: 2rem; }
-    .byok-badge { display: inline-block; background: #eff6ff; color: #1e40af; padding: 4px 12px; border-radius: 9999px; font-size: 0.8rem; font-weight: bold; margin-bottom: 1rem; border: 1px solid #bfdbfe; }
+    .code-prompt { background: var(--background-color); padding: 1rem; border-radius: 8px; font-family: monospace; font-size: 0.85rem; color: var(--text-color); height: 180px; overflow-y: auto; border: 1px solid rgba(128,128,128,0.2); }
+    .plan-container { text-align: center; background: var(--secondary-background-color); padding: 2rem; border-radius: 16px; border: 1px solid rgba(128,128,128,0.2); margin-top: 2rem; }
+    .byok-badge { display: inline-block; background: rgba(37, 99, 235, 0.1); color: #2563eb; padding: 4px 12px; border-radius: 9999px; font-size: 0.8rem; font-weight: bold; margin-bottom: 1rem; border: 1px solid rgba(37, 99, 235, 0.2); }
 
-    /* Pré-prompt e Tags */
-    .ps-preprompt { background: #ffffff; border: 1px solid var(--ps-line); border-radius: 12px; padding: 1.25rem 1.4rem; line-height: 1.85; font-size: 1.02rem; color: var(--ps-ink); box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin: 0.8rem 0 1.2rem; }
-    .ps-user-word { color: var(--ps-blue); font-weight: 700; background-color: var(--ps-blue-subtle); padding: 2px 6px; border-radius: 4px; }
+    /* Pré-prompt e Tags (App Interno) */
+    .ps-preprompt { background: var(--secondary-background-color); border: 1px solid rgba(128,128,128,0.2); border-radius: 12px; padding: 1.25rem 1.4rem; line-height: 1.85; font-size: 1.02rem; color: var(--text-color); margin: 0.8rem 0 1.2rem; }
+    .ps-user-word { color: var(--text-color); font-weight: 700; background-color: rgba(37, 99, 235, 0.15); border-left: 2px solid #2563eb; padding: 2px 6px; border-radius: 4px; }
     .ps-ai-word { color: var(--ps-gold); font-weight: 600; }
     .ps-legend { display: flex; gap: 1.5rem; margin: .6rem 0 .9rem; font-size: .88rem; font-weight: 600; align-items: center; }
     
     /* Banners */
     .comp-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; font-weight: 700; padding: 4px 10px; border-radius: 9999px; margin-right: 6px; margin-bottom: 6px; }
-    .comp-green { background-color: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
-    .comp-amber { background-color: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
-    .comp-blue  { background-color: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
-    .risk-banner { border-radius: 8px; padding: 0.75rem 1rem; font-size: 0.9rem; font-weight: 500; margin-top: 0.5rem; margin-bottom: 0.8rem; display: flex; align-items: center; gap: 8px; }
-    .risk-green { background: #ecfdf5; border-left: 4px solid var(--ps-emerald); color: #065f46; }
-    .risk-amber { background: #fffbeb; border-left: 4px solid var(--ps-amber); color: #92400e; }
-    .risk-rose  { background: #fff1f2; border-left: 4px solid var(--ps-rose); color: #9f1239; }
+    .comp-green { background-color: rgba(5, 150, 105, 0.1); color: #10b981; border: 1px solid rgba(5, 150, 105, 0.3); }
+    .comp-amber { background-color: rgba(217, 119, 6, 0.1); color: #f59e0b; border: 1px solid rgba(217, 119, 6, 0.3); }
+    .comp-blue  { background-color: rgba(37, 99, 235, 0.1); color: #3b82f6; border: 1px solid rgba(37, 99, 235, 0.3); }
     </style>
     """,
     unsafe_allow_html=True,
@@ -520,8 +514,18 @@ if "autenticado" not in st.session_state: st.session_state.autenticado = False
 
 if not st.session_state.autenticado:
     vitrines = [
-        {"id": "Uma mulher elfa em uma floresta mágica.", "pr": "masterpiece, best quality...", "mt": "ComfyUI / Illustrious", "im": "elfa.jpg"},
-        {"id": "Um carro de corrida na chuva à noite.", "pr": "A breathtaking highly detailed...", "mt": "Midjourney v6.1+", "im": "carro.jpg"}
+        {
+            "id": "Uma garota de anime com cabelo curto encostada na estante de uma biblioteca perto da janela.", 
+            "pr": "score_9, score_8_up, 1girl, solo, videl (dragon ball), short black hair, blue eyes, white t-shirt, black spandex shorts, green boots, leaning against bookshelf, window, sunlight, library, anime style, high quality, masterpiece.", 
+            "mt": "ComfyUI / Pony SDXL", 
+            "im": "carro.jpg"
+        },
+        {
+            "id": "Uma mulher loira fotorrealista com blusa vermelha curta e saia jeans em uma escadaria de pedra.", 
+            "pr": "A breathtaking highly detailed photograph of a beautiful blonde woman with striking blue eyes, wearing a red long-sleeve crop top and a denim mini skirt. She is standing on ancient outdoor stone steps in a European village. Bright midday sunlight, cinematic lighting, photorealistic, 8k resolution, shot on 35mm lens --ar 4:5 --v 6.1 --stylize 250", 
+            "mt": "Midjourney v6.1+", 
+            "im": "elfa.jpg"
+        }
     ]
     vit = random.choice(vitrines)
 
@@ -535,13 +539,13 @@ if not st.session_state.autenticado:
         st.markdown(f"<div class='text-ideia'>\"{vit['id']}\"</div>", unsafe_allow_html=True)
         st.markdown(f"<div class='label-prompt'>A Engenharia do Cockpit (Motor: {vit['mt']})</div>", unsafe_allow_html=True)
         st.markdown(f"<div class='code-prompt'>{vit['pr']}</div>", unsafe_allow_html=True)
-    
     with c2: 
+        # Carrega perfeitamente as imagens que estão na pasta do seu projeto!
         st.image(vit['im'], use_container_width=True)
-        
     st.markdown("</div>", unsafe_allow_html=True)
 
     c_l1, c_l2, c_l3 = st.columns([1, 4, 1])
+    # ... (o resto do código de login abaixo permanece igual)
     with c_l2:
         st.markdown("<div class='plan-container'>", unsafe_allow_html=True)
         st.markdown("<div class='byok-badge'>🔒 Modelo BYOK: Conecte sua própria chave API (Gemini/Groq) após assinar.</div>", unsafe_allow_html=True)
