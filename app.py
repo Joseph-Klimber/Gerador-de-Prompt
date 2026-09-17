@@ -9,8 +9,9 @@ v2.0 — Melhorias:
   • Erros amigáveis (sem traceback cru exposto ao usuário)
   • Clientes de API cacheados (st.cache_resource)
   • Estado do pré-prompt editado mais robusto
-  • Histórico de prompts salvos
+  • Histórico de prompts salvos via POST (suporta grandes volumes)
   • Detalhador Pericial de Imagem (Editável)
+  • Modificador de Contexto Literal (Anti-Fluff)
 """
 
 import os
@@ -285,22 +286,27 @@ def carregar_config(email=None):
     return config
 
 def salvar_config(dados, email=None):
-    """Salva config: Sheets (chaves criptografadas) + espelho local p/ testes."""
+    """Salva config via POST (suporta dados maiores). Falha segura para arquivo local."""
     dados = dict(dados)
     dados["chaves"] = {k: _criptografar(v) for k, v in dados.get("chaves", {}).items()}
     if dados.get("groq_api_key"): dados["groq_api_key"] = _criptografar(dados["groq_api_key"])
     if dados.get("cloudflare_api_token"): dados["cloudflare_api_token"] = _criptografar(dados["cloudflare_api_token"])
-    payload = json.dumps(dados, ensure_ascii=False)
-    resp = _req_apps_script({"acao": "salvar_config", "email": (email or "").strip().lower(), "config": payload})
-    if not (resp and resp.get("ok")):
-        os.makedirs(PASTA_CONFIGS, exist_ok=True)
-        with open(os.path.join(PASTA_CONFIGS, f"config_{_slug_usuario(email)}.json"), "w", encoding="utf-8") as f:
-            json.dump(dados, f, indent=4, ensure_ascii=False)
-        return False, resp.get("erro", "Não foi possível salvar no servidor. Salvo apenas localmente.")
-    return True, None
+    
+    payload = {"acao": "salvar_config", "email": (email or "").strip().lower(), "config": json.dumps(dados, ensure_ascii=False)}
+    try:
+        resp = requests.post(APPS_SCRIPT_URL.strip(), json=payload, timeout=20, allow_redirects=True)
+        if resp.status_code == 200 and resp.json().get("ok"):
+            return True, None
+    except Exception:
+        pass
+        
+    os.makedirs(PASTA_CONFIGS, exist_ok=True)
+    with open(os.path.join(PASTA_CONFIGS, f"config_{_slug_usuario(email)}.json"), "w", encoding="utf-8") as f:
+        json.dump(dados, f, indent=4, ensure_ascii=False)
+    return False, "Erro ao salvar na Nuvem. Cópia salva apenas localmente."
 
 def salvar_resultado_manual(texto, nome_sujeito, email=None):
-    """Salva um prompt em arquivo local (mesma pasta do original), retornando nome."""
+    """Salva fallback local apenas em último caso."""
     if not texto or not str(texto).strip():
         return "⚠️ Nenhum resultado para salvar."
     pasta = os.path.join(PASTA_RESULTADOS, _slug_usuario(email))
@@ -309,7 +315,7 @@ def salvar_resultado_manual(texto, nome_sujeito, email=None):
     nome = f"prompt_{nome_base}_{time.strftime('%Y%m%d_%H%M%S')}.txt"
     with open(os.path.join(pasta, nome), "w", encoding="utf-8") as f:
         f.write(texto)
-    return f"💾 Prompt salvo no servidor: `{nome}`"
+    return f"💾 Prompt salvo localmente: `{nome}`"
 
 def _extrair_texto_resposta(obj):
     if isinstance(obj, str): return obj.strip()
@@ -323,7 +329,6 @@ def _extrair_texto_resposta(obj):
 # 2.2 ERROS AMIGÁVEIS
 # ==============================================================================
 def _msg_erro_amigavel(e):
-    """Converte exceções de API em mensagens claras, sem expor traceback."""
     texto = str(e)
     if "Nenhuma chave configurada" in texto or "Nenhuma chave de API" in texto:
         return "🔑 **Nenhum motor conectado.** Abra o **Centro de Conexão** na barra lateral e cole sua chave (Gemini/Groq/Cloudflare)."
@@ -403,7 +408,7 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-fl
                 texto = getattr(resp, "text", "")
                 
             elif nome == "Groq":
-                url_groq = "[https://api.groq.com/openai/v1/chat/completions](https://api.groq.com/openai/v1/chat/completions)".strip()
+                url_groq = "[https://api.groq.com/openai/v1/chat/completions](https://api.groq.com/openai/v1/chat/completions)"
                 payload = {
                     "model": "llama-3.1-70b-versatile",
                     "messages": [{"role": "system", "content": sys_final}, {"role": "user", "content": user_prompt}], 
@@ -415,7 +420,7 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-fl
                 
             elif nome == "Cloudflare":
                 cf_modelo = "@cf/meta/llama-3.1-8b-instruct"
-                url_cf = f"[https://api.cloudflare.com/client/v4/accounts/](https://api.cloudflare.com/client/v4/accounts/){cred[1].strip()}/ai/run/{cf_modelo}".strip()
+                url_cf = f"[https://api.cloudflare.com/client/v4/accounts/](https://api.cloudflare.com/client/v4/accounts/){cred[1].strip()}/ai/run/{cf_modelo}"
                 payload = {
                     "messages": [{"role": "system", "content": sys_final}, {"role": "user", "content": user_prompt}], 
                     "temperature": temperature, 
@@ -553,16 +558,21 @@ def renderizar_sidebar():
 # 5.1 HISTÓRICO DE PROMPTS (via Apps Script)
 # ==============================================================================
 def _historico_sheets(email, prompt_texto=None, acao="listar"):
-    """Lista ou adiciona prompts no histórico via Apps Script."""
+    """Lista ou adiciona prompts no histórico. Usa POST para permitir grandes volumes."""
     email = (email or "").strip().lower()
     if acao == "adicionar":
         if not prompt_texto or not str(prompt_texto).strip():
             return False, "Nenhum prompt para salvar."
-        params = {"acao": "adicionar_historico", "email": email, "prompt": str(prompt_texto)[:12000]}
-        resp = _req_apps_script(params, timeout=30)
-        if resp and resp.get("ok"):
-            return True, None
-        return False, resp.get("erro", "Não foi possível salvar no servidor.")
+        payload = {"acao": "adicionar_historico", "email": email, "prompt": str(prompt_texto)[:12000]}
+        try:
+            resp = requests.post(APPS_SCRIPT_URL.strip(), json=payload, timeout=30, allow_redirects=True)
+            if resp.status_code == 200 and resp.json().get("ok"):
+                return True, None
+        except Exception as e:
+            return False, f"Falha de conexão: {e}"
+        return False, "Erro ao processar no servidor."
+        
+    # O listar usa o GET seguro normal
     params = {"acao": "listar_historico", "email": email}
     resp = _req_apps_script(params, timeout=20)
     if resp and resp.get("ok"):
@@ -594,9 +604,10 @@ def renderizar_cockpit():
     
     with st.container(border=True):
         st.markdown("### 🧬 Agentes Modificadores Globais")
-        col_m1, col_m2 = st.columns(2)
-        with col_m1: estilo_conversao = st.selectbox("Tradução de Estilo de Arte:", ["Manter Estilo Original", "📸 Converter para Fotorrealismo", "🎨 Converter para Anime"], key="ck_estilo_conversao")
-        with col_m2: sens_escolhida = st.select_slider("Nível de Sensualidade & Modéstia:", options=OPCOES_SENSUALIDADE, key="ck_sens_slider", value=st.session_state.get("ck_sens_slider", OPCOES_SENSUALIDADE[1]))
+        col_m1, col_m2, col_m3 = st.columns(3)
+        with col_m1: estilo_conversao = st.selectbox("Estilo de Arte:", ["Manter Estilo Original", "📸 Converter para Fotorrealismo", "🎨 Converter para Anime"], key="ck_estilo_conversao")
+        with col_m2: foco_contexto = st.selectbox("Foco e Contexto:", ["Harmônico (Preencher/Embelezar)", "Literal (Direto, Sem Floreios)"], key="ck_foco_contexto")
+        with col_m3: sens_escolhida = st.select_slider("Sensualidade:", options=OPCOES_SENSUALIDADE, key="ck_sens_slider", value=st.session_state.get("ck_sens_slider", OPCOES_SENSUALIDADE[1]))
 
     with st.container(border=True):
         st.markdown("### 🖼️ Extração Pericial de Imagem (Visão)")
@@ -661,6 +672,10 @@ def renderizar_cockpit():
             with st.spinner("Desenhando a cena..."):
                 try:
                     p = f"IDEIA:\n{ideia_input.strip()}\n\n[AGENTE: SENSUALIDADE NÍVEL '{sens_escolhida}']: Aplique roupas/pose relativas a este nível substituindo a roupa do usuário se explícito."
+                    
+                    if "Literal" in foco_contexto:
+                        p += "\n[AGENTE: CONTEXTO LITERAL]: Seja 100% fiel e obediente à ideia original. Crie APENAS o cenário lógico, físico e elementar inerente à ação (ex: 'voando' = céu azul e nuvens; 'nadando' = água). É ESTRITAMENTE PROIBIDO adicionar elementos não solicitados, iluminação épica, embelezamentos dramáticos ou 'fluff' estético. Descreva a cena de forma mecânica, física e direta."
+                        
                     txt, prov = _chamar_provedor_ia(SYS_GERADOR_PREPROMPT, p)
                     st.session_state["ck_ideia"] = ideia_input.strip()
                     st.session_state["ck_preprompt"] = txt
@@ -743,6 +758,9 @@ def renderizar_cockpit():
                     
                     p = f"DESTINO: {dest_sel}\nRATING: {sens_escolhida}\n\n1. NARRATIVA VISUAL (TRADUZA ISSO INTEGRALMENTE):\n{txt_b}\n\n2. SUGESTÕES CIRÚRGICAS INCORPORADAS:\n{sug_str}\n\nGere o prompt garantindo a ancoragem de Sujeito."
                     
+                    if "Literal" in foco_contexto:
+                        p += "\n[MODO LITERAL ATIVADO]: Você DEVE ignorar diretrizes estéticas excessivas da regra do motor. Remova termos de 'embelezamento' (como cinematic lighting, highly detailed, etc) da sintaxe final, focando puramente nos atributos físicos do sujeito e do cenário lógico elementar."
+
                     res, prov = _chamar_provedor_ia(SYS_MESTRE_CORE + bloco, p)
                     st.session_state["ck_prompt_final"] = res
                     st.session_state["ck_prov_usado"] = prov
