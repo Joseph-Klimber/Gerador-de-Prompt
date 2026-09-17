@@ -261,8 +261,8 @@ def carregar_config(email=None):
     config = {
         "chaves": {"Chave 1": ""}, "groq_api_key": "", "cloudflare_account_id": "",
         "cloudflare_api_token": "", "provedor_ia": "Gemini", "fallback_automatico": True,
-        "gemini_so_visao": True, "modelo_groq": "llama3-70b-8192",
-        "modelo_cloudflare": "@cf/meta/llama-3-8b-instruct", "modelo_padrao": "gemini-3.8-flash"
+        "gemini_so_visao": True, "modelo_groq": "llama-3.1-70b-versatile",
+        "modelo_cloudflare": "@cf/meta/llama-3.1-8b-instruct", "modelo_padrao": "gemini-3.5-flash"
     }
     dados = _req_apps_script({"acao": "carregar_config", "email": (email or "").strip().lower()})
     if dados and dados.get("ok") and dados.get("config"):
@@ -280,6 +280,11 @@ def carregar_config(email=None):
         try:
             with open(caminho, "r", encoding="utf-8") as f:
                 config.update(json.load(f))
+            config["chaves"] = {k: _descriptografar(v) for k, v in config.get("chaves", {}).items()}
+            if config.get("groq_api_key"):
+                config["groq_api_key"] = _descriptografar(config["groq_api_key"])
+            if config.get("cloudflare_api_token"):
+                config["cloudflare_api_token"] = _descriptografar(config["cloudflare_api_token"])
         except Exception:
             pass
             
@@ -370,7 +375,7 @@ def verificar_acesso_sheets(email):
     except Exception as e:
         return False, "", f"⚠️ Falha na conexão: {e}"
 
-def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-flash", temperature=0.25):
+def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.5-flash", temperature=0.25):
     config = carregar_config(st.session_state.get("user_email", ""))
     provedores = []
     
@@ -408,9 +413,10 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-fl
                 texto = getattr(resp, "text", "")
                 
             elif nome == "Groq":
-                url_groq = "[https://api.groq.com/openai/v1/chat/completions](https://api.groq.com/openai/v1/chat/completions)"
+                url_groq = "https://api.groq.com/openai/v1/chat/completions"
+                modelo_groq = config.get("modelo_groq", "llama-3.1-70b-versatile")
                 payload = {
-                    "model": "llama-3.1-70b-versatile",
+                    "model": modelo_groq,
                     "messages": [{"role": "system", "content": sys_final}, {"role": "user", "content": user_prompt}], 
                     "temperature": temperature
                 }
@@ -419,8 +425,8 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.8-fl
                 texto = _extrair_texto_resposta(resp.json())
                 
             elif nome == "Cloudflare":
-                cf_modelo = "@cf/meta/llama-3.1-8b-instruct"
-                url_cf = f"[https://api.cloudflare.com/client/v4/accounts/](https://api.cloudflare.com/client/v4/accounts/){cred[1].strip()}/ai/run/{cf_modelo}"
+                cf_modelo = config.get("modelo_cloudflare", "@cf/meta/llama-3.1-8b-instruct")
+                url_cf = f"https://api.cloudflare.com/client/v4/accounts/{cred[1].strip()}/ai/run/{cf_modelo}"
                 payload = {
                     "messages": [{"role": "system", "content": sys_final}, {"role": "user", "content": user_prompt}], 
                     "temperature": temperature, 
@@ -545,8 +551,8 @@ def renderizar_sidebar():
             "cloudflare_account_id": cf_acc, "cloudflare_api_token": cf_tok,
             "provedor_ia": st.session_state.get("ps_provedor_manual", "Automático"),
             "fallback_automatico": fallback_chk, "gemini_so_visao": gemini_so_visao_chk,
-            "modelo_groq": "llama3-70b-8192", "modelo_cloudflare": "@cf/meta/llama-3-8b-instruct",
-            "modelo_padrao": "gemini-3.8-flash", "usar_busca_web": False
+            "modelo_groq": "llama-3.1-70b-versatile", "modelo_cloudflare": "@cf/meta/llama-3.1-8b-instruct",
+            "modelo_padrao": "gemini-3.5-flash", "usar_busca_web": False
         }
         ok_salvo, erro_salvo = salvar_config(dados_salvos, st.session_state.get("user_email", ""))
         if ok_salvo:
@@ -622,7 +628,7 @@ def renderizar_cockpit():
             else:
                 with st.spinner("Analisando matriz óptica..."):
                     try:
-                        res = processar_imagem_visao(img_file, estilo_conversao, sens_escolhida, "gemini-3.8-flash")
+                        res = processar_imagem_visao(img_file, estilo_conversao, sens_escolhida, "gemini-3.5-flash")
                         if res["tipo"] == "json":
                             st.session_state["ck_img_parametros"] = res["dados"]
                             # Já monta uma narrativa básica inicial
