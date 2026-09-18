@@ -778,15 +778,15 @@ def renderizar_cockpit():
         st.markdown("---")
         st.markdown(f"### 📋 Prompt Especializado ({st.session_state.get('ck_dest_usado')})")
     
-        # Tenta usar a quebra de linha nativa das versões mais recentes do Streamlit
-        try:
+    # Tenta usar a quebra de linha nativa das versões mais recentes do Streamlit
+    try:
         st.code(st.session_state["ck_prompt_final"], language="markdown", wrap_lines=True)
-        except TypeError:
+    except TypeError:
         # Fallback seguro caso o servidor esteja com uma versão mais antiga
         st.markdown(f"<div class='ps-preprompt' style='white-space: pre-wrap; word-wrap: break-word; font-family: monospace;'>{html.escape(st.session_state['ck_prompt_final'])}</div>", unsafe_allow_html=True)
         
-        c_save1, c_save2 = st.columns(2)
-        with c_save1:
+    c_save1, c_save2 = st.columns(2)
+    with c_save1:
         if st.button("💾 Salvar no Histórico", use_container_width=True):
             ok_hist, erro_hist = _historico_sheets(st.session_state.get("user_email", ""), st.session_state["ck_prompt_final"], acao="adicionar")
             if ok_hist: st.success("✅ Prompt salvo no histórico!")
