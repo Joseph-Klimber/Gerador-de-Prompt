@@ -650,9 +650,9 @@ def renderizar_cockpit():
                     p_suj = st.text_area("👤 Sujeito (Biotipo/Roupas):", value=parametros.get("sujeito", ""), height=90)
                     p_cen = st.text_area("🏞️ Cenário:", value=parametros.get("cenario", ""), height=90)
                 with c2:
-                p_act = st.text_area("🏃 Ação / Pose:", value=parametros.get("acao", ""), height=90)
-                p_ilu = st.text_area("💡 Iluminação:", value=parametros.get("iluminacao", ""), height=90)
-                p_est = st.text_area("📷 Estilo / Câmera:", value=parametros.get("estilo_camera", ""), height=90)
+                    p_act = st.text_area("🏃 Ação / Pose:", value=parametros.get("acao", ""), height=90)
+                    p_ilu = st.text_area("💡 Iluminação:", value=parametros.get("iluminacao", ""), height=90)
+                    p_est = st.text_area("📷 Estilo / Câmera:", value=parametros.get("estilo_camera", ""), height=90)
                 
                 if st.button("🔄 Atualizar Narrativa Visual", use_container_width=True):
                     st.session_state["ck_ideia_input"] = f"{p_suj}, {p_act}. Cenário: {p_cen}. Iluminação: {p_ilu}. Estilo: {p_est}."
