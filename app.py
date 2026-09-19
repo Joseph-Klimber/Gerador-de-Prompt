@@ -211,7 +211,10 @@ def _chave_fernet():
     except Exception:
         pass
     if not segredo:
-        segredo = os.environ.get("PS_FERNET_KEY", "chave-local-nao-segura")
+        segredo = os.environ.get("PS_FERNET_KEY")
+    if not segredo:
+        st.error("🔒 Chave de criptografia não configurada. Defina PS_FERNET_KEY em secrets ou ambiente.")
+        st.stop()
     try:
         from cryptography.fernet import Fernet
         import base64
@@ -495,6 +498,11 @@ ATENÇÃO: A narrativa de figurino já foi resolvida globalmente. Sua função �
 """
 
 def processar_imagem_visao(arquivo_imagem, estilo_conversao, nivel_sensualidade, modelo_gemini):
+    # VALIDAÇÃO DE TAMANHO DE IMAGEM
+    MAX_IMAGE_SIZE_MB = 10
+    if arquivo_imagem.size > MAX_IMAGE_SIZE_MB * 1024 * 1024:
+        raise RuntimeError(f"🖼️ Imagem muito grande ({arquivo_imagem.size // (1024*1024)} MB). Limite: {MAX_IMAGE_SIZE_MB} MB.")
+    
     gemini_key = st.session_state.get("input_key_1", "").strip() or carregar_config(st.session_state.get("user_email", "")).get("chaves", {}).get("Chave 1", "")
     if not gemini_key or genai is None: raise RuntimeError("Chave do Google Gemini necessária para leitura de imagens. Adicione na barra lateral.")
     
@@ -539,11 +547,18 @@ def renderizar_sidebar():
     k_groq = st.sidebar.text_input("Cole sua Chave Groq", value=config.get("groq_api_key", ""), type="password", key="input_groq_api", label_visibility="collapsed")
 
     with st.sidebar.expander("Ferramentas Avançadas", expanded=False):
-        st.selectbox("Provedor Prioritário", ["Automático", "Gemini", "Groq", "Cloudflare"], key="ps_provedor_manual")
-        cf_acc = st.text_input("Cloudflare Account ID", value=config.get("cloudflare_account_id", ""), key="input_cloudflare_account")
-        cf_tok = st.text_input("Cloudflare Token", value=config.get("cloudflare_api_token", ""), type="password", key="input_cloudflare_token")
-        gemini_so_visao_chk = st.checkbox("🛡️ Economia Gemini (Groq p/ Texto, Gemini só Visão)", value=config.get("gemini_so_visao", True), key="gemini_so_visao")
-        fallback_chk = st.checkbox("Fallback Automático", value=config.get("fallback_automatico", True), key="fallback_automatico")
+            st.selectbox("Provedor Prioritário", ["Automático", "Gemini", "Groq", "Cloudflare"], key="ps_provedor_manual")
+            cf_acc = st.text_input("Cloudflare Account ID", value=config.get("cloudflare_account_id", ""), key="input_cloudflare_account")
+            cf_tok = st.text_input("Cloudflare Token", value=config.get("cloudflare_api_token", ""), type="password", key="input_cloudflare_token")
+            gemini_so_visao_chk = st.checkbox("🛡️ Economia Gemini (Groq p/ Texto, Gemini só Visão)", value=config.get("gemini_so_visao", True), key="gemini_so_visao")
+            fallback_chk = st.checkbox("Fallback Automático", value=config.get("fallback_automatico", True), key="fallback_automatico")
+            # NOVO: Seletor de modelo de visão
+            modelo_visao = st.selectbox(
+                "Modelo de Visão", 
+                ["gemini-3.5-flash", "gemini-1.5-pro-latest"], 
+                index=0,
+                key="modelo_visao_select"
+            )
 
     if st.sidebar.button("💾 Conectar Motores", type="primary", use_container_width=True):
         dados_salvos = {
@@ -569,7 +584,15 @@ def _historico_sheets(email, prompt_texto=None, acao="listar"):
     if acao == "adicionar":
         if not prompt_texto or not str(prompt_texto).strip():
             return False, "Nenhum prompt para salvar."
-        payload = {"acao": "adicionar_historico", "email": email, "prompt": str(prompt_texto)[:12000]}
+        # AUMENTE LIMITE E ADICIONE FLAG DE TRUNCAMENTO
+        MAX_HISTORY_CHARS = 25000
+        truncado = len(str(prompt_texto)) > MAX_HISTORY_CHARS
+        payload = {
+            "acao": "adicionar_historico", 
+            "email": email, 
+            "prompt": str(prompt_texto)[:MAX_HISTORY_CHARS],
+            "_truncado": truncado
+        }
         try:
             resp = requests.post(APPS_SCRIPT_URL.strip(), json=payload, timeout=30, allow_redirects=True)
             if resp.status_code == 200 and resp.json().get("ok"):
@@ -628,7 +651,9 @@ def renderizar_cockpit():
             else:
                 with st.spinner("Analisando matriz óptica..."):
                     try:
-                        res = processar_imagem_visao(img_file, estilo_conversao, sens_escolhida, "gemini-3.5-flash")
+                        # USAR MODELO DE VISÃO CONFIGURÁVEL
+                        modelo_visao = st.session_state.get("modelo_visao_select", "gemini-3.5-flash")
+                        res = processar_imagem_visao(img_file, estilo_conversao, sens_escolhida, modelo_visao)
                         if res["tipo"] == "json":
                             st.session_state["ck_img_parametros"] = res["dados"]
                             # Já monta uma narrativa básica inicial
@@ -681,12 +706,12 @@ def renderizar_cockpit():
                     
                     if "Literal" in foco_contexto:
                         p += "\n[AGENTE: CONTEXTO LITERAL]: Seja 100% fiel e obediente à ideia original. Crie APENAS o cenário lógico, físico e elementar inerente à ação (ex: 'voando' = céu azul e nuvens; 'nadando' = água). É ESTRITAMENTE PROIBIDO adicionar elementos não solicitados, iluminação épica, embelezamentos dramáticos ou 'fluff' estético. Descreva a cena de forma mecânica, física e direta."
-                        
+                    
                     txt, prov = _chamar_provedor_ia(SYS_GERADOR_PREPROMPT, p)
+                    # CORREÇÃO DO ESTADO DO PRÉ-PROMPT: vincular diretamente ao session state
                     st.session_state["ck_ideia"] = ideia_input.strip()
                     st.session_state["ck_preprompt"] = txt
-                    st.session_state["ck_preprompt_editado"] = txt
-                    st.session_state["ck_preprompt_dirty"] = False
+                    st.session_state["ck_preprompt_editado"] = txt  # Sincroniza com valor gerado
                     st.rerun()
                 except Exception as e: st.error(_msg_erro_amigavel(e))
 
@@ -709,11 +734,17 @@ def renderizar_cockpit():
             st.markdown("### 🎨 Pré-prompt (Cena Traduzida)")
             st.markdown("<div class='ps-legend'><span><span class='ps-user-word'>Ideia Original</span></span> • <span><span class='ps-ai-word'>Desenvolvimento da IA</span></span></div>", unsafe_allow_html=True)
             st.markdown(f"<div class='ps-preprompt'>{_ps_markup_origin(st.session_state['ck_preprompt'], st.session_state.get('ck_ideia', ''))}</div>", unsafe_allow_html=True)
-            pre_ed = st.text_area("Ajuste fino manual (Esta caixa será enviada ao Sintetizador):", height=130, key="ck_preprompt_editado")
-            # Atualiza o valor "atual" apenas se o usuário realmente editou (evita sobrescrever em reruns)
-            if pre_ed != st.session_state.get("ck_preprompt") and not st.session_state.get("ck_preprompt_dirty", False):
+            # CORREÇÃO: usar ck_preprompt_editado diretamente vinculado ao widget
+            pre_ed = st.text_area(
+                "Ajuste fino manual (Esta caixa será enviada ao Sintetizador):", 
+                value=st.session_state.get("ck_preprompt_editado", ""),
+                key="ck_preprompt_editado",
+                height=130
+            )
+            # Atualiza o valor "atual" sempre que o usuário edita (não depende de flag suja)
+            if pre_ed != st.session_state.get("ck_preprompt"):
                 st.session_state["ck_preprompt"] = pre_ed
-                st.session_state["ck_preprompt_dirty"] = True
+                # Não precisamos mais do flag dirty
 
     diag = st.session_state.get("ck_diagnostico")
     if diag:
@@ -757,7 +788,8 @@ def renderizar_cockpit():
                     eng = BANCO_DE_MOTORES[dest_sel]
                     bloco = f"\n\n======================================\n3. SINTAXE NATIVA: {dest_sel}\n======================================\n- POSITIVO: {eng['regra_positivo']}\n- NEGATIVO: {eng.get('regra_negativo', 'N/A')}\n\nSAÍDA OBRIGATÓRIA:\n1. PROMPT (Inglês)\n2. NEGATIVO\n3. LEGENDA (Português)\n4. HASHTAGS\n💡 DICA TÉCNICA: {eng['dica_tecnica']}"
                     
-                    txt_b = st.session_state.get("ck_preprompt", ideia_input.strip())
+                    # USAR O PRÉ-PROMPT EDITADO (AGORA VINCULADO CORRETAMENTE)
+                    txt_b = st.session_state.get("ck_preprompt_editado", ideia_input.strip())
                     
                     sug_aceitas = st.session_state.get("ck_sugestoes_marcadas", [])
                     sug_str = "\n".join(f"- {s}" for s in sug_aceitas) if sug_aceitas else "Nenhuma sugestão adicional marcada."
@@ -790,7 +822,12 @@ def renderizar_cockpit():
             if st.button("💾 Salvar no Histórico", use_container_width=True):
                 ok_hist, erro_hist = _historico_sheets(st.session_state.get("user_email", ""), st.session_state["ck_prompt_final"], acao="adicionar")
                 if ok_hist: st.success("✅ Prompt salvo no histórico!")
-                else: st.warning(f"⚠️ {erro_hist or 'Não foi possível salvar.'}")
+                else: 
+                    # MOSTRAR AVISO SE TRUNCADO
+                    if erro_hist and "_truncado" in str(erro_hist):
+                        st.warning("⚠️ Prompt truncado no histórico (limite de 25.000 caracteres).")
+                    else:
+                        st.warning(f"⚠️ {erro_hist or 'Não foi possível salvar.'}")
 
 # ==============================================================================
 # 9. PONTO DE ENTRADA (VITRINE DINÂMICA E LOGIN)
