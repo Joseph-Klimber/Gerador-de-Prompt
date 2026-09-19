@@ -3,18 +3,13 @@
 Prompt Studio Cockpit — Interface Minimalista de Alta Precisão
 Arquitetura: Shift-Left (Modificadores no Ponto Zero) + BYOK (Traga sua Chave) + Carga Distribuída.
 
-v2.0 — Melhorias:
-  • Chaves criptografadas em repouso (Fernet, chave via st.secrets/ambiente)
-  • Persistência via Google Sheets (Apps Script do login) com fallback local
-  • Erros amigáveis (sem traceback cru exposto ao usuário)
-  • Clientes de API cacheados (st.cache_resource)
-  • Estado do pré-prompt editado mais robusto
-  • Histórico de prompts salvos via POST (suporta grandes volumes)
-  • Detalhador Pericial de Imagem (Editável)
-  • Modificador de Contexto Literal (Anti-Fluff)
-  • Substituição de Motores Pagos por NVIDIA NIM (Llama 3.1 70B)
-  • Trava de Recência de Idioma (Anti-viés de tradução)
+v2.1 — Blindagem Total:
+  • Arquitetura Tri-Core: Gemini 1 -> GitHub Models (Llama 70B) -> Gemini 2 (Reserva)
+  • Redundância Óptica: Leitura de imagem com fallback automático Gemini 1 -> Gemini 2
+  • Chaves criptografadas em repouso (Fernet) e persistência via Google Sheets
   • URLs ofuscadas via concatenação (Anti-bug de Markdown do Chat)
+  • Trava de Recência de Idioma (Anti-viés de tradução)
+  • Campos editáveis com expansão visual completa (st.text_area)
 """
 
 import os
@@ -230,8 +225,7 @@ def _mascarar_chaves(config):
     copia = dict(config)
     chaves = copia.get("chaves", {})
     copia["chaves"] = {k: (("********") if v else "") for k, v in chaves.items()}
-    if copia.get("groq_api_key"): copia["groq_api_key"] = "********"
-    if copia.get("nvidia_api_key"): copia["nvidia_api_key"] = "********"
+    if copia.get("github_token"): copia["github_token"] = "********"
     return copia
 
 def _req_apps_script(params, timeout=20):
@@ -243,18 +237,17 @@ def _req_apps_script(params, timeout=20):
 
 def carregar_config(email=None):
     config = {
-        "chaves": {"Chave 1": ""}, "groq_api_key": "", "nvidia_api_key": "",
-        "provedor_ia": "Gemini", "fallback_automatico": True,
-        "gemini_so_visao": True, "modelo_groq": "llama-3.1-70b-versatile",
-        "modelo_nvidia": "meta/llama-3.1-70b-instruct", "modelo_padrao": "gemini-3.5-flash"
+        "chaves": {"Chave 1": "", "Chave 2": ""}, "github_token": "",
+        "provedor_ia": "Automático", "fallback_automatico": True,
+        "gemini_so_visao": False, "modelo_github": "meta-llama-3.1-70b-instruct", 
+        "modelo_padrao": "gemini-3.5-flash"
     }
     dados = _req_apps_script({"acao": "carregar_config", "email": (email or "").strip().lower()})
     if dados and dados.get("ok") and dados.get("config"):
         try:
             config.update(json.loads(dados["config"]))
             config["chaves"] = {k: _descriptografar(v) for k, v in config.get("chaves", {}).items()}
-            if config.get("groq_api_key"): config["groq_api_key"] = _descriptografar(config["groq_api_key"])
-            if config.get("nvidia_api_key"): config["nvidia_api_key"] = _descriptografar(config["nvidia_api_key"])
+            if config.get("github_token"): config["github_token"] = _descriptografar(config["github_token"])
             return config
         except Exception: pass
             
@@ -263,16 +256,14 @@ def carregar_config(email=None):
         try:
             with open(caminho, "r", encoding="utf-8") as f: config.update(json.load(f))
             config["chaves"] = {k: _descriptografar(v) for k, v in config.get("chaves", {}).items()}
-            if config.get("groq_api_key"): config["groq_api_key"] = _descriptografar(config["groq_api_key"])
-            if config.get("nvidia_api_key"): config["nvidia_api_key"] = _descriptografar(config["nvidia_api_key"])
+            if config.get("github_token"): config["github_token"] = _descriptografar(config["github_token"])
         except Exception: pass
     return config
 
 def salvar_config(dados, email=None):
     dados = dict(dados)
     dados["chaves"] = {k: _criptografar(v) for k, v in dados.get("chaves", {}).items()}
-    if dados.get("groq_api_key"): dados["groq_api_key"] = _criptografar(dados["groq_api_key"])
-    if dados.get("nvidia_api_key"): dados["nvidia_api_key"] = _criptografar(dados["nvidia_api_key"])
+    if dados.get("github_token"): dados["github_token"] = _criptografar(dados["github_token"])
     
     payload = {"acao": "salvar_config", "email": (email or "").strip().lower(), "config": json.dumps(dados, ensure_ascii=False)}
     try:
@@ -295,13 +286,13 @@ def _extrair_texto_resposta(obj):
 
 def _msg_erro_amigavel(e):
     texto = str(e)
-    if "Nenhuma chave configurada" in texto or "Nenhuma chave de API" in texto: return "🔑 **Nenhum motor conectado.** Cole sua chave (Gemini/Groq/NVIDIA)."
+    if "Nenhuma chave configurada" in texto: return "🔑 **Nenhum motor conectado.** Cole sua chave na barra lateral."
     if "REF-VERIF" in texto or "Falha de Comunicação" in texto:
         detalhes = texto.split("Detalhes:")[-1].strip() if "Detalhes:" in texto else ""
-        return f"⚠️ **Falha ao chamar o motor de IA.** Verifique sua chave, cota e conexão. {detalhes[:200]}"
-    if "401" in texto or "Unauthorized" in texto or "API key not valid" in texto: return "🔑 **Chave de API inválida ou expirada.**"
-    if "429" in texto or "quota" in texto.lower() or "rate limit" in texto.lower(): return "⏳ **Limite de uso atingido (429).** Aguarde ou use outro motor."
-    if "503" in texto or "overloaded" in texto.lower(): return "🔌 **Provedor sobrecarregado (503).** Tente em instantes."
+        return f"⚠️ **Falha ao chamar motores de IA.** Verifique conexão e chaves. {detalhes[:200]}"
+    if "401" in texto or "Unauthorized" in texto: return "🔑 **Chave/Token inválido ou expirado.**"
+    if "429" in texto or "quota" in texto.lower(): return "⏳ **Limite de uso temporário atingido (429).** Aguarde a renovação da cota."
+    if "503" in texto or "overloaded" in texto.lower(): return "🔌 **Servidor sobrecarregado (503).** O fallback deve assumir."
     if "timeout" in texto.lower(): return "⏱️ **Tempo esgotado na chamada.** Tente novamente."
     return f"⚠️ **Algo deu errado.** {texto[:300]}"
 
@@ -323,26 +314,34 @@ def verificar_acesso_sheets(email):
         return False, "", f"⚠️ Erro do servidor {response.status_code}."
     except Exception as e: return False, "", f"⚠️ Falha na conexão: {e}"
 
+# ==============================================================================
+# 3. MOTOR DE CHAMADA TRI-CORE COM REDUNDÂNCIA (GEMINI 1 -> GITHUB -> GEMINI 2)
+# ==============================================================================
 def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.5-flash", temperature=0.25):
     config = carregar_config(st.session_state.get("user_email", ""))
+    
+    g_key_1 = st.session_state.get("input_key_1", "").strip() or config.get("chaves", {}).get("Chave 1", "")
+    gh_token = st.session_state.get("input_github_token", "").strip() or config.get("github_token", "")
+    g_key_2 = st.session_state.get("input_key_2", "").strip() or config.get("chaves", {}).get("Chave 2", "")
+
     provedores = []
-    
-    g_key = st.session_state.get("input_key_1", "").strip() or config.get("chaves", {}).get("Chave 1", "")
-    if g_key and genai is not None: provedores.append(("Gemini", g_key))
-    
-    gr_key = st.session_state.get("input_groq_api", "").strip() or config.get("groq_api_key", "")
-    if gr_key: provedores.append(("Groq", gr_key))
-    
-    nv_key = st.session_state.get("input_nvidia_api", "").strip() or config.get("nvidia_api_key", "")
-    if nv_key: provedores.append(("NVIDIA", nv_key))
+    if g_key_1 and genai is not None:
+        provedores.append(("Gemini (Principal)", g_key_1))
+    if gh_token:
+        provedores.append(("GitHub Models", gh_token))
+    if g_key_2 and genai is not None:
+        provedores.append(("Gemini (Reserva)", g_key_2))
 
-    if not provedores: raise RuntimeError("Nenhuma chave configurada. Acesse as configurações.")
+    if not provedores:
+        raise RuntimeError("Nenhuma chave configurada. Acesse as configurações no painel lateral.")
 
-    if st.session_state.get("ps_provedor_manual", "Automático") != "Automático":
-        provedores = sorted(provedores, key=lambda x: 0 if x[0] == st.session_state.get("ps_provedor_manual") else 1)
-
-    if st.session_state.get("gemini_so_visao", config.get("gemini_so_visao", True)):
-        provedores = [p for p in provedores if p[0] != "Gemini"] + [p for p in provedores if p[0] == "Gemini"]
+    # Ajuste manual ou preferência por economia de cota Gemini
+    escolha_manual = st.session_state.get("ps_provedor_manual", "Automático")
+    if escolha_manual != "Automático":
+        provedores = sorted(provedores, key=lambda x: 0 if x[0] == escolha_manual else 1)
+    elif st.session_state.get("gemini_so_visao", config.get("gemini_so_visao", False)):
+        # Prioriza o GitHub Models para texto, preservando a cota do Gemini
+        provedores = [p for p in provedores if "GitHub" in p[0]] + [p for p in provedores if "Gemini" in p[0]]
 
     if not st.session_state.get("fallback_automatico", config.get("fallback_automatico", True)):
         provedores = provedores[:1]
@@ -352,34 +351,25 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.5-fl
     
     for nome, cred in provedores:
         try:
-            if nome == "Gemini":
+            if "Gemini" in nome:
                 client = genai.Client(api_key=cred)
                 cfg = types.GenerateContentConfig(system_instruction=sys_final, temperature=temperature) if types else {"system_instruction": sys_final, "temperature": temperature}
                 resp = client.models.generate_content(model=modelo_gemini, contents=user_prompt, config=cfg)
                 texto = getattr(resp, "text", "")
                 
-            elif nome == "Groq":
-                url_groq = "http" + "s://api.groq.com/openai/v1/chat/completions"
-                modelo_groq = config.get("modelo_groq", "llama-3.1-70b-versatile")
+            elif nome == "GitHub Models":
+                url_gh = "http" + "s://models.inference.ai.azure.com/chat/completions"
+                modelo_gh = config.get("modelo_github", "meta-llama-3.1-70b-instruct")
                 payload = {
-                    "model": modelo_groq,
+                    "model": modelo_gh,
                     "messages": [{"role": "system", "content": sys_final}, {"role": "user", "content": user_prompt}], 
                     "temperature": temperature
                 }
-                resp = requests.post(url_groq, headers={"Authorization": f"Bearer {cred}"}, json=payload, timeout=90)
-                resp.raise_for_status()
-                texto = _extrair_texto_resposta(resp.json())
-                
-            elif nome == "NVIDIA":
-                url_nv = "http" + "s://integrate.api.nvidia.com/v1/chat/completions"
-                modelo_nv = config.get("modelo_nvidia", "meta/llama-3.1-70b-instruct")
-                payload = {
-                    "model": modelo_nv,
-                    "messages": [{"role": "system", "content": sys_final}, {"role": "user", "content": user_prompt}], 
-                    "temperature": temperature,
-                    "max_tokens": 4096
+                headers = {
+                    "Authorization": f"Bearer {cred}",
+                    "Content-Type": "application/json"
                 }
-                resp = requests.post(url_nv, headers={"Authorization": f"Bearer {cred}"}, json=payload, timeout=90)
+                resp = requests.post(url_gh, headers=headers, json=payload, timeout=90)
                 resp.raise_for_status()
                 texto = _extrair_texto_resposta(resp.json())
             
@@ -443,23 +433,38 @@ ATENÇÃO: A narrativa de figurino já foi resolvida globalmente. Sua função �
 
 def processar_imagem_visao(arquivo_imagem, estilo_conversao, nivel_sensualidade, modelo_gemini):
     MAX_IMAGE_SIZE_MB = 10
-    if arquivo_imagem.size > MAX_IMAGE_SIZE_MB * 1024 * 1024: raise RuntimeError(f"🖼️ Imagem limite: {MAX_IMAGE_SIZE_MB} MB.")
-    gemini_key = st.session_state.get("input_key_1", "").strip() or carregar_config(st.session_state.get("user_email", "")).get("chaves", {}).get("Chave 1", "")
-    if not gemini_key or genai is None: raise RuntimeError("Chave Gemini necessária para visão.")
+    if arquivo_imagem.size > MAX_IMAGE_SIZE_MB * 1024 * 1024:
+        raise RuntimeError(f"🖼️ Imagem limite: {MAX_IMAGE_SIZE_MB} MB.")
+    
+    config = carregar_config(st.session_state.get("user_email", ""))
+    k1 = st.session_state.get("input_key_1", "").strip() or config.get("chaves", {}).get("Chave 1", "")
+    k2 = st.session_state.get("input_key_2", "").strip() or config.get("chaves", {}).get("Chave 2", "")
+    
+    chaves_visao = [k for k in [k1, k2] if k]
+    if not chaves_visao or genai is None:
+        raise RuntimeError("Chave Gemini necessária para visão. Conecte no painel lateral.")
     
     img_pil = Image.open(arquivo_imagem)
     user_prompt = "Desconstrua pericialmente esta imagem. \n[MODIFICADOR 2: SENSUALIDADE]: Nível " + str(nivel_sensualidade) + " - Redesenhe a roupa/pose original para refletir EXATAMENTE esse nível (Nível 4 ou 5 exige remoção de roupas)."
     if "Fotorrealismo" in estilo_conversao: user_prompt += "\n[MODIFICADOR 1: ESTILO]: Traduza a cena inteira para o MUNDO REAL fotorrealista (proibido anime/3d)."
     elif "Anime" in estilo_conversao: user_prompt += "\n[MODIFICADOR 1: ESTILO]: Traduza a cena para ILUSTRAÇÃO 2D ANIME (proibido poros/fotorrealismo)."
 
-    client = genai.Client(api_key=gemini_key)
-    cfg = types.GenerateContentConfig(system_instruction=SYS_LEITOR_PARAMETRICO, temperature=0.2)
-    resp = client.models.generate_content(model=modelo_gemini, contents=[img_pil, user_prompt], config=cfg)
-    texto = getattr(resp, "text", "") or ""
-    if not texto.strip(): raise RuntimeError("A IA bloqueou o retorno da imagem.")
-    dados = parse_json_ia(texto)
-    if dados: return {"tipo": "json", "dados": dados}
-    return {"tipo": "texto", "texto": texto}
+    erros = []
+    # Redundância de Visão: se a Chave 1 falhar ou atingir cota, tenta a Chave 2 automaticamente
+    for idx, chave in enumerate(chaves_visao):
+        try:
+            client = genai.Client(api_key=chave)
+            cfg = types.GenerateContentConfig(system_instruction=SYS_LEITOR_PARAMETRICO, temperature=0.2)
+            resp = client.models.generate_content(model=modelo_gemini, contents=[img_pil, user_prompt], config=cfg)
+            texto = getattr(resp, "text", "") or ""
+            if not texto.strip(): raise RuntimeError("A IA bloqueou o retorno da imagem.")
+            dados = parse_json_ia(texto)
+            if dados: return {"tipo": "json", "dados": dados}
+            return {"tipo": "texto", "texto": texto}
+        except Exception as e:
+            erros.append(f"Gemini {idx+1}: {str(e)}")
+
+    raise RuntimeError("Falha na leitura óptica em todas as chaves Gemini conectadas: " + " | ".join(erros))
 
 # ==============================================================================
 # 5. UI: BARRA LATERAL (CENTRO DE CONEXÃO BYOK) E LANDING PAGE
@@ -474,30 +479,30 @@ def renderizar_sidebar():
     config = carregar_config(st.session_state.get("user_email", ""))
     
     st.sidebar.markdown("---")
-    st.sidebar.markdown("**O motor é seu.** Pegue suas chaves de API gratuitas nos painéis oficiais e cole abaixo para ativar o Cockpit.")
+    st.sidebar.markdown("**O motor é seu.** Pegue suas chaves de API gratuitas nos painéis oficiais e conecte abaixo.")
     
-    st.sidebar.markdown("<a href='http" + "s://aistudio.google.com/app/apikey' target='_blank' style='color:#2563eb; text-decoration:none;'>🔑 Pegar chave grátis no AI Studio</a>", unsafe_allow_html=True)
-    k1 = st.sidebar.text_input("Cole sua Chave Gemini", value=config.get("chaves", {}).get("Chave 1", ""), type="password", key="input_key_1", label_visibility="collapsed")
+    st.sidebar.markdown("<a href='http" + "s://aistudio.google.com/app/apikey' target='_blank' style='color:#2563eb; text-decoration:none;'>🔑 Google Gemini (Principal)</a>", unsafe_allow_html=True)
+    k1 = st.sidebar.text_input("Chave Gemini 1", value=config.get("chaves", {}).get("Chave 1", ""), type="password", key="input_key_1", label_visibility="collapsed")
     
-    st.sidebar.markdown("<br><a href='http" + "s://console.groq.com/keys' target='_blank' style='color:#b45309; text-decoration:none;'>⚡ Pegar chave grátis no Groq Console</a>", unsafe_allow_html=True)
-    k_groq = st.sidebar.text_input("Cole sua Chave Groq", value=config.get("groq_api_key", ""), type="password", key="input_groq_api", label_visibility="collapsed")
+    st.sidebar.markdown("<br><a href='http" + "s://github.com/settings/tokens' target='_blank' style='color:#10b981; text-decoration:none;'>🌐 GitHub Models (Llama 70B - Token Pessoal)</a>", unsafe_allow_html=True)
+    k_gh = st.sidebar.text_input("Token GitHub", value=config.get("github_token", ""), type="password", key="input_github_token", label_visibility="collapsed")
 
-    st.sidebar.markdown("<br><a href='http" + "s://build.nvidia.com/' target='_blank' style='color:#10b981; text-decoration:none;'>🟢 Pegar chave grátis na NVIDIA NIM</a>", unsafe_allow_html=True)
-    k_nv = st.sidebar.text_input("Cole sua Chave NVIDIA", value=config.get("nvidia_api_key", ""), type="password", key="input_nvidia_api", label_visibility="collapsed")
+    st.sidebar.markdown("<br><span style='color:#b45309; font-weight:600;'>🛡️ Google Gemini (Reserva / Opcional)</span>", unsafe_allow_html=True)
+    k2 = st.sidebar.text_input("Chave Gemini 2", value=config.get("chaves", {}).get("Chave 2", ""), type="password", key="input_key_2", label_visibility="collapsed")
 
     with st.sidebar.expander("Ferramentas Avançadas", expanded=False):
-            st.selectbox("Provedor Prioritário", ["Automático", "Gemini", "Groq", "NVIDIA"], key="ps_provedor_manual")
-            gemini_so_visao_chk = st.checkbox("🛡️ Economia Gemini (Groq/NVIDIA p/ Texto, Gemini só Visão)", value=config.get("gemini_so_visao", True), key="gemini_so_visao")
+            st.selectbox("Provedor Prioritário", ["Automático", "Gemini (Principal)", "GitHub Models", "Gemini (Reserva)"], key="ps_provedor_manual")
+            gemini_so_visao_chk = st.checkbox("🛡️ Priorizar GitHub para Texto (Poupa Cota Gemini)", value=config.get("gemini_so_visao", False), key="gemini_so_visao")
             fallback_chk = st.checkbox("Fallback Automático", value=config.get("fallback_automatico", True), key="fallback_automatico")
             st.selectbox("Modelo de Visão (Gemini)", ["gemini-3.5-flash", "gemini-3.8-flash"], index=0, key="modelo_visao_select")
 
     if st.sidebar.button("💾 Conectar Motores", type="primary", use_container_width=True):
         dados_salvos = {
-            "chaves": {"Chave 1": k1, "Chave 2": ""}, "groq_api_key": k_groq,
-            "nvidia_api_key": k_nv,
+            "chaves": {"Chave 1": k1, "Chave 2": k2}, 
+            "github_token": k_gh,
             "provedor_ia": st.session_state.get("ps_provedor_manual", "Automático"),
             "fallback_automatico": fallback_chk, "gemini_so_visao": gemini_so_visao_chk,
-            "modelo_groq": "llama-3.1-70b-versatile", "modelo_nvidia": "meta/llama-3.1-70b-instruct",
+            "modelo_github": "meta-llama-3.1-70b-instruct",
             "modelo_padrao": "gemini-3.5-flash", "usar_busca_web": False
         }
         ok_salvo, erro_salvo = salvar_config(dados_salvos, st.session_state.get("user_email", ""))
