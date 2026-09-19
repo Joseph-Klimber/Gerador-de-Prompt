@@ -12,8 +12,9 @@ v2.0 — Melhorias:
   • Histórico de prompts salvos via POST (suporta grandes volumes)
   • Detalhador Pericial de Imagem (Editável)
   • Modificador de Contexto Literal (Anti-Fluff)
-  • Substituição da Cloudflare pela SambaNova Cloud (Llama 3.3 70B Gratuito)
+  • Substituição de Motores Pagos por NVIDIA NIM (Llama 3.1 70B)
   • Trava de Recência de Idioma (Anti-viés de tradução)
+  • URLs ofuscadas via concatenação (Anti-bug de Markdown do Chat)
 """
 
 import os
@@ -92,12 +93,12 @@ st.markdown(
 )
 
 # ==============================================================================
-# 2. CONSTANTES E DICIONÁRIO DE TRADUÇÃO JURAMENTADA
+# 2. CONSTANTES E DICIONÁRIO (COM BLINDAGEM DE URL)
 # ==============================================================================
-APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzgEj3YPwqiUbiueyu8wjZ9ZZK0Rcc6G3kucysRSJ2gNmzRzUdMuLqv_q55N1kSO8PQ/exec"
-LINK_KIWIFY_15_DIAS = "https://pay.kiwify.com.br/MXVL98k"
-LINK_KIWIFY_30_DIAS = "https://pay.kiwify.com.br/dyfEGe5"
-LINK_KIWIFY_90_DIAS = "https://pay.kiwify.com.br/xo0m3rF"
+APPS_SCRIPT_URL = "http" + "s://script.google.com/macros/s/AKfycbzgEj3YPwqiUbiueyu8wjZ9ZZK0Rcc6G3kucysRSJ2gNmzRzUdMuLqv_q55N1kSO8PQ/exec"
+LINK_KIWIFY_15_DIAS = "http" + "s://pay.kiwify.com.br/MXVL98k"
+LINK_KIWIFY_30_DIAS = "http" + "s://pay.kiwify.com.br/dyfEGe5"
+LINK_KIWIFY_90_DIAS = "http" + "s://pay.kiwify.com.br/xo0m3rF"
 
 PASTA_CONFIGS = "configs_usuarios"
 PASTA_RESULTADOS = "resultados"
@@ -172,48 +173,36 @@ OPCOES_DESTINO = ["Selecione o Motor Destino..."] + list(BANCO_DE_MOTORES.keys()
 # 2.1 FUNÇÕES PURAS (testáveis) + CRIPTOGRAFIA + PERSISTÊNCIA
 # ==============================================================================
 def _slug_usuario(email):
-    """Normaliza um e-mail para usar como nome de arquivo/pasta com segurança."""
     return re.sub(r'[^\w\-.]', '_', (email or "anonimo").strip().lower()) or "anonimo"
 
 def normalizar_texto(texto):
-    """Remove acentos e normaliza minúsculas — usado na marcação origem vs IA."""
     return "".join(
         c for c in unicodedata.normalize("NFD", (texto or "").lower())
         if unicodedata.category(c) != "Mn"
     )
 
 def parse_json_ia(texto):
-    """Extrai um JSON de uma resposta de IA, tolerando cercas ```json e lixo ao redor."""
-    if not texto:
-        return None
+    if not texto: return None
     limpo = str(texto).strip().strip("`")
-    if limpo.lower().startswith("json"):
-        limpo = limpo[4:].strip()
+    if limpo.lower().startswith("json"): limpo = limpo[4:].strip()
     ini = limpo.find("{")
     if ini >= 0:
         depth = 0
         for i in range(ini, len(limpo)):
-            if limpo[i] == "{":
-                depth += 1
+            if limpo[i] == "{": depth += 1
             elif limpo[i] == "}":
                 depth -= 1
                 if depth == 0:
                     limpo = limpo[ini:i+1]
                     break
-    try:
-        return json.loads(limpo)
-    except Exception:
-        return None
+    try: return json.loads(limpo)
+    except Exception: return None
 
 def _chave_fernet():
-    """Deriva uma chave Fernet estável a partir de st.secrets ou variável de ambiente."""
     segredo = None
-    try:
-        segredo = st.secrets.get("PS_FERNET_KEY")
-    except Exception:
-        pass
-    if not segredo:
-        segredo = os.environ.get("PS_FERNET_KEY")
+    try: segredo = st.secrets.get("PS_FERNET_KEY")
+    except Exception: pass
+    if not segredo: segredo = os.environ.get("PS_FERNET_KEY")
     if not segredo:
         st.error("🔒 Chave de criptografia não configurada. Defina PS_FERNET_KEY em secrets ou ambiente.")
         st.stop()
@@ -228,46 +217,36 @@ def _chave_fernet():
 
 def _criptografar(texto):
     f = _chave_fernet()
-    if not f or not texto:
-        return texto
+    if not f or not texto: return texto
     return f.encrypt(texto.encode("utf-8")).decode("utf-8")
 
 def _descriptografar(texto):
     f = _chave_fernet()
-    if not f or not texto:
-        return texto
-    try:
-        return f.decrypt(texto.encode("utf-8")).decode("utf-8")
-    except Exception:
-        return texto
+    if not f or not texto: return texto
+    try: return f.decrypt(texto.encode("utf-8")).decode("utf-8")
+    except Exception: return texto
 
 def _mascarar_chaves(config):
-    """Remove conteúdo sensível de um dict p/ exibição segura (nunca logar chaves)."""
     copia = dict(config)
     chaves = copia.get("chaves", {})
     copia["chaves"] = {k: (("********") if v else "") for k, v in chaves.items()}
     if copia.get("groq_api_key"): copia["groq_api_key"] = "********"
-    if copia.get("sambanova_api_key"): copia["sambanova_api_key"] = "********"
+    if copia.get("nvidia_api_key"): copia["nvidia_api_key"] = "********"
     return copia
 
-# ---- Persistência: Google Sheets (Apps Script) com fallback local ----
 def _req_apps_script(params, timeout=20):
-    """Faz GET no Apps Script e devolve JSON, tratando erros de rede com clareza."""
     try:
         resp = requests.get(APPS_SCRIPT_URL.strip(), params=params, timeout=timeout, allow_redirects=True)
-        if resp.status_code == 200:
-            return resp.json()
+        if resp.status_code == 200: return resp.json()
         return {"ok": False, "erro": f"Servidor retornou HTTP {resp.status_code}."}
-    except Exception as e:
-        return {"ok": False, "erro": f"Falha de conexão com o serviço de dados: {e}"}
+    except Exception as e: return {"ok": False, "erro": f"Falha de conexão com o serviço de dados: {e}"}
 
 def carregar_config(email=None):
-    """Carrega config do usuário: tenta Sheets primeiro; fallback p/ arquivo local."""
     config = {
-        "chaves": {"Chave 1": ""}, "groq_api_key": "", "sambanova_api_key": "",
+        "chaves": {"Chave 1": ""}, "groq_api_key": "", "nvidia_api_key": "",
         "provedor_ia": "Gemini", "fallback_automatico": True,
         "gemini_so_visao": True, "modelo_groq": "llama-3.1-70b-versatile",
-        "modelo_sambanova": "Meta-Llama-3.3-70B-Instruct", "modelo_padrao": "gemini-3.5-flash"
+        "modelo_nvidia": "meta/llama-3.1-70b-instruct", "modelo_padrao": "gemini-3.5-flash"
     }
     dados = _req_apps_script({"acao": "carregar_config", "email": (email or "").strip().lower()})
     if dados and dados.get("ok") and dados.get("config"):
@@ -275,57 +254,36 @@ def carregar_config(email=None):
             config.update(json.loads(dados["config"]))
             config["chaves"] = {k: _descriptografar(v) for k, v in config.get("chaves", {}).items()}
             if config.get("groq_api_key"): config["groq_api_key"] = _descriptografar(config["groq_api_key"])
-            if config.get("sambanova_api_key"): config["sambanova_api_key"] = _descriptografar(config["sambanova_api_key"])
+            if config.get("nvidia_api_key"): config["nvidia_api_key"] = _descriptografar(config["nvidia_api_key"])
             return config
-        except Exception:
-            pass
+        except Exception: pass
             
     caminho = os.path.join(PASTA_CONFIGS, f"config_{_slug_usuario(email)}.json")
     if os.path.exists(caminho):
         try:
-            with open(caminho, "r", encoding="utf-8") as f:
-                config.update(json.load(f))
+            with open(caminho, "r", encoding="utf-8") as f: config.update(json.load(f))
             config["chaves"] = {k: _descriptografar(v) for k, v in config.get("chaves", {}).items()}
-            if config.get("groq_api_key"):
-                config["groq_api_key"] = _descriptografar(config["groq_api_key"])
-            if config.get("sambanova_api_key"):
-                config["sambanova_api_key"] = _descriptografar(config["sambanova_api_key"])
-        except Exception:
-            pass
-            
+            if config.get("groq_api_key"): config["groq_api_key"] = _descriptografar(config["groq_api_key"])
+            if config.get("nvidia_api_key"): config["nvidia_api_key"] = _descriptografar(config["nvidia_api_key"])
+        except Exception: pass
     return config
 
 def salvar_config(dados, email=None):
-    """Salva config via POST (suporta dados maiores). Falha segura para arquivo local."""
     dados = dict(dados)
     dados["chaves"] = {k: _criptografar(v) for k, v in dados.get("chaves", {}).items()}
     if dados.get("groq_api_key"): dados["groq_api_key"] = _criptografar(dados["groq_api_key"])
-    if dados.get("sambanova_api_key"): dados["sambanova_api_key"] = _criptografar(dados["sambanova_api_key"])
+    if dados.get("nvidia_api_key"): dados["nvidia_api_key"] = _criptografar(dados["nvidia_api_key"])
     
     payload = {"acao": "salvar_config", "email": (email or "").strip().lower(), "config": json.dumps(dados, ensure_ascii=False)}
     try:
         resp = requests.post(APPS_SCRIPT_URL.strip(), json=payload, timeout=20, allow_redirects=True)
-        if resp.status_code == 200 and resp.json().get("ok"):
-            return True, None
-    except Exception:
-        pass
+        if resp.status_code == 200 and resp.json().get("ok"): return True, None
+    except Exception: pass
         
     os.makedirs(PASTA_CONFIGS, exist_ok=True)
     with open(os.path.join(PASTA_CONFIGS, f"config_{_slug_usuario(email)}.json"), "w", encoding="utf-8") as f:
         json.dump(dados, f, indent=4, ensure_ascii=False)
     return False, "Erro ao salvar na Nuvem. Cópia salva apenas localmente."
-
-def salvar_resultado_manual(texto, nome_sujeito, email=None):
-    """Salva fallback local apenas em último caso."""
-    if not texto or not str(texto).strip():
-        return "⚠️ Nenhum resultado para salvar."
-    pasta = os.path.join(PASTA_RESULTADOS, _slug_usuario(email))
-    os.makedirs(pasta, exist_ok=True)
-    nome_base = re.sub(r"[^\w\-]", "_", str(nome_sujeito or "prompt")).strip("_").lower() or "prompt"
-    nome = f"prompt_{nome_base}_{time.strftime('%Y%m%d_%H%M%S')}.txt"
-    with open(os.path.join(pasta, nome), "w", encoding="utf-8") as f:
-        f.write(texto)
-    return f"💾 Prompt salvo localmente: `{nome}`"
 
 def _extrair_texto_resposta(obj):
     if isinstance(obj, str): return obj.strip()
@@ -335,50 +293,35 @@ def _extrair_texto_resposta(obj):
             if k in obj and obj[k]: return _extrair_texto_resposta(obj[k])
     return ""
 
-# ==============================================================================
-# 2.2 ERROS AMIGÁVEIS
-# ==============================================================================
 def _msg_erro_amigavel(e):
     texto = str(e)
-    if "Nenhuma chave configurada" in texto or "Nenhuma chave de API" in texto:
-        return "🔑 **Nenhum motor conectado.** Abra o **Centro de Conexão** na barra lateral e cole sua chave (Gemini/Groq/SambaNova)."
+    if "Nenhuma chave configurada" in texto or "Nenhuma chave de API" in texto: return "🔑 **Nenhum motor conectado.** Cole sua chave (Gemini/Groq/NVIDIA)."
     if "REF-VERIF" in texto or "Falha de Comunicação" in texto:
         detalhes = texto.split("Detalhes:")[-1].strip() if "Detalhes:" in texto else ""
         return f"⚠️ **Falha ao chamar o motor de IA.** Verifique sua chave, cota e conexão. {detalhes[:200]}"
-    if "401" in texto or "Unauthorized" in texto or "API key not valid" in texto:
-        return "🔑 **Chave de API inválida ou expirada.** Verifique no painel do provedor e atualize no Centro de Conexão."
-    if "429" in texto or "quota" in texto.lower() or "rate limit" in texto.lower():
-        return "⏳ **Limite de uso atingido (429).** O provedor está com cota esgotada. Aguarde ou use outro motor (fallback)."
-    if "503" in texto or "overloaded" in texto.lower() or "overload" in texto.lower():
-        return "🔌 **Provedor sobrecarregado (503).** Tente novamente em instantes ou mude o provedor prioritário."
-    if "timeout" in texto.lower() or "timed out" in texto.lower():
-        return "⏱️ **Tempo esgotado na chamada.** Tente novamente; se persistir, use outro provedor."
+    if "401" in texto or "Unauthorized" in texto or "API key not valid" in texto: return "🔑 **Chave de API inválida ou expirada.**"
+    if "429" in texto or "quota" in texto.lower() or "rate limit" in texto.lower(): return "⏳ **Limite de uso atingido (429).** Aguarde ou use outro motor."
+    if "503" in texto or "overloaded" in texto.lower(): return "🔌 **Provedor sobrecarregado (503).** Tente em instantes."
+    if "timeout" in texto.lower(): return "⏱️ **Tempo esgotado na chamada.** Tente novamente."
     return f"⚠️ **Algo deu errado.** {texto[:300]}"
 
-# ==============================================================================
-# 3. AUTENTICAÇÃO, CONFIGURAÇÃO E MOTOR DE CHAMADA
-# ==============================================================================
 def verificar_acesso_sheets(email):
     try:
         params = {"acao": "verificar_acesso", "email": (email or "").strip().lower()}
         response = requests.get(APPS_SCRIPT_URL.strip(), params=params, timeout=15, allow_redirects=True)
         if response.status_code == 200:
             dados = response.json()
-            if not dados.get("encontrado", False):
-                return False, dados.get("expiracao", ""), "⚠️ E-mail não encontrado na base de clientes autorizados."
+            if not dados.get("encontrado", False): return False, dados.get("expiracao", ""), "⚠️ E-mail não encontrado."
             exp = str(dados.get("expiracao", "")).strip()
             if exp:
                 for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d/%m/%Y %H:%M", "%Y-%m-%d %H:%M:%S"):
                     try:
-                        if datetime.strptime(exp.split("T")[0], fmt).date() < datetime.now().date():
-                            return False, exp, f"⚠️ Seu acesso expirou em {exp}."
+                        if datetime.strptime(exp.split("T")[0], fmt).date() < datetime.now().date(): return False, exp, f"⚠️ Acesso expirou em {exp}."
                         break
-                    except Exception:
-                        continue
+                    except Exception: continue
             return True, exp, None
         return False, "", f"⚠️ Erro do servidor {response.status_code}."
-    except Exception as e:
-        return False, "", f"⚠️ Falha na conexão: {e}"
+    except Exception as e: return False, "", f"⚠️ Falha na conexão: {e}"
 
 def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.5-flash", temperature=0.25):
     config = carregar_config(st.session_state.get("user_email", ""))
@@ -390,11 +333,10 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.5-fl
     gr_key = st.session_state.get("input_groq_api", "").strip() or config.get("groq_api_key", "")
     if gr_key: provedores.append(("Groq", gr_key))
     
-    sn_key = st.session_state.get("input_sambanova_api", "").strip() or config.get("sambanova_api_key", "")
-    if sn_key: provedores.append(("SambaNova", sn_key))
+    nv_key = st.session_state.get("input_nvidia_api", "").strip() or config.get("nvidia_api_key", "")
+    if nv_key: provedores.append(("NVIDIA", nv_key))
 
-    if not provedores:
-        raise RuntimeError("Nenhuma chave configurada. Acesse as configurações na barra lateral esquerda para conectar seu motor.")
+    if not provedores: raise RuntimeError("Nenhuma chave configurada. Acesse as configurações.")
 
     if st.session_state.get("ps_provedor_manual", "Automático") != "Automático":
         provedores = sorted(provedores, key=lambda x: 0 if x[0] == st.session_state.get("ps_provedor_manual") else 1)
@@ -417,7 +359,7 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.5-fl
                 texto = getattr(resp, "text", "")
                 
             elif nome == "Groq":
-                url_groq = "https://api.groq.com/openai/v1/chat/completions"
+                url_groq = "http" + "s://api.groq.com/openai/v1/chat/completions"
                 modelo_groq = config.get("modelo_groq", "llama-3.1-70b-versatile")
                 payload = {
                     "model": modelo_groq,
@@ -428,15 +370,16 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.5-fl
                 resp.raise_for_status()
                 texto = _extrair_texto_resposta(resp.json())
                 
-            elif nome == "SambaNova":
-                url_sn = "https://api.sambanova.ai/v1/chat/completions"
-                modelo_sn = config.get("modelo_sambanova", "Meta-Llama-3.3-70B-Instruct")
+            elif nome == "NVIDIA":
+                url_nv = "http" + "s://integrate.api.nvidia.com/v1/chat/completions"
+                modelo_nv = config.get("modelo_nvidia", "meta/llama-3.1-70b-instruct")
                 payload = {
-                    "model": modelo_sn,
+                    "model": modelo_nv,
                     "messages": [{"role": "system", "content": sys_final}, {"role": "user", "content": user_prompt}], 
-                    "temperature": temperature
+                    "temperature": temperature,
+                    "max_tokens": 4096
                 }
-                resp = requests.post(url_sn, headers={"Authorization": f"Bearer {cred}"}, json=payload, timeout=90)
+                resp = requests.post(url_nv, headers={"Authorization": f"Bearer {cred}"}, json=payload, timeout=90)
                 resp.raise_for_status()
                 texto = _extrair_texto_resposta(resp.json())
             
@@ -445,7 +388,7 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.5-fl
         except Exception as e: 
             erros.append(f"{nome}: {str(e)}")
 
-    raise RuntimeError("Falha de Comunicação com as APIs. Detalhes: " + " | ".join(erros))
+    raise RuntimeError("Falha de Comunicação. Detalhes: " + " | ".join(erros))
 
 # ==============================================================================
 # 4. ENGENHARIA DE PROMPT MESTRE E LEITURA DE IMAGEM
@@ -499,13 +442,10 @@ ATENÇÃO: A narrativa de figurino já foi resolvida globalmente. Sua função �
 """
 
 def processar_imagem_visao(arquivo_imagem, estilo_conversao, nivel_sensualidade, modelo_gemini):
-    # VALIDAÇÃO DE TAMANHO DE IMAGEM
     MAX_IMAGE_SIZE_MB = 10
-    if arquivo_imagem.size > MAX_IMAGE_SIZE_MB * 1024 * 1024:
-        raise RuntimeError(f"🖼️ Imagem muito grande ({arquivo_imagem.size // (1024*1024)} MB). Limite: {MAX_IMAGE_SIZE_MB} MB.")
-    
+    if arquivo_imagem.size > MAX_IMAGE_SIZE_MB * 1024 * 1024: raise RuntimeError(f"🖼️ Imagem limite: {MAX_IMAGE_SIZE_MB} MB.")
     gemini_key = st.session_state.get("input_key_1", "").strip() or carregar_config(st.session_state.get("user_email", "")).get("chaves", {}).get("Chave 1", "")
-    if not gemini_key or genai is None: raise RuntimeError("Chave do Google Gemini necessária para leitura de imagens. Adicione na barra lateral.")
+    if not gemini_key or genai is None: raise RuntimeError("Chave Gemini necessária para visão.")
     
     img_pil = Image.open(arquivo_imagem)
     user_prompt = "Desconstrua pericialmente esta imagem. \n[MODIFICADOR 2: SENSUALIDADE]: Nível " + str(nivel_sensualidade) + " - Redesenhe a roupa/pose original para refletir EXATAMENTE esse nível (Nível 4 ou 5 exige remoção de roupas)."
@@ -515,13 +455,10 @@ def processar_imagem_visao(arquivo_imagem, estilo_conversao, nivel_sensualidade,
     client = genai.Client(api_key=gemini_key)
     cfg = types.GenerateContentConfig(system_instruction=SYS_LEITOR_PARAMETRICO, temperature=0.2)
     resp = client.models.generate_content(model=modelo_gemini, contents=[img_pil, user_prompt], config=cfg)
-    
     texto = getattr(resp, "text", "") or ""
     if not texto.strip(): raise RuntimeError("A IA bloqueou o retorno da imagem.")
-    
     dados = parse_json_ia(texto)
-    if dados:
-        return {"tipo": "json", "dados": dados}
+    if dados: return {"tipo": "json", "dados": dados}
     return {"tipo": "texto", "texto": texto}
 
 # ==============================================================================
@@ -539,85 +476,56 @@ def renderizar_sidebar():
     st.sidebar.markdown("---")
     st.sidebar.markdown("**O motor é seu.** Pegue suas chaves de API gratuitas nos painéis oficiais e cole abaixo para ativar o Cockpit.")
     
-    st.sidebar.markdown("🔑 **Google Gemini** (Visão e Textos)")
-    st.sidebar.markdown("[Pegar chave grátis no AI Studio](https://aistudio.google.com/app/apikey)", unsafe_allow_html=True)
+    st.sidebar.markdown("<a href='http" + "s://aistudio.google.com/app/apikey' target='_blank' style='color:#2563eb; text-decoration:none;'>🔑 Pegar chave grátis no AI Studio</a>", unsafe_allow_html=True)
     k1 = st.sidebar.text_input("Cole sua Chave Gemini", value=config.get("chaves", {}).get("Chave 1", ""), type="password", key="input_key_1", label_visibility="collapsed")
     
-    st.sidebar.markdown("⚡ **Groq** (Texto Ultra-rápido Llama 3)")
-    st.sidebar.markdown("[Pegar chave grátis no Groq Console](https://console.groq.com/keys)", unsafe_allow_html=True)
+    st.sidebar.markdown("<br><a href='http" + "s://console.groq.com/keys' target='_blank' style='color:#b45309; text-decoration:none;'>⚡ Pegar chave grátis no Groq Console</a>", unsafe_allow_html=True)
     k_groq = st.sidebar.text_input("Cole sua Chave Groq", value=config.get("groq_api_key", ""), type="password", key="input_groq_api", label_visibility="collapsed")
 
-    st.sidebar.markdown("🟣 **SambaNova** (Gigante 70B Gratuito)")
-    st.sidebar.markdown("[Pegar chave grátis no SambaNova Cloud](https://cloud.sambanova.ai/)", unsafe_allow_html=True)
-    k_sn = st.sidebar.text_input("Cole sua Chave SambaNova", value=config.get("sambanova_api_key", ""), type="password", key="input_sambanova_api", label_visibility="collapsed")
+    st.sidebar.markdown("<br><a href='http" + "s://build.nvidia.com/' target='_blank' style='color:#10b981; text-decoration:none;'>🟢 Pegar chave grátis na NVIDIA NIM</a>", unsafe_allow_html=True)
+    k_nv = st.sidebar.text_input("Cole sua Chave NVIDIA", value=config.get("nvidia_api_key", ""), type="password", key="input_nvidia_api", label_visibility="collapsed")
 
     with st.sidebar.expander("Ferramentas Avançadas", expanded=False):
-            st.selectbox("Provedor Prioritário", ["Automático", "Gemini", "Groq", "SambaNova"], key="ps_provedor_manual")
-            gemini_so_visao_chk = st.checkbox("🛡️ Economia Gemini (Groq/SambaNova p/ Texto, Gemini só Visão)", value=config.get("gemini_so_visao", True), key="gemini_so_visao")
+            st.selectbox("Provedor Prioritário", ["Automático", "Gemini", "Groq", "NVIDIA"], key="ps_provedor_manual")
+            gemini_so_visao_chk = st.checkbox("🛡️ Economia Gemini (Groq/NVIDIA p/ Texto, Gemini só Visão)", value=config.get("gemini_so_visao", True), key="gemini_so_visao")
             fallback_chk = st.checkbox("Fallback Automático", value=config.get("fallback_automatico", True), key="fallback_automatico")
-            modelo_visao = st.selectbox(
-                "Modelo de Visão (Gemini)", 
-                ["gemini-3.5-flash", "gemini-1.5-pro-latest"], 
-                index=0,
-                key="modelo_visao_select"
-            )
+            st.selectbox("Modelo de Visão (Gemini)", ["gemini-3.5-flash", "gemini-3.8-flash"], index=0, key="modelo_visao_select")
 
     if st.sidebar.button("💾 Conectar Motores", type="primary", use_container_width=True):
         dados_salvos = {
             "chaves": {"Chave 1": k1, "Chave 2": ""}, "groq_api_key": k_groq,
-            "sambanova_api_key": k_sn,
+            "nvidia_api_key": k_nv,
             "provedor_ia": st.session_state.get("ps_provedor_manual", "Automático"),
             "fallback_automatico": fallback_chk, "gemini_so_visao": gemini_so_visao_chk,
-            "modelo_groq": "llama-3.1-70b-versatile", "modelo_sambanova": "Meta-Llama-3.3-70B-Instruct",
+            "modelo_groq": "llama-3.1-70b-versatile", "modelo_nvidia": "meta/llama-3.1-70b-instruct",
             "modelo_padrao": "gemini-3.5-flash", "usar_busca_web": False
         }
         ok_salvo, erro_salvo = salvar_config(dados_salvos, st.session_state.get("user_email", ""))
-        if ok_salvo:
-            st.sidebar.success("✅ Motores conectados e prontos!")
-        else:
-            st.sidebar.warning(f"⚠️ {erro_salvo}")
+        if ok_salvo: st.sidebar.success("✅ Motores conectados e prontos!")
+        else: st.sidebar.warning(f"⚠️ {erro_salvo}")
 
-# ==============================================================================
-# 5.1 HISTÓRICO DE PROMPTS (via Apps Script)
-# ==============================================================================
 def _historico_sheets(email, prompt_texto=None, acao="listar"):
-    """Lista ou adiciona prompts no histórico. Usa POST para permitir grandes volumes."""
     email = (email or "").strip().lower()
     if acao == "adicionar":
-        if not prompt_texto or not str(prompt_texto).strip():
-            return False, "Nenhum prompt para salvar."
+        if not prompt_texto or not str(prompt_texto).strip(): return False, "Nenhum prompt."
         MAX_HISTORY_CHARS = 25000
         truncado = len(str(prompt_texto)) > MAX_HISTORY_CHARS
-        payload = {
-            "acao": "adicionar_historico", 
-            "email": email, 
-            "prompt": str(prompt_texto)[:MAX_HISTORY_CHARS],
-            "_truncado": truncado
-        }
+        payload = { "acao": "adicionar_historico", "email": email, "prompt": str(prompt_texto)[:MAX_HISTORY_CHARS], "_truncado": truncado }
         try:
             resp = requests.post(APPS_SCRIPT_URL.strip(), json=payload, timeout=30, allow_redirects=True)
-            if resp.status_code == 200 and resp.json().get("ok"):
-                return True, None
-        except Exception as e:
-            return False, f"Falha de conexão: {e}"
-        return False, "Erro ao processar no servidor."
-        
+            if resp.status_code == 200 and resp.json().get("ok"): return True, None
+        except Exception as e: return False, f"Falha de conexão: {e}"
+        return False, "Erro ao processar."
     params = {"acao": "listar_historico", "email": email}
     resp = _req_apps_script(params, timeout=20)
-    if resp and resp.get("ok"):
-        return True, resp.get("itens", [])
+    if resp and resp.get("ok"): return True, resp.get("itens", [])
     return False, []
 
 def renderizar_historico():
-    """Exibe na sidebar um expansor com os últimos prompts salvos."""
     with st.sidebar.expander("🕘 Histórico de Prompts", expanded=False):
         ok, itens = _historico_sheets(st.session_state.get("user_email", ""), acao="listar")
-        if not ok:
-            st.caption("Histórico indisponível no momento.")
-            return
-        if not itens:
-            st.caption("Nenhum prompt salvo ainda.")
-            return
+        if not ok: st.caption("Histórico indisponível."); return
+        if not itens: st.caption("Nenhum prompt salvo ainda."); return
         for item in itens[-10:]:
             ts = item.get("quando", "")[:16]
             preview = str(item.get("prompt", ""))[:90].replace("\n", " ")
@@ -666,7 +574,7 @@ def renderizar_cockpit():
         parametros = st.session_state.get("ck_img_parametros")
         if parametros:
             with st.expander("🔬 Detalhador Pericial de Imagem (Editável)", expanded=True):
-                st.caption("Ajuste os parâmetros extraídos da imagem. Ao terminar, clique no botão abaixo para atualizar a Narrativa Visual.")
+                st.caption("Ajuste os parâmetros extraídos da imagem.")
                 c1, c2 = st.columns(2)
                 with c1:
                     p_suj = st.text_area("👤 Sujeito (Biotipo/Roupas):", value=parametros.get("sujeito", ""), height=90)
@@ -675,7 +583,6 @@ def renderizar_cockpit():
                     p_act = st.text_area("🏃 Ação / Pose:", value=parametros.get("acao", ""), height=90)
                     p_ilu = st.text_area("💡 Iluminação:", value=parametros.get("iluminacao", ""), height=90)
                     p_est = st.text_area("📷 Estilo / Câmera:", value=parametros.get("estilo_camera", ""), height=90)
-                
                 if st.button("🔄 Atualizar Narrativa Visual", use_container_width=True):
                     st.session_state["ck_ideia_input"] = f"{p_suj}, {p_act}. Cenário: {p_cen}. Iluminação: {p_ilu}. Estilo: {p_est}."
                     st.session_state["ck_img_parametros"] = {"sujeito": p_suj, "acao": p_act, "cenario": p_cen, "iluminacao": p_ilu, "estilo_camera": p_est}
@@ -700,10 +607,8 @@ def renderizar_cockpit():
             with st.spinner("Desenhando a cena..."):
                 try:
                     p = f"IDEIA:\n{ideia_input.strip()}\n\n[AGENTE: SENSUALIDADE NÍVEL '{sens_escolhida}']: Aplique roupas/pose relativas a este nível substituindo a roupa do usuário se explícito."
-                    
                     if "Literal" in foco_contexto:
-                        p += "\n[AGENTE: CONTEXTO LITERAL]: Seja 100% fiel e obediente à ideia original. Crie APENAS o cenário lógico, físico e elementar inerente à ação (ex: 'voando' = céu azul e nuvens; 'nadando' = água). É ESTRITAMENTE PROIBIDO adicionar elementos não solicitados, iluminação épica, embelezamentos dramáticos ou 'fluff' estético. Descreva a cena de forma mecânica, física e direta."
-                    
+                        p += "\n[AGENTE: CONTEXTO LITERAL]: Seja 100% fiel e obediente à ideia original. Crie APENAS o cenário lógico, físico e elementar inerente à ação. É ESTRITAMENTE PROIBIDO adicionar elementos não solicitados, embelezamentos ou 'fluff' estético."
                     txt, prov = _chamar_provedor_ia(SYS_GERADOR_PREPROMPT, p)
                     st.session_state["ck_ideia"] = ideia_input.strip()
                     st.session_state["ck_preprompt"] = txt
@@ -718,11 +623,8 @@ def renderizar_cockpit():
                 try:
                     txt, prov = _chamar_provedor_ia(SYS_COMPOSITOMETRO, f"AVALIE:\n{ideia_input.strip()}")
                     diag = parse_json_ia(txt)
-                    if not diag:
-                        st.error("⚠️ O Compositômetro retornou um formato inesperado. Tente novamente.")
-                    else:
-                        st.session_state["ck_diagnostico"] = diag
-                        st.rerun()
+                    if not diag: st.error("⚠️ O Compositômetro retornou um formato inesperado. Tente novamente.")
+                    else: st.session_state["ck_diagnostico"] = diag; st.rerun()
                 except Exception as e: st.error(_msg_erro_amigavel(e))
 
     if st.session_state.get("ck_preprompt"):
@@ -730,14 +632,8 @@ def renderizar_cockpit():
             st.markdown("### 🎨 Pré-prompt (Cena Traduzida)")
             st.markdown("<div class='ps-legend'><span><span class='ps-user-word'>Ideia Original</span></span> • <span><span class='ps-ai-word'>Desenvolvimento da IA</span></span></div>", unsafe_allow_html=True)
             st.markdown(f"<div class='ps-preprompt'>{_ps_markup_origin(st.session_state['ck_preprompt'], st.session_state.get('ck_ideia', ''))}</div>", unsafe_allow_html=True)
-            pre_ed = st.text_area(
-                "Ajuste fino manual (Esta caixa será enviada ao Sintetizador):", 
-                value=st.session_state.get("ck_preprompt_editado", ""),
-                key="ck_preprompt_editado",
-                height=130
-            )
-            if pre_ed != st.session_state.get("ck_preprompt"):
-                st.session_state["ck_preprompt"] = pre_ed
+            pre_ed = st.text_area("Ajuste fino manual (Esta caixa será enviada ao Sintetizador):", value=st.session_state.get("ck_preprompt_editado", ""), key="ck_preprompt_editado", height=130)
+            if pre_ed != st.session_state.get("ck_preprompt"): st.session_state["ck_preprompt"] = pre_ed
 
     diag = st.session_state.get("ck_diagnostico")
     if diag:
@@ -750,19 +646,15 @@ def renderizar_cockpit():
                 col.markdown(f"<div class='comp-badge {cl}'>{ic} {label}: {diag.get(key, 'Pendente')}</div>", unsafe_allow_html=True) 
             
             st.write("")
-            if diag.get("diagnostico_texto"):
-                st.caption(f"ℹ️ **Diagnóstico:** {diag.get('diagnostico_texto')}")
-
+            if diag.get("diagnostico_texto"): st.caption(f"ℹ️ **Diagnóstico:** {diag.get('diagnostico_texto')}")
             sugestoes = diag.get("sugestoes_cirurgicas", [])
             if sugestoes:
-                st.markdown("##### ✨ Sugestões Cirúrgicas Opcionais (Marque para incorporar):")
+                st.markdown("##### ✨ Sugestões Cirúrgicas Opcionais:")
                 selecionadas = []
                 for idx, sug in enumerate(sugestoes):
-                    if st.checkbox(sug, key=f"sug_chk_{idx}"):
-                        selecionadas.append(sug)
+                    if st.checkbox(sug, key=f"sug_chk_{idx}"): selecionadas.append(sug)
                 st.session_state["ck_sugestoes_marcadas"] = selecionadas
-            else:
-                st.session_state["ck_sugestoes_marcadas"] = []
+            else: st.session_state["ck_sugestoes_marcadas"] = []
 
     st.write("")
     col_dest1, col_dest2 = st.columns([7, 3])
@@ -773,7 +665,7 @@ def renderizar_cockpit():
         btn_exec = st.button("⚡ Gerar Código do Prompt", type="primary", use_container_width=True)
 
     if btn_exec:
-        if dest_sel == "Selecione o Motor Destino...": st.error("🛑 Pare! Você precisa selecionar para qual motor de IA este prompt será compilado.")
+        if dest_sel == "Selecione o Motor Destino...": st.error("🛑 Pare! Selecione para qual motor de IA este prompt será compilado.")
         elif not ideia_input.strip(): st.warning("Descreva sua ideia antes.")
         else:
             with st.spinner(f"Compilando sintaxe para {dest_sel}..."):
@@ -782,16 +674,12 @@ def renderizar_cockpit():
                     bloco = f"\n\n======================================\n3. SINTAXE NATIVA: {dest_sel}\n======================================\n- POSITIVO: {eng['regra_positivo']}\n- NEGATIVO: {eng.get('regra_negativo', 'N/A')}\n\nSAÍDA OBRIGATÓRIA:\n1. PROMPT (MANDATORY IN ENGLISH)\n2. NEGATIVE PROMPT (MANDATORY IN ENGLISH)\n3. LEGENDA (Português)\n4. HASHTAGS\n💡 DICA TÉCNICA: {eng['dica_tecnica']}"
                     
                     txt_b = st.session_state.get("ck_preprompt_editado", ideia_input.strip())
-                    
                     sug_aceitas = st.session_state.get("ck_sugestoes_marcadas", [])
                     sug_str = "\n".join(f"- {s}" for s in sug_aceitas) if sug_aceitas else "Nenhuma sugestão adicional marcada."
                     
                     p = f"DESTINO: {dest_sel}\nRATING: {sens_escolhida}\n\n1. NARRATIVA VISUAL:\n{txt_b}\n\n2. SUGESTÕES CIRÚRGICAS INCORPORADAS:\n{sug_str}\n\nGere o prompt garantindo a ancoragem de Sujeito."
                     
-                    if "Literal" in foco_contexto:
-                        p += "\n[MODO LITERAL ATIVADO]: Você DEVE ignorar diretrizes estéticas excessivas da regra do motor. Remova termos de 'embelezamento' (como cinematic lighting, highly detailed, etc) da sintaxe final, focando puramente nos atributos físicos do sujeito e do cenário lógico elementar."
-
-                    # TRAVA ANTI-VIÉS DE RECÊNCIA (GARANTE INGLÊS EM QUALQUER MOTOR)
+                    if "Literal" in foco_contexto: p += "\n[MODO LITERAL ATIVADO]: Você DEVE ignorar diretrizes estéticas excessivas da regra do motor. Remova termos de 'embelezamento' da sintaxe final, focando puramente nos atributos físicos e no cenário lógico elementar."
                     p += "\n\n⚠️ CRITICAL INSTRUCTION: THE FINAL 'PROMPT' AND 'NEGATIVE' SECTIONS MUST BE GENERATED STRICTLY IN ENGLISH. DO NOT TRANSLATE THEM TO PORTUGUESE."
 
                     res, prov = _chamar_provedor_ia(SYS_MESTRE_CORE + bloco, p)
@@ -804,11 +692,8 @@ def renderizar_cockpit():
     if st.session_state.get("ck_prompt_final"):
         st.markdown("---")
         st.markdown(f"### 📋 Prompt Especializado ({st.session_state.get('ck_dest_usado')})")
-        
-        try:
-            st.code(st.session_state["ck_prompt_final"], language="markdown", wrap_lines=True)
-        except Exception:
-            st.markdown(f"<div class='ps-preprompt' style='white-space: pre-wrap; word-wrap: break-word; font-family: monospace;'>{html.escape(st.session_state['ck_prompt_final'])}</div>", unsafe_allow_html=True)
+        try: st.code(st.session_state["ck_prompt_final"], language="markdown", wrap_lines=True)
+        except Exception: st.markdown(f"<div class='ps-preprompt' style='white-space: pre-wrap; word-wrap: break-word; font-family: monospace;'>{html.escape(st.session_state['ck_prompt_final'])}</div>", unsafe_allow_html=True)
             
         c_save1, c_save2 = st.columns(2)
         with c_save1:
@@ -816,10 +701,8 @@ def renderizar_cockpit():
                 ok_hist, erro_hist = _historico_sheets(st.session_state.get("user_email", ""), st.session_state["ck_prompt_final"], acao="adicionar")
                 if ok_hist: st.success("✅ Prompt salvo no histórico!")
                 else: 
-                    if erro_hist and "_truncado" in str(erro_hist):
-                        st.warning("⚠️ Prompt truncado no histórico (limite de 25.000 caracteres).")
-                    else:
-                        st.warning(f"⚠️ {erro_hist or 'Não foi possível salvar.'}")
+                    if erro_hist and "_truncado" in str(erro_hist): st.warning("⚠️ Prompt truncado no histórico (limite de 25.000 caracteres).")
+                    else: st.warning(f"⚠️ {erro_hist or 'Não foi possível salvar.'}")
 
 # ==============================================================================
 # 9. PONTO DE ENTRADA (VITRINE DINÂMICA E LOGIN)
@@ -828,18 +711,8 @@ if "autenticado" not in st.session_state: st.session_state.autenticado = False
 
 if not st.session_state.autenticado:
     vitrines = [
-        {
-            "id": "Uma garota de anime com cabelo curto encostada na estante de uma biblioteca perto da janela.", 
-            "pr": "score_9, score_8_up, 1girl, solo, videl (dragon ball), short black hair, blue eyes, white t-shirt, black spandex shorts, green boots, leaning against bookshelf, window, sunlight, library, anime style, high quality, masterpiece.", 
-            "mt": "ComfyUI / Pony SDXL", 
-            "im": "carro.jpg"
-        },
-        {
-            "id": "Uma mulher loira fotorrealista com blusa vermelha curta e saia jeans em uma escadaria de pedra.", 
-            "pr": "A breathtaking highly detailed photograph of a beautiful blonde woman with striking blue eyes, wearing a red long-sleeve crop top and a denim mini skirt. She is standing on ancient outdoor stone steps in a European village. Bright midday sunlight, cinematic lighting, photorealistic, 8k resolution, shot on 35mm lens --ar 4:5 --v 6.1 --stylize 250", 
-            "mt": "Midjourney v6.1+", 
-            "im": "elfa.jpg"
-        }
+        {"id": "Uma garota de anime com cabelo curto encostada na estante de uma biblioteca perto da janela.", "pr": "score_9, score_8_up, 1girl, solo, videl (dragon ball), short black hair, blue eyes, white t-shirt, black spandex shorts, green boots, leaning against bookshelf, window, sunlight, library, anime style, high quality, masterpiece.", "mt": "ComfyUI / Pony SDXL", "im": "carro.jpg"},
+        {"id": "Uma mulher loira fotorrealista com blusa vermelha curta e saia jeans em uma escadaria de pedra.", "pr": "A breathtaking highly detailed photograph of a beautiful blonde woman with striking blue eyes, wearing a red long-sleeve crop top and a denim mini skirt. She is standing on ancient outdoor stone steps in a European village. Bright midday sunlight, cinematic lighting, photorealistic, 8k resolution, shot on 35mm lens --ar 4:5 --v 6.1 --stylize 250", "mt": "Midjourney v6.1+", "im": "elfa.jpg"}
     ]
     vit = random.choice(vitrines)
 
@@ -853,14 +726,13 @@ if not st.session_state.autenticado:
         st.markdown(f"<div class='text-ideia'>\"{vit['id']}\"</div>", unsafe_allow_html=True)
         st.markdown(f"<div class='label-prompt'>A Engenharia do Cockpit (Motor: {vit['mt']})</div>", unsafe_allow_html=True)
         st.markdown(f"<div class='code-prompt'>{vit['pr']}</div>", unsafe_allow_html=True)
-    with c2: 
-        st.image(vit['im'], use_container_width=True)
+    with c2: st.image(vit['im'], use_container_width=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
     c_l1, c_l2, c_l3 = st.columns([1, 4, 1])
     with c_l2:
         st.markdown("<div class='plan-container'>", unsafe_allow_html=True)
-        st.markdown("<div class='byok-badge'>🔒 Modelo BYOK: Conecte sua própria chave API (Gemini/Groq) após assinar.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='byok-badge'>🔒 Modelo BYOK: Conecte sua própria chave API após assinar.</div>", unsafe_allow_html=True)
         st.markdown("### 🚀 Acesse o Cockpit Agora")
         cp1, cp2, cp3 = st.columns(3)
         with cp1: st.link_button("15 Dias (R$ 14,99)", LINK_KIWIFY_15_DIAS, use_container_width=True)
