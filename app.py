@@ -12,6 +12,8 @@ v2.0 — Melhorias:
   • Histórico de prompts salvos via POST (suporta grandes volumes)
   • Detalhador Pericial de Imagem (Editável)
   • Modificador de Contexto Literal (Anti-Fluff)
+  • Substituição da Cloudflare pela SambaNova Cloud (Llama 3.3 70B Gratuito)
+  • Trava de Recência de Idioma (Anti-viés de tradução)
 """
 
 import os
@@ -245,7 +247,7 @@ def _mascarar_chaves(config):
     chaves = copia.get("chaves", {})
     copia["chaves"] = {k: (("********") if v else "") for k, v in chaves.items()}
     if copia.get("groq_api_key"): copia["groq_api_key"] = "********"
-    if copia.get("cloudflare_api_token"): copia["cloudflare_api_token"] = "********"
+    if copia.get("sambanova_api_key"): copia["sambanova_api_key"] = "********"
     return copia
 
 # ---- Persistência: Google Sheets (Apps Script) com fallback local ----
@@ -262,10 +264,10 @@ def _req_apps_script(params, timeout=20):
 def carregar_config(email=None):
     """Carrega config do usuário: tenta Sheets primeiro; fallback p/ arquivo local."""
     config = {
-        "chaves": {"Chave 1": ""}, "groq_api_key": "", "cloudflare_account_id": "",
-        "cloudflare_api_token": "", "provedor_ia": "Gemini", "fallback_automatico": True,
+        "chaves": {"Chave 1": ""}, "groq_api_key": "", "sambanova_api_key": "",
+        "provedor_ia": "Gemini", "fallback_automatico": True,
         "gemini_so_visao": True, "modelo_groq": "llama-3.1-70b-versatile",
-        "modelo_cloudflare": "@cf/meta/llama-3.1-8b-instruct", "modelo_padrao": "gemini-3.5-flash"
+        "modelo_sambanova": "Meta-Llama-3.3-70B-Instruct", "modelo_padrao": "gemini-3.5-flash"
     }
     dados = _req_apps_script({"acao": "carregar_config", "email": (email or "").strip().lower()})
     if dados and dados.get("ok") and dados.get("config"):
@@ -273,7 +275,7 @@ def carregar_config(email=None):
             config.update(json.loads(dados["config"]))
             config["chaves"] = {k: _descriptografar(v) for k, v in config.get("chaves", {}).items()}
             if config.get("groq_api_key"): config["groq_api_key"] = _descriptografar(config["groq_api_key"])
-            if config.get("cloudflare_api_token"): config["cloudflare_api_token"] = _descriptografar(config["cloudflare_api_token"])
+            if config.get("sambanova_api_key"): config["sambanova_api_key"] = _descriptografar(config["sambanova_api_key"])
             return config
         except Exception:
             pass
@@ -286,8 +288,8 @@ def carregar_config(email=None):
             config["chaves"] = {k: _descriptografar(v) for k, v in config.get("chaves", {}).items()}
             if config.get("groq_api_key"):
                 config["groq_api_key"] = _descriptografar(config["groq_api_key"])
-            if config.get("cloudflare_api_token"):
-                config["cloudflare_api_token"] = _descriptografar(config["cloudflare_api_token"])
+            if config.get("sambanova_api_key"):
+                config["sambanova_api_key"] = _descriptografar(config["sambanova_api_key"])
         except Exception:
             pass
             
@@ -298,7 +300,7 @@ def salvar_config(dados, email=None):
     dados = dict(dados)
     dados["chaves"] = {k: _criptografar(v) for k, v in dados.get("chaves", {}).items()}
     if dados.get("groq_api_key"): dados["groq_api_key"] = _criptografar(dados["groq_api_key"])
-    if dados.get("cloudflare_api_token"): dados["cloudflare_api_token"] = _criptografar(dados["cloudflare_api_token"])
+    if dados.get("sambanova_api_key"): dados["sambanova_api_key"] = _criptografar(dados["sambanova_api_key"])
     
     payload = {"acao": "salvar_config", "email": (email or "").strip().lower(), "config": json.dumps(dados, ensure_ascii=False)}
     try:
@@ -339,7 +341,7 @@ def _extrair_texto_resposta(obj):
 def _msg_erro_amigavel(e):
     texto = str(e)
     if "Nenhuma chave configurada" in texto or "Nenhuma chave de API" in texto:
-        return "🔑 **Nenhum motor conectado.** Abra o **Centro de Conexão** na barra lateral e cole sua chave (Gemini/Groq/Cloudflare)."
+        return "🔑 **Nenhum motor conectado.** Abra o **Centro de Conexão** na barra lateral e cole sua chave (Gemini/Groq/SambaNova)."
     if "REF-VERIF" in texto or "Falha de Comunicação" in texto:
         detalhes = texto.split("Detalhes:")[-1].strip() if "Detalhes:" in texto else ""
         return f"⚠️ **Falha ao chamar o motor de IA.** Verifique sua chave, cota e conexão. {detalhes[:200]}"
@@ -388,9 +390,8 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.5-fl
     gr_key = st.session_state.get("input_groq_api", "").strip() or config.get("groq_api_key", "")
     if gr_key: provedores.append(("Groq", gr_key))
     
-    cf_t = st.session_state.get("input_cloudflare_token", "").strip() or config.get("cloudflare_api_token", "")
-    cf_a = st.session_state.get("input_cloudflare_account", "").strip() or config.get("cloudflare_account_id", "")
-    if cf_t and cf_a: provedores.append(("Cloudflare", (cf_t, cf_a)))
+    sn_key = st.session_state.get("input_sambanova_api", "").strip() or config.get("sambanova_api_key", "")
+    if sn_key: provedores.append(("SambaNova", sn_key))
 
     if not provedores:
         raise RuntimeError("Nenhuma chave configurada. Acesse as configurações na barra lateral esquerda para conectar seu motor.")
@@ -427,15 +428,15 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.5-fl
                 resp.raise_for_status()
                 texto = _extrair_texto_resposta(resp.json())
                 
-            elif nome == "Cloudflare":
-                cf_modelo = config.get("modelo_cloudflare", "@cf/meta/llama-3.1-8b-instruct")
-                url_cf = f"https://api.cloudflare.com/client/v4/accounts/{cred[1].strip()}/ai/run/{cf_modelo}"
+            elif nome == "SambaNova":
+                url_sn = "https://api.sambanova.ai/v1/chat/completions"
+                modelo_sn = config.get("modelo_sambanova", "Meta-Llama-3.3-70B-Instruct")
                 payload = {
+                    "model": modelo_sn,
                     "messages": [{"role": "system", "content": sys_final}, {"role": "user", "content": user_prompt}], 
-                    "temperature": temperature, 
-                    "max_tokens": 4096
+                    "temperature": temperature
                 }
-                resp = requests.post(url_cf, headers={"Authorization": f"Bearer {cred[0]}"}, json=payload, timeout=90)
+                resp = requests.post(url_sn, headers={"Authorization": f"Bearer {cred}"}, json=payload, timeout=90)
                 resp.raise_for_status()
                 texto = _extrair_texto_resposta(resp.json())
             
@@ -546,15 +547,16 @@ def renderizar_sidebar():
     st.sidebar.markdown("[Pegar chave grátis no Groq Console](https://console.groq.com/keys)", unsafe_allow_html=True)
     k_groq = st.sidebar.text_input("Cole sua Chave Groq", value=config.get("groq_api_key", ""), type="password", key="input_groq_api", label_visibility="collapsed")
 
+    st.sidebar.markdown("🟣 **SambaNova** (Gigante 70B Gratuito)")
+    st.sidebar.markdown("[Pegar chave grátis no SambaNova Cloud](https://cloud.sambanova.ai/)", unsafe_allow_html=True)
+    k_sn = st.sidebar.text_input("Cole sua Chave SambaNova", value=config.get("sambanova_api_key", ""), type="password", key="input_sambanova_api", label_visibility="collapsed")
+
     with st.sidebar.expander("Ferramentas Avançadas", expanded=False):
-            st.selectbox("Provedor Prioritário", ["Automático", "Gemini", "Groq", "Cloudflare"], key="ps_provedor_manual")
-            cf_acc = st.text_input("Cloudflare Account ID", value=config.get("cloudflare_account_id", ""), key="input_cloudflare_account")
-            cf_tok = st.text_input("Cloudflare Token", value=config.get("cloudflare_api_token", ""), type="password", key="input_cloudflare_token")
-            gemini_so_visao_chk = st.checkbox("🛡️ Economia Gemini (Groq p/ Texto, Gemini só Visão)", value=config.get("gemini_so_visao", True), key="gemini_so_visao")
+            st.selectbox("Provedor Prioritário", ["Automático", "Gemini", "Groq", "SambaNova"], key="ps_provedor_manual")
+            gemini_so_visao_chk = st.checkbox("🛡️ Economia Gemini (Groq/SambaNova p/ Texto, Gemini só Visão)", value=config.get("gemini_so_visao", True), key="gemini_so_visao")
             fallback_chk = st.checkbox("Fallback Automático", value=config.get("fallback_automatico", True), key="fallback_automatico")
-            # NOVO: Seletor de modelo de visão
             modelo_visao = st.selectbox(
-                "Modelo de Visão", 
+                "Modelo de Visão (Gemini)", 
                 ["gemini-3.5-flash", "gemini-1.5-pro-latest"], 
                 index=0,
                 key="modelo_visao_select"
@@ -563,10 +565,10 @@ def renderizar_sidebar():
     if st.sidebar.button("💾 Conectar Motores", type="primary", use_container_width=True):
         dados_salvos = {
             "chaves": {"Chave 1": k1, "Chave 2": ""}, "groq_api_key": k_groq,
-            "cloudflare_account_id": cf_acc, "cloudflare_api_token": cf_tok,
+            "sambanova_api_key": k_sn,
             "provedor_ia": st.session_state.get("ps_provedor_manual", "Automático"),
             "fallback_automatico": fallback_chk, "gemini_so_visao": gemini_so_visao_chk,
-            "modelo_groq": "llama-3.1-70b-versatile", "modelo_cloudflare": "@cf/meta/llama-3.1-8b-instruct",
+            "modelo_groq": "llama-3.1-70b-versatile", "modelo_sambanova": "Meta-Llama-3.3-70B-Instruct",
             "modelo_padrao": "gemini-3.5-flash", "usar_busca_web": False
         }
         ok_salvo, erro_salvo = salvar_config(dados_salvos, st.session_state.get("user_email", ""))
@@ -584,7 +586,6 @@ def _historico_sheets(email, prompt_texto=None, acao="listar"):
     if acao == "adicionar":
         if not prompt_texto or not str(prompt_texto).strip():
             return False, "Nenhum prompt para salvar."
-        # AUMENTE LIMITE E ADICIONE FLAG DE TRUNCAMENTO
         MAX_HISTORY_CHARS = 25000
         truncado = len(str(prompt_texto)) > MAX_HISTORY_CHARS
         payload = {
@@ -601,7 +602,6 @@ def _historico_sheets(email, prompt_texto=None, acao="listar"):
             return False, f"Falha de conexão: {e}"
         return False, "Erro ao processar no servidor."
         
-    # O listar usa o GET seguro normal
     params = {"acao": "listar_historico", "email": email}
     resp = _req_apps_script(params, timeout=20)
     if resp and resp.get("ok"):
@@ -651,12 +651,10 @@ def renderizar_cockpit():
             else:
                 with st.spinner("Analisando matriz óptica..."):
                     try:
-                        # USAR MODELO DE VISÃO CONFIGURÁVEL
                         modelo_visao = st.session_state.get("modelo_visao_select", "gemini-3.5-flash")
                         res = processar_imagem_visao(img_file, estilo_conversao, sens_escolhida, modelo_visao)
                         if res["tipo"] == "json":
                             st.session_state["ck_img_parametros"] = res["dados"]
-                            # Já monta uma narrativa básica inicial
                             st.session_state["ck_ideia_input"] = f"{res['dados'].get('sujeito','')}, {res['dados'].get('acao','')}. Cenário: {res['dados'].get('cenario','')}. Iluminação: {res['dados'].get('iluminacao','')}. Estilo: {res['dados'].get('estilo_camera','')}."
                         else:
                             st.session_state["ck_ideia_input"] = res["texto"]
@@ -665,7 +663,6 @@ def renderizar_cockpit():
                         st.rerun()
                     except Exception as e: st.error(_msg_erro_amigavel(e))
 
-        # --- NOVO DETALHADOR EDITÁVEL ---
         parametros = st.session_state.get("ck_img_parametros")
         if parametros:
             with st.expander("🔬 Detalhador Pericial de Imagem (Editável)", expanded=True):
@@ -708,10 +705,9 @@ def renderizar_cockpit():
                         p += "\n[AGENTE: CONTEXTO LITERAL]: Seja 100% fiel e obediente à ideia original. Crie APENAS o cenário lógico, físico e elementar inerente à ação (ex: 'voando' = céu azul e nuvens; 'nadando' = água). É ESTRITAMENTE PROIBIDO adicionar elementos não solicitados, iluminação épica, embelezamentos dramáticos ou 'fluff' estético. Descreva a cena de forma mecânica, física e direta."
                     
                     txt, prov = _chamar_provedor_ia(SYS_GERADOR_PREPROMPT, p)
-                    # CORREÇÃO DO ESTADO DO PRÉ-PROMPT: vincular diretamente ao session state
                     st.session_state["ck_ideia"] = ideia_input.strip()
                     st.session_state["ck_preprompt"] = txt
-                    st.session_state["ck_preprompt_editado"] = txt  # Sincroniza com valor gerado
+                    st.session_state["ck_preprompt_editado"] = txt 
                     st.rerun()
                 except Exception as e: st.error(_msg_erro_amigavel(e))
 
@@ -734,17 +730,14 @@ def renderizar_cockpit():
             st.markdown("### 🎨 Pré-prompt (Cena Traduzida)")
             st.markdown("<div class='ps-legend'><span><span class='ps-user-word'>Ideia Original</span></span> • <span><span class='ps-ai-word'>Desenvolvimento da IA</span></span></div>", unsafe_allow_html=True)
             st.markdown(f"<div class='ps-preprompt'>{_ps_markup_origin(st.session_state['ck_preprompt'], st.session_state.get('ck_ideia', ''))}</div>", unsafe_allow_html=True)
-            # CORREÇÃO: usar ck_preprompt_editado diretamente vinculado ao widget
             pre_ed = st.text_area(
                 "Ajuste fino manual (Esta caixa será enviada ao Sintetizador):", 
                 value=st.session_state.get("ck_preprompt_editado", ""),
                 key="ck_preprompt_editado",
                 height=130
             )
-            # Atualiza o valor "atual" sempre que o usuário edita (não depende de flag suja)
             if pre_ed != st.session_state.get("ck_preprompt"):
                 st.session_state["ck_preprompt"] = pre_ed
-                # Não precisamos mais do flag dirty
 
     diag = st.session_state.get("ck_diagnostico")
     if diag:
@@ -786,18 +779,20 @@ def renderizar_cockpit():
             with st.spinner(f"Compilando sintaxe para {dest_sel}..."):
                 try:
                     eng = BANCO_DE_MOTORES[dest_sel]
-                    bloco = f"\n\n======================================\n3. SINTAXE NATIVA: {dest_sel}\n======================================\n- POSITIVO: {eng['regra_positivo']}\n- NEGATIVO: {eng.get('regra_negativo', 'N/A')}\n\nSAÍDA OBRIGATÓRIA:\n1. PROMPT (Inglês)\n2. NEGATIVO\n3. LEGENDA (Português)\n4. HASHTAGS\n💡 DICA TÉCNICA: {eng['dica_tecnica']}"
+                    bloco = f"\n\n======================================\n3. SINTAXE NATIVA: {dest_sel}\n======================================\n- POSITIVO: {eng['regra_positivo']}\n- NEGATIVO: {eng.get('regra_negativo', 'N/A')}\n\nSAÍDA OBRIGATÓRIA:\n1. PROMPT (MANDATORY IN ENGLISH)\n2. NEGATIVE PROMPT (MANDATORY IN ENGLISH)\n3. LEGENDA (Português)\n4. HASHTAGS\n💡 DICA TÉCNICA: {eng['dica_tecnica']}"
                     
-                    # USAR O PRÉ-PROMPT EDITADO (AGORA VINCULADO CORRETAMENTE)
                     txt_b = st.session_state.get("ck_preprompt_editado", ideia_input.strip())
                     
                     sug_aceitas = st.session_state.get("ck_sugestoes_marcadas", [])
                     sug_str = "\n".join(f"- {s}" for s in sug_aceitas) if sug_aceitas else "Nenhuma sugestão adicional marcada."
                     
-                    p = f"DESTINO: {dest_sel}\nRATING: {sens_escolhida}\n\n1. NARRATIVA VISUAL (TRADUZA ISSO INTEGRALMENTE):\n{txt_b}\n\n2. SUGESTÕES CIRÚRGICAS INCORPORADAS:\n{sug_str}\n\nGere o prompt garantindo a ancoragem de Sujeito."
+                    p = f"DESTINO: {dest_sel}\nRATING: {sens_escolhida}\n\n1. NARRATIVA VISUAL:\n{txt_b}\n\n2. SUGESTÕES CIRÚRGICAS INCORPORADAS:\n{sug_str}\n\nGere o prompt garantindo a ancoragem de Sujeito."
                     
                     if "Literal" in foco_contexto:
                         p += "\n[MODO LITERAL ATIVADO]: Você DEVE ignorar diretrizes estéticas excessivas da regra do motor. Remova termos de 'embelezamento' (como cinematic lighting, highly detailed, etc) da sintaxe final, focando puramente nos atributos físicos do sujeito e do cenário lógico elementar."
+
+                    # TRAVA ANTI-VIÉS DE RECÊNCIA (GARANTE INGLÊS EM QUALQUER MOTOR)
+                    p += "\n\n⚠️ CRITICAL INSTRUCTION: THE FINAL 'PROMPT' AND 'NEGATIVE' SECTIONS MUST BE GENERATED STRICTLY IN ENGLISH. DO NOT TRANSLATE THEM TO PORTUGUESE."
 
                     res, prov = _chamar_provedor_ia(SYS_MESTRE_CORE + bloco, p)
                     st.session_state["ck_prompt_final"] = res
@@ -810,11 +805,9 @@ def renderizar_cockpit():
         st.markdown("---")
         st.markdown(f"### 📋 Prompt Especializado ({st.session_state.get('ck_dest_usado')})")
         
-        # Tenta usar a quebra de linha nativa
         try:
             st.code(st.session_state["ck_prompt_final"], language="markdown", wrap_lines=True)
         except Exception:
-            # Fallback BLINDADO: se qualquer erro acontecer, força a quebra com CSS
             st.markdown(f"<div class='ps-preprompt' style='white-space: pre-wrap; word-wrap: break-word; font-family: monospace;'>{html.escape(st.session_state['ck_prompt_final'])}</div>", unsafe_allow_html=True)
             
         c_save1, c_save2 = st.columns(2)
@@ -823,7 +816,6 @@ def renderizar_cockpit():
                 ok_hist, erro_hist = _historico_sheets(st.session_state.get("user_email", ""), st.session_state["ck_prompt_final"], acao="adicionar")
                 if ok_hist: st.success("✅ Prompt salvo no histórico!")
                 else: 
-                    # MOSTRAR AVISO SE TRUNCADO
                     if erro_hist and "_truncado" in str(erro_hist):
                         st.warning("⚠️ Prompt truncado no histórico (limite de 25.000 caracteres).")
                     else:
