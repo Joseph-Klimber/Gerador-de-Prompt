@@ -3,13 +3,12 @@
 Prompt Studio Cockpit — Interface Minimalista de Alta Precisão
 Arquitetura: Shift-Left (Modificadores no Ponto Zero) + BYOK (Traga sua Chave) + Carga Distribuída.
 
-v2.1 — Blindagem Total:
-  • Arquitetura Tri-Core: Gemini 1 -> GitHub Models (Llama 70B) -> Gemini 2 (Reserva)
-  • Redundância Óptica: Leitura de imagem com fallback automático Gemini 1 -> Gemini 2
+v2.3 — Revisão Final Blindada:
+  • Arquitetura Tri-Core Definitiva: Gemini 1 -> OpenRouter (Llama 70B Gratuito) -> Gemini 2
+  • Leitura de Imagem Ultra-Densa (Dense Captioning) com redundância de chaves Gemini
   • Chaves criptografadas em repouso (Fernet) e persistência via Google Sheets
-  • URLs ofuscadas via concatenação (Anti-bug de Markdown do Chat)
-  • Trava de Recência de Idioma (Anti-viés de tradução)
-  • Campos editáveis com expansão visual completa (st.text_area)
+  • URLs ofuscadas via concatenação (Anti-bug de Markdown)
+  • Interface polida com st.text_area dinâmico para edição forense
 """
 
 import os
@@ -225,7 +224,7 @@ def _mascarar_chaves(config):
     copia = dict(config)
     chaves = copia.get("chaves", {})
     copia["chaves"] = {k: (("********") if v else "") for k, v in chaves.items()}
-    if copia.get("github_token"): copia["github_token"] = "********"
+    if copia.get("openrouter_api_key"): copia["openrouter_api_key"] = "********"
     return copia
 
 def _req_apps_script(params, timeout=20):
@@ -237,17 +236,17 @@ def _req_apps_script(params, timeout=20):
 
 def carregar_config(email=None):
     config = {
-        "chaves": {"Chave 1": "", "Chave 2": ""}, "github_token": "",
+        "chaves": {"Chave 1": "", "Chave 2": ""}, "openrouter_api_key": "",
         "provedor_ia": "Automático", "fallback_automatico": True,
-        "gemini_so_visao": False, "modelo_github": "meta-llama-3.1-70b-instruct", 
-        "modelo_padrao": "gemini-3.5-flash"
+        "gemini_so_visao": False, "modelo_openrouter": "meta-llama/llama-3.1-70b-instruct:free", 
+        "modelo_padrao": "gemini-1.5-flash"
     }
     dados = _req_apps_script({"acao": "carregar_config", "email": (email or "").strip().lower()})
     if dados and dados.get("ok") and dados.get("config"):
         try:
             config.update(json.loads(dados["config"]))
             config["chaves"] = {k: _descriptografar(v) for k, v in config.get("chaves", {}).items()}
-            if config.get("github_token"): config["github_token"] = _descriptografar(config["github_token"])
+            if config.get("openrouter_api_key"): config["openrouter_api_key"] = _descriptografar(config["openrouter_api_key"])
             return config
         except Exception: pass
             
@@ -256,14 +255,14 @@ def carregar_config(email=None):
         try:
             with open(caminho, "r", encoding="utf-8") as f: config.update(json.load(f))
             config["chaves"] = {k: _descriptografar(v) for k, v in config.get("chaves", {}).items()}
-            if config.get("github_token"): config["github_token"] = _descriptografar(config["github_token"])
+            if config.get("openrouter_api_key"): config["openrouter_api_key"] = _descriptografar(config["openrouter_api_key"])
         except Exception: pass
     return config
 
 def salvar_config(dados, email=None):
     dados = dict(dados)
     dados["chaves"] = {k: _criptografar(v) for k, v in dados.get("chaves", {}).items()}
-    if dados.get("github_token"): dados["github_token"] = _criptografar(dados["github_token"])
+    if dados.get("openrouter_api_key"): dados["openrouter_api_key"] = _criptografar(dados["openrouter_api_key"])
     
     payload = {"acao": "salvar_config", "email": (email or "").strip().lower(), "config": json.dumps(dados, ensure_ascii=False)}
     try:
@@ -315,33 +314,31 @@ def verificar_acesso_sheets(email):
     except Exception as e: return False, "", f"⚠️ Falha na conexão: {e}"
 
 # ==============================================================================
-# 3. MOTOR DE CHAMADA TRI-CORE COM REDUNDÂNCIA (GEMINI 1 -> GITHUB -> GEMINI 2)
+# 3. MOTOR DE CHAMADA TRI-CORE COM REDUNDÂNCIA (GEMINI 1 -> OPENROUTER -> GEMINI 2)
 # ==============================================================================
-def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.5-flash", temperature=0.25):
+def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-1.5-flash", temperature=0.25):
     config = carregar_config(st.session_state.get("user_email", ""))
     
     g_key_1 = st.session_state.get("input_key_1", "").strip() or config.get("chaves", {}).get("Chave 1", "")
-    gh_token = st.session_state.get("input_github_token", "").strip() or config.get("github_token", "")
+    or_key = st.session_state.get("input_openrouter_api", "").strip() or config.get("openrouter_api_key", "")
     g_key_2 = st.session_state.get("input_key_2", "").strip() or config.get("chaves", {}).get("Chave 2", "")
 
     provedores = []
     if g_key_1 and genai is not None:
         provedores.append(("Gemini (Principal)", g_key_1))
-    if gh_token:
-        provedores.append(("GitHub Models", gh_token))
+    if or_key:
+        provedores.append(("OpenRouter", or_key))
     if g_key_2 and genai is not None:
         provedores.append(("Gemini (Reserva)", g_key_2))
 
     if not provedores:
         raise RuntimeError("Nenhuma chave configurada. Acesse as configurações no painel lateral.")
 
-    # Ajuste manual ou preferência por economia de cota Gemini
     escolha_manual = st.session_state.get("ps_provedor_manual", "Automático")
     if escolha_manual != "Automático":
         provedores = sorted(provedores, key=lambda x: 0 if x[0] == escolha_manual else 1)
     elif st.session_state.get("gemini_so_visao", config.get("gemini_so_visao", False)):
-        # Prioriza o GitHub Models para texto, preservando a cota do Gemini
-        provedores = [p for p in provedores if "GitHub" in p[0]] + [p for p in provedores if "Gemini" in p[0]]
+        provedores = [p for p in provedores if "OpenRouter" in p[0]] + [p for p in provedores if "Gemini" in p[0]]
 
     if not st.session_state.get("fallback_automatico", config.get("fallback_automatico", True)):
         provedores = provedores[:1]
@@ -357,19 +354,20 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.5-fl
                 resp = client.models.generate_content(model=modelo_gemini, contents=user_prompt, config=cfg)
                 texto = getattr(resp, "text", "")
                 
-            elif nome == "GitHub Models":
-                url_gh = "http" + "s://models.inference.ai.azure.com/chat/completions"
-                modelo_gh = config.get("modelo_github", "meta-llama-3.1-70b-instruct")
+            elif nome == "OpenRouter":
+                url_or = "http" + "s://openrouter.ai/api/v1/chat/completions"
+                modelo_or = config.get("modelo_openrouter", "meta-llama/llama-3.1-70b-instruct:free")
                 payload = {
-                    "model": modelo_gh,
+                    "model": modelo_or,
                     "messages": [{"role": "system", "content": sys_final}, {"role": "user", "content": user_prompt}], 
                     "temperature": temperature
                 }
                 headers = {
                     "Authorization": f"Bearer {cred}",
-                    "Content-Type": "application/json"
+                    "HTTP-Referer": "http" + "s://promptstudio.local",
+                    "X-Title": "Prompt Studio Cockpit"
                 }
-                resp = requests.post(url_gh, headers=headers, json=payload, timeout=90)
+                resp = requests.post(url_or, headers=headers, json=payload, timeout=90)
                 resp.raise_for_status()
                 texto = _extrair_texto_resposta(resp.json())
             
@@ -408,10 +406,19 @@ SYS_COMPOSITOMETRO = r"""Você é o Auditor Óptico e Analista de Composição d
 Retorne EXCLUSIVAMENTE um JSON válido no formato:
 {"sujeito_status": "Definido | Vago | Ausente", "sujeito_resumo": "resumo do sujeito", "acao_status": "Presente | Estática | Ausente", "cenario_status": "Definido | Vago | Ausente", "iluminacao_status": "Definida | Inferida pela IA", "camera_status": "Definida | Inferida pela IA", "nivel_sensualidade_sugerido": 1, "diagnostico_texto": "breve diagnostico", "sugestoes_cirurgicas": [ "sugestão 1", "sugestão 2" ]}"""
 
-SYS_LEITOR_PARAMETRICO = r"""Você é o Cirurgião Óptico de ALTA PRECISÃO do Prompt Studio. Desconstrua a imagem de forma pericial.
-REGRAS: BIOTIPO (trave peso e proporções reais da imagem), CABELO (comprimento/cor exatos), ROUPA (tecido/caimento sem invenção), POSE (mapeie braços/pernas/olhar).
-Retorne EXCLUSIVAMENTE um JSON válido:
-{"sujeito": "biotipo, etnia, cabelo e roupas precisas", "acao": "pose eixos X/Y", "cenario": "ambiente", "iluminacao": "luz e cores", "estilo_camera": "estilo e enquadramento"}"""
+# --- DIRETRIZ DE ULTRA-DENSIDADE VISUAL ---
+SYS_LEITOR_PARAMETRICO = r"""Você é o Motor de Extração Óptica de Ultra-Densidade (nível Dense Captioning) do Prompt Studio.
+Sua missão é realizar uma varredura microscópica da imagem e desconstruí-la com precisão forense. Não resuma.
+
+REGRAS DE EXTRAÇÃO:
+1. SUJEITO: Especifique etnia, formato do rosto, cor exata dos olhos e micro-expressões. Descreva a roupa detalhando os materiais (ex: couro sintético, látex reflexivo, algodão desgastado), texturas, costuras, logotipos, caimento, dobras e pequenos acessórios menores (brincos, anéis, tatuagens, manchas na pele).
+2. AÇÃO/POSE: Mapeie a geometria corporal exata (ex: "braço direito flexionado a 90 graus tocando o pescoço", "peso apoiado na perna esquerda"), direção milimétrica do olhar e a tensão dos músculos.
+3. CENÁRIO: Divida obrigatoriamente a análise em Foreground (Primeiro Plano), Midground e Background. Liste objetos ao redor, clima, arquitetura e texturas dos materiais do ambiente.
+4. ILUMINAÇÃO: Mapeie a luz principal (Key light), luz de preenchimento (Fill) e contra-luz (Rim light). Especifique se as sombras são duras ou suaves e localize onde os reflexos especulares atingem a pele ou roupas.
+5. CÂMERA: Infira a lente aproximada (ex: 35mm, 85mm macro), a profundidade de campo (DoF/desfoque de fundo), ângulo (High angle, Dutch angle) e a granulação/meio fotográfico.
+
+Retorne EXCLUSIVAMENTE um JSON válido neste formato:
+{"sujeito": "...", "acao": "...", "cenario": "...", "iluminacao": "...", "estilo_camera": "..."}"""
 
 SYS_MESTRE_CORE = r"""Você é o Motor de Síntese Óptica e Engenharia de Prompts do Prompt Studio.
 Sua missão é compilar o prompt na sintaxe do motor destino com FIDELIDADE ABSOLUTA.
@@ -445,7 +452,7 @@ def processar_imagem_visao(arquivo_imagem, estilo_conversao, nivel_sensualidade,
         raise RuntimeError("Chave Gemini necessária para visão. Conecte no painel lateral.")
     
     img_pil = Image.open(arquivo_imagem)
-    user_prompt = "Desconstrua pericialmente esta imagem. \n[MODIFICADOR 2: SENSUALIDADE]: Nível " + str(nivel_sensualidade) + " - Redesenhe a roupa/pose original para refletir EXATAMENTE esse nível (Nível 4 ou 5 exige remoção de roupas)."
+    user_prompt = "Desconstrua pericialmente esta imagem com detalhes microscópicos. \n[MODIFICADOR 2: SENSUALIDADE]: Nível " + str(nivel_sensualidade) + " - Redesenhe a roupa/pose original para refletir EXATAMENTE esse nível (Nível 4 ou 5 exige remoção de roupas)."
     if "Fotorrealismo" in estilo_conversao: user_prompt += "\n[MODIFICADOR 1: ESTILO]: Traduza a cena inteira para o MUNDO REAL fotorrealista (proibido anime/3d)."
     elif "Anime" in estilo_conversao: user_prompt += "\n[MODIFICADOR 1: ESTILO]: Traduza a cena para ILUSTRAÇÃO 2D ANIME (proibido poros/fotorrealismo)."
 
@@ -484,26 +491,26 @@ def renderizar_sidebar():
     st.sidebar.markdown("<a href='http" + "s://aistudio.google.com/app/apikey' target='_blank' style='color:#2563eb; text-decoration:none;'>🔑 Google Gemini (Principal)</a>", unsafe_allow_html=True)
     k1 = st.sidebar.text_input("Chave Gemini 1", value=config.get("chaves", {}).get("Chave 1", ""), type="password", key="input_key_1", label_visibility="collapsed")
     
-    st.sidebar.markdown("<br><a href='http" + "s://github.com/settings/tokens' target='_blank' style='color:#10b981; text-decoration:none;'>🌐 GitHub Models (Llama 70B - Token Pessoal)</a>", unsafe_allow_html=True)
-    k_gh = st.sidebar.text_input("Token GitHub", value=config.get("github_token", ""), type="password", key="input_github_token", label_visibility="collapsed")
+    st.sidebar.markdown("<br><a href='http" + "s://openrouter.ai/keys' target='_blank' style='color:#10b981; text-decoration:none;'>🌐 OpenRouter (Llama 70B Gratuito)</a>", unsafe_allow_html=True)
+    k_or = st.sidebar.text_input("Chave OpenRouter", value=config.get("openrouter_api_key", ""), type="password", key="input_openrouter_api", label_visibility="collapsed")
 
     st.sidebar.markdown("<br><span style='color:#b45309; font-weight:600;'>🛡️ Google Gemini (Reserva / Opcional)</span>", unsafe_allow_html=True)
     k2 = st.sidebar.text_input("Chave Gemini 2", value=config.get("chaves", {}).get("Chave 2", ""), type="password", key="input_key_2", label_visibility="collapsed")
 
     with st.sidebar.expander("Ferramentas Avançadas", expanded=False):
-            st.selectbox("Provedor Prioritário", ["Automático", "Gemini (Principal)", "GitHub Models", "Gemini (Reserva)"], key="ps_provedor_manual")
-            gemini_so_visao_chk = st.checkbox("🛡️ Priorizar GitHub para Texto (Poupa Cota Gemini)", value=config.get("gemini_so_visao", False), key="gemini_so_visao")
+            st.selectbox("Provedor Prioritário", ["Automático", "Gemini (Principal)", "OpenRouter", "Gemini (Reserva)"], key="ps_provedor_manual")
+            gemini_so_visao_chk = st.checkbox("🛡️ Priorizar OpenRouter para Texto (Poupa Cota Gemini)", value=config.get("gemini_so_visao", False), key="gemini_so_visao")
             fallback_chk = st.checkbox("Fallback Automático", value=config.get("fallback_automatico", True), key="fallback_automatico")
-            st.selectbox("Modelo de Visão (Gemini)", ["gemini-3.5-flash", "gemini-3.8-flash"], index=0, key="modelo_visao_select")
+            st.selectbox("Modelo de Visão (Gemini)", ["gemini-1.5-flash", "gemini-1.5-pro"], index=0, key="modelo_visao_select")
 
     if st.sidebar.button("💾 Conectar Motores", type="primary", use_container_width=True):
         dados_salvos = {
             "chaves": {"Chave 1": k1, "Chave 2": k2}, 
-            "github_token": k_gh,
+            "openrouter_api_key": k_or,
             "provedor_ia": st.session_state.get("ps_provedor_manual", "Automático"),
             "fallback_automatico": fallback_chk, "gemini_so_visao": gemini_so_visao_chk,
-            "modelo_github": "meta-llama-3.1-70b-instruct",
-            "modelo_padrao": "gemini-3.5-flash", "usar_busca_web": False
+            "modelo_openrouter": "meta-llama/llama-3.1-70b-instruct:free",
+            "modelo_padrao": "gemini-1.5-flash", "usar_busca_web": False
         }
         ok_salvo, erro_salvo = salvar_config(dados_salvos, st.session_state.get("user_email", ""))
         if ok_salvo: st.sidebar.success("✅ Motores conectados e prontos!")
@@ -562,9 +569,9 @@ def renderizar_cockpit():
         if btn_ler:
             if not img_file: st.warning("Selecione uma imagem primeiro.")
             else:
-                with st.spinner("Analisando matriz óptica..."):
+                with st.spinner("Analisando matriz óptica com Varredura Ultra-Densa..."):
                     try:
-                        modelo_visao = st.session_state.get("modelo_visao_select", "gemini-3.5-flash")
+                        modelo_visao = st.session_state.get("modelo_visao_select", "gemini-1.5-flash")
                         res = processar_imagem_visao(img_file, estilo_conversao, sens_escolhida, modelo_visao)
                         if res["tipo"] == "json":
                             st.session_state["ck_img_parametros"] = res["dados"]
@@ -582,12 +589,12 @@ def renderizar_cockpit():
                 st.caption("Ajuste os parâmetros extraídos da imagem.")
                 c1, c2 = st.columns(2)
                 with c1:
-                    p_suj = st.text_area("👤 Sujeito (Biotipo/Roupas):", value=parametros.get("sujeito", ""), height=90)
-                    p_cen = st.text_area("🏞️ Cenário:", value=parametros.get("cenario", ""), height=90)
+                    p_suj = st.text_area("👤 Sujeito (Biotipo/Roupas):", value=parametros.get("sujeito", ""), height=150)
+                    p_cen = st.text_area("🏞️ Cenário:", value=parametros.get("cenario", ""), height=150)
                 with c2:
-                    p_act = st.text_area("🏃 Ação / Pose:", value=parametros.get("acao", ""), height=90)
-                    p_ilu = st.text_area("💡 Iluminação:", value=parametros.get("iluminacao", ""), height=90)
-                    p_est = st.text_area("📷 Estilo / Câmera:", value=parametros.get("estilo_camera", ""), height=90)
+                    p_act = st.text_area("🏃 Ação / Pose:", value=parametros.get("acao", ""), height=100)
+                    p_ilu = st.text_area("💡 Iluminação:", value=parametros.get("iluminacao", ""), height=100)
+                    p_est = st.text_area("📷 Estilo / Câmera:", value=parametros.get("estilo_camera", ""), height=100)
                 if st.button("🔄 Atualizar Narrativa Visual", use_container_width=True):
                     st.session_state["ck_ideia_input"] = f"{p_suj}, {p_act}. Cenário: {p_cen}. Iluminação: {p_ilu}. Estilo: {p_est}."
                     st.session_state["ck_img_parametros"] = {"sujeito": p_suj, "acao": p_act, "cenario": p_cen, "iluminacao": p_ilu, "estilo_camera": p_est}
