@@ -239,7 +239,7 @@ def carregar_config(email=None):
         "chaves": {"Chave 1": "", "Chave 2": ""}, "openrouter_api_key": "",
         "provedor_ia": "Automático", "fallback_automatico": True,
         "gemini_so_visao": False, "modelo_openrouter": "meta-llama/llama-3.1-70b-instruct:free", 
-        "modelo_padrao": "gemini-1.5-flash"
+        "modelo_padrao": "gemini-3.5-flash"
     }
     dados = _req_apps_script({"acao": "carregar_config", "email": (email or "").strip().lower()})
     if dados and dados.get("ok") and dados.get("config"):
@@ -316,7 +316,7 @@ def verificar_acesso_sheets(email):
 # ==============================================================================
 # 3. MOTOR DE CHAMADA TRI-CORE COM REDUNDÂNCIA (GEMINI 1 -> OPENROUTER -> GEMINI 2)
 # ==============================================================================
-def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-1.5-flash", temperature=0.25):
+def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.5-flash", temperature=0.25):
     config = carregar_config(st.session_state.get("user_email", ""))
     
     g_key_1 = st.session_state.get("input_key_1", "").strip() or config.get("chaves", {}).get("Chave 1", "")
@@ -501,7 +501,7 @@ def renderizar_sidebar():
             st.selectbox("Provedor Prioritário", ["Automático", "Gemini (Principal)", "OpenRouter", "Gemini (Reserva)"], key="ps_provedor_manual")
             gemini_so_visao_chk = st.checkbox("🛡️ Priorizar OpenRouter para Texto (Poupa Cota Gemini)", value=config.get("gemini_so_visao", False), key="gemini_so_visao")
             fallback_chk = st.checkbox("Fallback Automático", value=config.get("fallback_automatico", True), key="fallback_automatico")
-            st.selectbox("Modelo de Visão (Gemini)", ["gemini-1.5-flash", "gemini-1.5-pro"], index=0, key="modelo_visao_select")
+            st.selectbox("Modelo de Visão (Gemini)", ["gemini-3.5-flash", "gemini-3.8-flash"], index=0, key="modelo_visao_select")
 
     if st.sidebar.button("💾 Conectar Motores", type="primary", use_container_width=True):
         dados_salvos = {
@@ -510,7 +510,7 @@ def renderizar_sidebar():
             "provedor_ia": st.session_state.get("ps_provedor_manual", "Automático"),
             "fallback_automatico": fallback_chk, "gemini_so_visao": gemini_so_visao_chk,
             "modelo_openrouter": "meta-llama/llama-3.1-70b-instruct:free",
-            "modelo_padrao": "gemini-1.5-flash", "usar_busca_web": False
+            "modelo_padrao": "gemini-3.5-flash", "usar_busca_web": False
         }
         ok_salvo, erro_salvo = salvar_config(dados_salvos, st.session_state.get("user_email", ""))
         if ok_salvo: st.sidebar.success("✅ Motores conectados e prontos!")
@@ -571,7 +571,7 @@ def renderizar_cockpit():
             else:
                 with st.spinner("Analisando matriz óptica com Varredura Ultra-Densa..."):
                     try:
-                        modelo_visao = st.session_state.get("modelo_visao_select", "gemini-1.5-flash")
+                        modelo_visao = st.session_state.get("modelo_visao_select", "gemini-3.5-flash")
                         res = processar_imagem_visao(img_file, estilo_conversao, sens_escolhida, modelo_visao)
                         if res["tipo"] == "json":
                             st.session_state["ck_img_parametros"] = res["dados"]
