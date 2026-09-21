@@ -3,12 +3,13 @@
 Prompt Studio Cockpit — Interface Minimalista de Alta Precisão
 Arquitetura: Shift-Left (Modificadores no Ponto Zero) + BYOK (Traga sua Chave) + Carga Distribuída.
 
-v2.3 — Revisão Final Blindada:
-  • Arquitetura Tri-Core Definitiva: Gemini 1 -> OpenRouter (Llama 70B Gratuito) -> Gemini 2
-  • Leitura de Imagem Ultra-Densa (Dense Captioning) com redundância de chaves Gemini
-  • Chaves criptografadas em repouso (Fernet) e persistência via Google Sheets
-  • URLs ofuscadas via concatenação (Anti-bug de Markdown)
-  • Interface polida com st.text_area dinâmico para edição forense
+v3.0 — Master UX & Lógica Tri-Core:
+  • Layout Top-Down: 5 Passos cronológicos (Ideia -> Imagem -> Modificadores -> Rascunho -> Síntese)
+  • Negativos Dinâmicos Injetados pelo Motor
+  • Modal de Histórico (st.dialog) e Botões de Download direto (.txt)
+  • Privacidade de UI (E-mail ofuscado)
+  • Slogan BYOK e clareza de contexto adicionados
+  • Mantido o Fallback Tri-Core e Ultra-Densidade Visual (Modelos 3.x Flash/Pro)
 """
 
 import os
@@ -52,14 +53,12 @@ st.markdown(
         --ps-rose: #e11d48;
     }
     
-    /* CSS NATIVO STREAMLIT (ADAPTA AO MODO CLARO E ESCURO) */
     .ps-brand { color: var(--text-color); font-size: 1.15rem; font-weight: 800; letter-spacing: .15em; margin-top: .2rem; }
     .ps-header-note { color: var(--text-color); opacity: 0.7; font-size: .88rem; margin-bottom: 1.1rem; }
     .ps-kicker { color: var(--ps-blue); font-size: .75rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; margin-top: .4rem; }
     .ps-title { color: var(--text-color); font-size: clamp(1.8rem, 3.2vw, 2.7rem); line-height: 1.15; margin: .2rem 0 .4rem; font-weight: 800; }
-    .ps-subtitle { color: var(--text-color); opacity: 0.8; font-size: 1.02rem; max-width: 820px; margin-bottom: 1.2rem; }
+    .ps-slogan { font-size: 1.15rem; color: var(--ps-blue); font-weight: 700; margin-bottom: 2rem; border-left: 4px solid var(--ps-blue); padding-left: 12px;}
     
-    /* Vitrine Landing Page Dinâmica */
     .hero-title { font-size: 3.5rem; font-weight: 900; color: var(--text-color); line-height: 1.1; margin-bottom: 1rem; text-align: center; letter-spacing: -0.03em; }
     .hero-subtitle { font-size: 1.2rem; color: var(--text-color); opacity: 0.8; text-align: center; max-width: 700px; margin: 0 auto 3rem auto; line-height: 1.6; }
     .showcase-box { background: var(--secondary-background-color); border: 1px solid rgba(128,128,128,0.2); border-radius: 16px; padding: 2rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
@@ -70,13 +69,11 @@ st.markdown(
     .plan-container { text-align: center; background: var(--secondary-background-color); padding: 2rem; border-radius: 16px; border: 1px solid rgba(128,128,128,0.2); margin-top: 2rem; }
     .byok-badge { display: inline-block; background: rgba(37, 99, 235, 0.1); color: #2563eb; padding: 4px 12px; border-radius: 9999px; font-size: 0.8rem; font-weight: bold; margin-bottom: 1rem; border: 1px solid rgba(37, 99, 235, 0.2); }
 
-    /* Pré-prompt e Tags (App Interno) */
     .ps-preprompt { background: var(--secondary-background-color); border: 1px solid rgba(128,128,128,0.2); border-radius: 12px; padding: 1.25rem 1.4rem; line-height: 1.85; font-size: 1.02rem; color: var(--text-color); margin: 0.8rem 0 1.2rem; }
     .ps-user-word { color: var(--text-color); font-weight: 700; background-color: rgba(37, 99, 235, 0.15); border-left: 2px solid #2563eb; padding: 2px 6px; border-radius: 4px; }
     .ps-ai-word { color: var(--ps-gold); font-weight: 600; }
     .ps-legend { display: flex; gap: 1.5rem; margin: .6rem 0 .9rem; font-size: .88rem; font-weight: 600; align-items: center; }
     
-    /* Banners */
     .comp-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; font-weight: 700; padding: 4px 10px; border-radius: 9999px; margin-right: 6px; margin-bottom: 6px; }
     .comp-green { background-color: rgba(5, 150, 105, 0.1); color: #10b981; border: 1px solid rgba(5, 150, 105, 0.3); }
     .comp-amber { background-color: rgba(217, 119, 6, 0.1); color: #f59e0b; border: 1px solid rgba(217, 119, 6, 0.3); }
@@ -87,7 +84,7 @@ st.markdown(
 )
 
 # ==============================================================================
-# 2. CONSTANTES E DICIONÁRIO (COM BLINDAGEM DE URL)
+# 2. CONSTANTES E DICIONÁRIO BLINDADO
 # ==============================================================================
 APPS_SCRIPT_URL = "http" + "s://script.google.com/macros/s/AKfycbzgEj3YPwqiUbiueyu8wjZ9ZZK0Rcc6G3kucysRSJ2gNmzRzUdMuLqv_q55N1kSO8PQ/exec"
 LINK_KIWIFY_15_DIAS = "http" + "s://pay.kiwify.com.br/MXVL98k"
@@ -95,8 +92,6 @@ LINK_KIWIFY_30_DIAS = "http" + "s://pay.kiwify.com.br/dyfEGe5"
 LINK_KIWIFY_90_DIAS = "http" + "s://pay.kiwify.com.br/xo0m3rF"
 
 PASTA_CONFIGS = "configs_usuarios"
-PASTA_RESULTADOS = "resultados"
-HISTORICO_LIMITE = 20
 
 OPCOES_SENSUALIDADE = [
     "1 - Seguro (SFW)",
@@ -107,16 +102,15 @@ OPCOES_SENSUALIDADE = [
     "6 - Dual (Com & Sem Censura)",
 ]
 
-# DICIONÁRIO BLINDADO ANTI-ALUCINAÇÃO
 BANCO_DE_MOTORES = {
     "ComfyUI / Pony SDXL": {
-        "regra_positivo": "PRIMEIRO, extraia o sujeito e a roupa da narrativa visual. Ordem de Tags OBRIGATÓRIA: 1. Qualidade (score_9, score_8_up) -> 2. CONTAGEM E GÊNERO (ex: 1boy, solo, ou 1girl, solo) -> 3. PROFISSÃO/ESPÉCIE (ex: astronaut) -> 4. Vestuário fiel à narrativa -> 5. Ação -> 6. Cenário. NUNCA invente gêneros ou pessoas que não estão na narrativa original.",
-        "regra_negativo": "BASE INEGOCIÁVEL: score_6, score_5, score_4, score_3, score_2, score_1, worst quality, low quality, normal quality, text, watermark, jpeg artifacts, ugly, bad anatomy, bad hands, missing fingers, extra digits, fewer digits, mutated, deformed, out of frame. Se fotorrealista adicione: source_anime, source_cartoon, 3d.",
-        "dica_tecnica": "Modelos baseados no Pony dependem estritamente da tag de gênero no início (ex: 1girl, solo)."
+        "regra_positivo": "PRIMEIRO, extraia o sujeito e a roupa da narrativa visual. Ordem de Tags OBRIGATÓRIA: 1. Qualidade (score_9, score_8_up) -> 2. CONTAGEM E GÊNERO (ex: 1boy, solo, ou 1girl, solo) -> 3. PROFISSÃO/ESPÉCIE (ex: astronaut) -> 4. Vestuário fiel à narrativa -> 5. Ação -> 6. Cenário.",
+        "regra_negativo": "BASE INEGOCIÁVEL: score_6, score_5, score_4, score_3, score_2, score_1, worst quality, low quality, normal quality, text, watermark, jpeg artifacts, ugly, bad anatomy, bad hands, missing fingers, extra digits, fewer digits, mutated, deformed, out of frame.",
+        "dica_tecnica": "Modelos baseados no Pony dependem estritamente da tag de gênero no início."
     },
     "ComfyUI / Illustrious": {
-        "regra_positivo": "Traduza fielmente a cena. PREFIXO OBRIGATÓRIO: masterpiece, best quality, ultra-detailed, illustration. Logo em seguida, adicione OBRIGATORIAMENTE a contagem e gênero do sujeito (ex: 1boy, solo, ou 1girl, multiple girls). Não alucine elementos ausentes no texto.",
-        "regra_negativo": "Base: lowres, bad quality, worst quality, bad anatomy, bad hands, text, error, missing fingers, cropped, signature, watermark. Remova 'blurry' se houver foco ou depth of field no positivo.",
+        "regra_positivo": "Traduza fielmente a cena. PREFIXO OBRIGATÓRIO: masterpiece, best quality, ultra-detailed, illustration. Logo em seguida, adicione OBRIGATORIAMENTE a contagem e gênero do sujeito (ex: 1boy, solo, ou 1girl, multiple girls).",
+        "regra_negativo": "Base: lowres, bad quality, worst quality, bad anatomy, bad hands, text, error, missing fingers, cropped, signature, watermark.",
         "dica_tecnica": "Mantenha CFG entre 5.0 e 7.0."
     },
     "Flux.1 / Flux.2 (Klein)": {
@@ -127,7 +121,7 @@ BANCO_DE_MOTORES = {
     "Midjourney v6.1+": {
         "regra_positivo": "REGRA MÁXIMA: Comece descrevendo o SUJEITO, A ROUPA e a AÇÃO exatamente como estão na Narrativa Visual. Depois descreva o CENÁRIO. SÓ ENTÃO adicione termos de estética cinematográfica (ex: cinematic lighting) e equipamentos de câmera. Termine com: --ar 16:9 --v 6.1 --stylize 250",
         "regra_negativo": None, 
-        "dica_tecnica": "Não sobreponha a estética ao sujeito. O sujeito deve ser a primeira coisa no prompt."
+        "dica_tecnica": "Não sobreponha a estética ao sujeito."
     },
     "ComfyUI / SDXL Base Natural": {
         "regra_positivo": "Traduza a cena integralmente. FÓRMULA: 'A breathtaking photo of [Sujeito + Roupas fiéis], who is [Ação], located in [Cenário Detalhado]. The lighting is [Iluminação]. Shot on [Câmera]'.",
@@ -152,7 +146,7 @@ BANCO_DE_MOTORES = {
     "Ernie (ViLG)": {
         "regra_positivo": "Traduza a cena recebida de forma clara em inglês, especificando a relação de proximidade espacial entre sujeito e cenário. Use termos de arte tradicionais.",
         "regra_negativo": "ugly, disfigured, low resolution, bad hands, deformed faces.",
-        "dica_tecnica": "Baidu Ernie prefere prompts físicos diretos. Evite metáforas."
+        "dica_tecnica": "Baidu Ernie prefere prompts físicos diretos."
     },
     "Z-Image": {
         "regra_positivo": "Traduza a narrativa para um inglês hiper-realista. Foque na coerência do sujeito informado e adicione texturas 8k e iluminação volumétrica.",
@@ -164,8 +158,14 @@ BANCO_DE_MOTORES = {
 OPCOES_DESTINO = ["Selecione o Motor Destino..."] + list(BANCO_DE_MOTORES.keys())
 
 # ==============================================================================
-# 2.1 FUNÇÕES PURAS (testáveis) + CRIPTOGRAFIA + PERSISTÊNCIA
+# 2.1 FUNÇÕES PURAS E SEGURANÇA
 # ==============================================================================
+def mascarar_email(email):
+    if not email or "@" not in email: return email
+    nome, dominio = email.split("@", 1)
+    if len(nome) <= 3: return f"{nome}***@{dominio}"
+    return f"{nome[:3]}***@{dominio}"
+
 def _slug_usuario(email):
     return re.sub(r'[^\w\-.]', '_', (email or "anonimo").strip().lower()) or "anonimo"
 
@@ -198,7 +198,7 @@ def _chave_fernet():
     except Exception: pass
     if not segredo: segredo = os.environ.get("PS_FERNET_KEY")
     if not segredo:
-        st.error("🔒 Chave de criptografia não configurada. Defina PS_FERNET_KEY em secrets ou ambiente.")
+        st.error("🔒 Chave de criptografia não configurada.")
         st.stop()
     try:
         from cryptography.fernet import Fernet
@@ -219,13 +219,6 @@ def _descriptografar(texto):
     if not f or not texto: return texto
     try: return f.decrypt(texto.encode("utf-8")).decode("utf-8")
     except Exception: return texto
-
-def _mascarar_chaves(config):
-    copia = dict(config)
-    chaves = copia.get("chaves", {})
-    copia["chaves"] = {k: (("********") if v else "") for k, v in chaves.items()}
-    if copia.get("openrouter_api_key"): copia["openrouter_api_key"] = "********"
-    return copia
 
 def _req_apps_script(params, timeout=20):
     try:
@@ -273,7 +266,7 @@ def salvar_config(dados, email=None):
     os.makedirs(PASTA_CONFIGS, exist_ok=True)
     with open(os.path.join(PASTA_CONFIGS, f"config_{_slug_usuario(email)}.json"), "w", encoding="utf-8") as f:
         json.dump(dados, f, indent=4, ensure_ascii=False)
-    return False, "Erro ao salvar na Nuvem. Cópia salva apenas localmente."
+    return False, "Erro ao salvar na Nuvem. Cópia salva localmente."
 
 def _extrair_texto_resposta(obj):
     if isinstance(obj, str): return obj.strip()
@@ -290,10 +283,11 @@ def _msg_erro_amigavel(e):
         detalhes = texto.split("Detalhes:")[-1].strip() if "Detalhes:" in texto else ""
         return f"⚠️ **Falha ao chamar motores de IA.** Verifique conexão e chaves. {detalhes[:200]}"
     if "401" in texto or "Unauthorized" in texto: return "🔑 **Chave/Token inválido ou expirado.**"
+    if "404" in texto or "not found" in texto.lower(): return "⚠️ **Modelo não encontrado (404).** A versão requisitada não existe."
     if "429" in texto or "quota" in texto.lower(): return "⏳ **Limite de uso temporário atingido (429).** Aguarde a renovação da cota."
     if "503" in texto or "overloaded" in texto.lower(): return "🔌 **Servidor sobrecarregado (503).** O fallback deve assumir."
     if "timeout" in texto.lower(): return "⏱️ **Tempo esgotado na chamada.** Tente novamente."
-    return f"⚠️ **Algo deu errado.** {texto[:300]}"
+    return f"⚠️ **Erro Sistémico.** {texto[:300]}"
 
 def verificar_acesso_sheets(email):
     try:
@@ -314,7 +308,7 @@ def verificar_acesso_sheets(email):
     except Exception as e: return False, "", f"⚠️ Falha na conexão: {e}"
 
 # ==============================================================================
-# 3. MOTOR DE CHAMADA TRI-CORE COM REDUNDÂNCIA (GEMINI 1 -> OPENROUTER -> GEMINI 2)
+# 3. MOTOR DE CHAMADA TRI-CORE COM REDUNDÂNCIA
 # ==============================================================================
 def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.5-flash", temperature=0.25):
     config = carregar_config(st.session_state.get("user_email", ""))
@@ -406,16 +400,15 @@ SYS_COMPOSITOMETRO = r"""Você é o Auditor Óptico e Analista de Composição d
 Retorne EXCLUSIVAMENTE um JSON válido no formato:
 {"sujeito_status": "Definido | Vago | Ausente", "sujeito_resumo": "resumo do sujeito", "acao_status": "Presente | Estática | Ausente", "cenario_status": "Definido | Vago | Ausente", "iluminacao_status": "Definida | Inferida pela IA", "camera_status": "Definida | Inferida pela IA", "nivel_sensualidade_sugerido": 1, "diagnostico_texto": "breve diagnostico", "sugestoes_cirurgicas": [ "sugestão 1", "sugestão 2" ]}"""
 
-# --- DIRETRIZ DE ULTRA-DENSIDADE VISUAL ---
 SYS_LEITOR_PARAMETRICO = r"""Você é o Motor de Extração Óptica de Ultra-Densidade (nível Dense Captioning) do Prompt Studio.
 Sua missão é realizar uma varredura microscópica da imagem e desconstruí-la com precisão forense. Não resuma.
 
 REGRAS DE EXTRAÇÃO:
-1. SUJEITO: Especifique etnia, formato do rosto, cor exata dos olhos e micro-expressões. Descreva a roupa detalhando os materiais (ex: couro sintético, látex reflexivo, algodão desgastado), texturas, costuras, logotipos, caimento, dobras e pequenos acessórios menores (brincos, anéis, tatuagens, manchas na pele).
-2. AÇÃO/POSE: Mapeie a geometria corporal exata (ex: "braço direito flexionado a 90 graus tocando o pescoço", "peso apoiado na perna esquerda"), direção milimétrica do olhar e a tensão dos músculos.
-3. CENÁRIO: Divida obrigatoriamente a análise em Foreground (Primeiro Plano), Midground e Background. Liste objetos ao redor, clima, arquitetura e texturas dos materiais do ambiente.
-4. ILUMINAÇÃO: Mapeie a luz principal (Key light), luz de preenchimento (Fill) e contra-luz (Rim light). Especifique se as sombras são duras ou suaves e localize onde os reflexos especulares atingem a pele ou roupas.
-5. CÂMERA: Infira a lente aproximada (ex: 35mm, 85mm macro), a profundidade de campo (DoF/desfoque de fundo), ângulo (High angle, Dutch angle) e a granulação/meio fotográfico.
+1. SUJEITO: Especifique etnia, formato do rosto, cor exata dos olhos e micro-expressões. Descreva a roupa detalhando os materiais (ex: couro sintético, látex reflexivo, algodão desgastado), texturas, costuras, logotipos, caimento, dobras e acessórios.
+2. AÇÃO/POSE: Mapeie a geometria corporal exata.
+3. CENÁRIO: Divida em Foreground, Midground e Background.
+4. ILUMINAÇÃO: Mapeie a luz principal, sombras e reflexos especulares.
+5. CÂMERA: Infira a lente aproximada, desfoque e ângulo.
 
 Retorne EXCLUSIVAMENTE um JSON válido neste formato:
 {"sujeito": "...", "acao": "...", "cenario": "...", "iluminacao": "...", "estilo_camera": "..."}"""
@@ -426,16 +419,25 @@ Sua missão é compilar o prompt na sintaxe do motor destino com FIDELIDADE ABSO
 =============================================================================
 1. TRADUÇÃO JURAMENTADA DA CENA (REGRA DE OURO)
 =============================================================================
-- Você DEVE extrair 100% das informações da NARRATIVA VISUAL (Sujeito, Roupa, Cenário, Luz) e aplicá-las no prompt final em inglês. NUNCA resuma, esqueça ou substitua o sujeito original da ideia. Você é um tradutor do pré-prompt, não um inventor.
+- Extraia 100% das informações da NARRATIVA VISUAL (Sujeito, Roupa, Cenário, Luz) e aplique-as no prompt em inglês.
 
 =============================================================================
 2. INJEÇÃO DE TAGS RATING E SENSUALIDADE
 =============================================================================
-ATENÇÃO: A narrativa de figurino já foi resolvida globalmente. Sua função é APENAS injetar as "Tags de Rating":
-- Nível 1/2: Injetar 'rating_safe'.
-- Nível 3/4: Injetar 'rating_questionable, nsfw'.
-- Nível 5: Injetar 'rating_explicit, nude, nsfw, uncensored'. Use tags Danbooru para anatomia exposta.
-- Nível 6 (Dual): Gere o prompt: VERSÃO A (Censurada) e VERSÃO B (Explícita).
+- Nível 1/2: 'rating_safe'
+- Nível 3/4: 'rating_questionable, nsfw'
+- Nível 5: 'rating_explicit, nude, nsfw, uncensored'
+- Nível 6 (Dual): VERSÃO A (Censurada) e VERSÃO B (Explícita)
+
+=============================================================================
+3. NEGATIVO DINÂMICO (OBRIGATÓRIO E PROFUNDO)
+=============================================================================
+NUNCA entregue um prompt negativo superficial apenas com a base fixa do motor.
+- Avalie o que foi pedido no positivo.
+- INJETE DINAMICAMENTE tags opostas que estragariam o resultado.
+- Ex: Se positivo é fotorrealista, o negativo DEVE ter 'anime, cartoon, 3d render, illustration'.
+- Ex: Se a cena é clara e iluminada, o negativo DEVE ter 'dark, gloomy, deep shadows'.
+- Junte o seu 'Negativo Dinâmico' com a base fixa da Regra do Motor.
 """
 
 def processar_imagem_visao(arquivo_imagem, estilo_conversao, nivel_sensualidade, modelo_gemini):
@@ -451,42 +453,48 @@ def processar_imagem_visao(arquivo_imagem, estilo_conversao, nivel_sensualidade,
     if not chaves_visao or genai is None:
         raise RuntimeError("Chave Gemini necessária para visão. Conecte no painel lateral.")
     
-    img_pil = Image.open(arquivo_imagem)
-    user_prompt = "Desconstrua pericialmente esta imagem com detalhes microscópicos. \n[MODIFICADOR 2: SENSUALIDADE]: Nível " + str(nivel_sensualidade) + " - Redesenhe a roupa/pose original para refletir EXATAMENTE esse nível (Nível 4 ou 5 exige remoção de roupas)."
-    if "Fotorrealismo" in estilo_conversao: user_prompt += "\n[MODIFICADOR 1: ESTILO]: Traduza a cena inteira para o MUNDO REAL fotorrealista (proibido anime/3d)."
-    elif "Anime" in estilo_conversao: user_prompt += "\n[MODIFICADOR 1: ESTILO]: Traduza a cena para ILUSTRAÇÃO 2D ANIME (proibido poros/fotorrealismo)."
+    user_prompt = "Desconstrua pericialmente esta imagem em Ultra-Densidade. \n[MODIFICADOR 2: SENSUALIDADE]: Nível " + str(nivel_sensualidade) + "."
+    if "Fotorrealismo" in estilo_conversao: user_prompt += "\n[MODIFICADOR 1: ESTILO]: Traduza para o MUNDO REAL fotorrealista."
+    elif "Anime" in estilo_conversao: user_prompt += "\n[MODIFICADOR 1: ESTILO]: Traduza para ILUSTRAÇÃO 2D ANIME."
 
     erros = []
-    # Redundância de Visão: se a Chave 1 falhar ou atingir cota, tenta a Chave 2 automaticamente
+    # Loop seguro com retorno de ponteiro (seek)
     for idx, chave in enumerate(chaves_visao):
         try:
+            arquivo_imagem.seek(0) # <--- CORREÇÃO DE SEGURANÇA (Restaura o buffer)
+            img_pil = Image.open(arquivo_imagem)
+            
             client = genai.Client(api_key=chave)
             cfg = types.GenerateContentConfig(system_instruction=SYS_LEITOR_PARAMETRICO, temperature=0.2)
             resp = client.models.generate_content(model=modelo_gemini, contents=[img_pil, user_prompt], config=cfg)
+            
             texto = getattr(resp, "text", "") or ""
-            if not texto.strip(): raise RuntimeError("A IA bloqueou o retorno da imagem.")
+            if not texto.strip(): raise RuntimeError("A IA bloqueou a imagem.")
             dados = parse_json_ia(texto)
             if dados: return {"tipo": "json", "dados": dados}
             return {"tipo": "texto", "texto": texto}
         except Exception as e:
             erros.append(f"Gemini {idx+1}: {str(e)}")
 
-    raise RuntimeError("Falha na leitura óptica em todas as chaves Gemini conectadas: " + " | ".join(erros))
+    raise RuntimeError("Falha na leitura óptica: " + " | ".join(erros))
 
 # ==============================================================================
-# 5. UI: BARRA LATERAL (CENTRO DE CONEXÃO BYOK) E LANDING PAGE
+# 5. UI: BARRA LATERAL E HISTÓRICO
 # ==============================================================================
 def renderizar_sidebar():
-    st.sidebar.markdown("## ⚙️ Centro de Conexão (Chaves)")
-    st.sidebar.caption(f"Usuário: **{st.session_state.get('user_email', '')}**")
+    st.sidebar.markdown("<div style='font-size: 0.95rem; color: var(--ps-blue); font-weight: 700; margin-bottom: 1rem;'>A porta é nossa, mas as chaves são suas.</div>", unsafe_allow_html=True)
+    st.sidebar.markdown("## ⚙️ Centro de Conexão")
+    
+    # E-mail ocultado por privacidade
+    user_email_masked = mascarar_email(st.session_state.get('user_email', ''))
+    st.sidebar.caption(f"Usuário: **{user_email_masked}**")
+    
     if st.sidebar.button("🚪 Sair do Sistema", use_container_width=True):
         st.session_state.autenticado = False
         st.rerun()
 
     config = carregar_config(st.session_state.get("user_email", ""))
-    
     st.sidebar.markdown("---")
-    st.sidebar.markdown("**O motor é seu.** Pegue suas chaves de API gratuitas nos painéis oficiais e conecte abaixo.")
     
     st.sidebar.markdown("<a href='http" + "s://aistudio.google.com/app/apikey' target='_blank' style='color:#2563eb; text-decoration:none;'>🔑 Google Gemini (Principal)</a>", unsafe_allow_html=True)
     k1 = st.sidebar.text_input("Chave Gemini 1", value=config.get("chaves", {}).get("Chave 1", ""), type="password", key="input_key_1", label_visibility="collapsed")
@@ -499,9 +507,9 @@ def renderizar_sidebar():
 
     with st.sidebar.expander("Ferramentas Avançadas", expanded=False):
             st.selectbox("Provedor Prioritário", ["Automático", "Gemini (Principal)", "OpenRouter", "Gemini (Reserva)"], key="ps_provedor_manual")
-            gemini_so_visao_chk = st.checkbox("🛡️ Priorizar OpenRouter para Texto (Poupa Cota Gemini)", value=config.get("gemini_so_visao", False), key="gemini_so_visao")
+            gemini_so_visao_chk = st.checkbox("🛡️ Priorizar OpenRouter para Texto (Poupa Cota)", value=config.get("gemini_so_visao", False), key="gemini_so_visao")
             fallback_chk = st.checkbox("Fallback Automático", value=config.get("fallback_automatico", True), key="fallback_automatico")
-            st.selectbox("Modelo de Visão (Gemini)", ["gemini-3.5-flash", "gemini-3.8-flash"], index=0, key="modelo_visao_select")
+            st.selectbox("Modelo de Visão (Gemini)", ["gemini-3.5-flash", "gemini-3.1-pro"], index=0, key="modelo_visao_select")
 
     if st.sidebar.button("💾 Conectar Motores", type="primary", use_container_width=True):
         dados_salvos = {
@@ -533,6 +541,13 @@ def _historico_sheets(email, prompt_texto=None, acao="listar"):
     if resp and resp.get("ok"): return True, resp.get("itens", [])
     return False, []
 
+# Modal Nativo Streamlit para visualizar Histórico
+@st.dialog("📝 Visualizador de Prompt (Histórico)")
+def modal_historico(conteudo):
+    st.info("Utilize o ícone de 'Copiar' no canto superior direito do bloco de código abaixo.")
+    st.code(conteudo, language="markdown")
+    st.download_button("📥 Baixar este Prompt (.txt)", data=conteudo, file_name=f"prompt_historico_{int(time.time())}.txt", use_container_width=True)
+
 def renderizar_historico():
     with st.sidebar.expander("🕘 Histórico de Prompts", expanded=False):
         ok, itens = _historico_sheets(st.session_state.get("user_email", ""), acao="listar")
@@ -540,137 +555,172 @@ def renderizar_historico():
         if not itens: st.caption("Nenhum prompt salvo ainda."); return
         for item in itens[-10:]:
             ts = item.get("quando", "")[:16]
-            preview = str(item.get("prompt", ""))[:90].replace("\n", " ")
+            preview = str(item.get("prompt", ""))[:60].replace("\n", " ")
             if st.button(f"{ts} — {preview}...", key=f"hist_{item.get('id', ts)}", use_container_width=True):
-                st.session_state["ck_historico_ver"] = item.get("prompt", "")
+                modal_historico(item.get("prompt", ""))
 
 # ==============================================================================
-# 6. UI: COCKPIT PRINCIPAL
+# 6. UI: COCKPIT PRINCIPAL (FUNIL UX 5 PASSOS)
 # ==============================================================================
 def renderizar_cockpit():
     st.markdown("<div class='ps-kicker'>PROMPT STUDIO COCKPIT · ATRITO ZERO</div>", unsafe_allow_html=True)
     st.markdown("<h1 class='ps-title'>Sua Ideia. Seu Motor. Controle Total.</h1>", unsafe_allow_html=True)
+    st.markdown("<div class='ps-slogan'>A porta é nossa, mas as chaves são suas.</div>", unsafe_allow_html=True)
+    
+    # --------------------------------------------------------------------------
+    # PASSO 1: A IDEIA (Texto Base)
+    # --------------------------------------------------------------------------
+    st.markdown("### 1️⃣ Passo 1: A Sua Ideia (A Narrativa Visual)")
+    st.caption("O ponto de partida. Descreva o que imagina ou veja a caixa preencher-se magicamente usando o Passo 2.")
+    ideia_input = st.text_area("Insira a sua Ideia:", value=st.session_state.get("ck_ideia_input", ""), key="ck_ideia_input_ui", height=140, label_visibility="collapsed")
+    
+    if st.session_state.get("ck_ideia_input_ui") != st.session_state.get("ck_ideia_input", ""):
+        st.session_state["ck_ideia_input"] = st.session_state.get("ck_ideia_input_ui", "")
+
+    if st.button("🗑️ Limpar Ideia", use_container_width=False):
+        st.session_state["ck_ideia_input"] = ""
+        # CORREÇÃO: Previne o StreamlitAPIException de modificação pós-renderização
+        if "ck_ideia_input_ui" in st.session_state:
+            del st.session_state["ck_ideia_input_ui"]
+            
+        for k in ["ck_img_parametros","ck_preprompt","ck_preprompt_editado","ck_diagnostico","ck_prompt_final", "ck_sugestoes_marcadas"]: 
+            st.session_state.pop(k, None)
+        st.rerun()
+
+    # --------------------------------------------------------------------------
+    # PASSO 2: REFERÊNCIA ÓPTICA (Imagem Opcional)
+    # --------------------------------------------------------------------------
+    st.markdown("---")
+    st.markdown("### 2️⃣ Passo 2: Referência Óptica (Opcional)")
+    st.caption("Sem inspiração para escrever? Faça upload de uma imagem. O Gemini lerá os micro-detalhes e injetará no Passo 1.")
+    
+    col_img1, col_img2 = st.columns([4, 6])
+    with col_img1: 
+        img_file = st.file_uploader("Upload de Referência", type=["png", "jpg", "jpeg", "webp"], key="ck_img_uploader", label_visibility="collapsed")
+    with col_img2:
+        st.write(" ")
+        btn_ler = st.button("👁️ Extrair Imagem (Ultra-Densidade)", use_container_width=True)
+
+    if btn_ler:
+        if not img_file: st.warning("Selecione uma imagem primeiro.")
+        else:
+            with st.spinner("Analisando matriz óptica com Varredura Ultra-Densa..."):
+                try:
+                    modelo_visao = st.session_state.get("modelo_visao_select", "gemini-3.5-flash")
+                    estilo_conversao = st.session_state.get("ck_estilo_conversao", "Manter Estilo Original")
+                    sens_escolhida = st.session_state.get("ck_sens_slider", OPCOES_SENSUALIDADE[1])
+                    
+                    res = processar_imagem_visao(img_file, estilo_conversao, sens_escolhida, modelo_visao)
+                    
+                    if res["tipo"] == "json":
+                        st.session_state["ck_img_parametros"] = res["dados"]
+                        ideia_extraida = f"Sujeito: {res['dados'].get('sujeito','')}\n\nAção: {res['dados'].get('acao','')}\n\nCenário: {res['dados'].get('cenario','')}\n\nIluminação: {res['dados'].get('iluminacao','')}\n\nEstilo: {res['dados'].get('estilo_camera','')}"
+                        st.session_state["ck_ideia_input"] = ideia_extraida
+                    else:
+                        st.session_state["ck_ideia_input"] = res["texto"]
+                        st.session_state.pop("ck_img_parametros", None)
+                        
+                    st.session_state.pop("ck_preprompt", None)
+                    st.rerun()
+                except Exception as e: st.error(_msg_erro_amigavel(e))
+
+    # Expander de Edição Pericial se houver JSON da imagem
+    parametros = st.session_state.get("ck_img_parametros")
+    if parametros:
+        with st.expander("🔬 Detalhador Pericial Extraído (Editável)", expanded=False):
+            c1, c2 = st.columns(2)
+            with c1:
+                p_suj = st.text_area("👤 Sujeito:", value=parametros.get("sujeito", ""), height=150)
+                p_cen = st.text_area("🏞️ Cenário:", value=parametros.get("cenario", ""), height=150)
+            with c2:
+                p_act = st.text_area("🏃 Ação:", value=parametros.get("acao", ""), height=100)
+                p_ilu = st.text_area("💡 Iluminação:", value=parametros.get("iluminacao", ""), height=100)
+                p_est = st.text_area("📷 Estilo:", value=parametros.get("estilo_camera", ""), height=100)
+            if st.button("🔄 Atualizar Caixa da Ideia com estas edições", use_container_width=True):
+                st.session_state["ck_ideia_input"] = f"Sujeito: {p_suj}\n\nAção: {p_act}\n\nCenário: {p_cen}\n\nIluminação: {p_ilu}\n\nEstilo: {p_est}"
+                st.session_state["ck_img_parametros"] = {"sujeito": p_suj, "acao": p_act, "cenario": p_cen, "iluminacao": p_ilu, "estilo_camera": p_est}
+                st.rerun()
+
+    # --------------------------------------------------------------------------
+    # PASSO 3: MODIFICADORES
+    # --------------------------------------------------------------------------
+    st.markdown("---")
+    st.markdown("### 3️⃣ Passo 3: Modificadores Globais")
+    st.caption("ℹ️ *Aviso: Estes filtros guiam a geração do seu prompt final. (Também alteram a leitura caso envie uma Imagem no Passo 2).*")
     
     with st.container(border=True):
-        st.markdown("### 🧬 Agentes Modificadores Globais")
         col_m1, col_m2, col_m3 = st.columns(3)
         with col_m1: estilo_conversao = st.selectbox("Estilo de Arte:", ["Manter Estilo Original", "📸 Converter para Fotorrealismo", "🎨 Converter para Anime"], key="ck_estilo_conversao")
         with col_m2: foco_contexto = st.selectbox("Foco e Contexto:", ["Harmônico (Preencher/Embelezar)", "Literal (Direto, Sem Floreios)"], key="ck_foco_contexto")
         with col_m3: sens_escolhida = st.select_slider("Sensualidade:", options=OPCOES_SENSUALIDADE, key="ck_sens_slider", value=st.session_state.get("ck_sens_slider", OPCOES_SENSUALIDADE[1]))
 
-    with st.container(border=True):
-        st.markdown("### 🖼️ Extração Pericial de Imagem (Visão)")
-        col_img1, col_img2 = st.columns([4, 6])
-        with col_img1: img_file = st.file_uploader("Upload de Referência", type=["png", "jpg", "jpeg", "webp"], key="ck_img_uploader", label_visibility="collapsed")
-        with col_img2:
-            st.write("Aplica as regras globais de figurino e estilo na leitura.")
-            btn_ler = st.button("👁️ Extrair Prompt da Imagem", use_container_width=True)
-
-        if btn_ler:
-            if not img_file: st.warning("Selecione uma imagem primeiro.")
-            else:
-                with st.spinner("Analisando matriz óptica com Varredura Ultra-Densa..."):
-                    try:
-                        modelo_visao = st.session_state.get("modelo_visao_select", "gemini-3.5-flash")
-                        res = processar_imagem_visao(img_file, estilo_conversao, sens_escolhida, modelo_visao)
-                        if res["tipo"] == "json":
-                            st.session_state["ck_img_parametros"] = res["dados"]
-                            st.session_state["ck_ideia_input"] = f"{res['dados'].get('sujeito','')}, {res['dados'].get('acao','')}. Cenário: {res['dados'].get('cenario','')}. Iluminação: {res['dados'].get('iluminacao','')}. Estilo: {res['dados'].get('estilo_camera','')}."
-                        else:
-                            st.session_state["ck_ideia_input"] = res["texto"]
-                            st.session_state.pop("ck_img_parametros", None)
-                        st.session_state.pop("ck_preprompt", None)
-                        st.rerun()
-                    except Exception as e: st.error(_msg_erro_amigavel(e))
-
-        parametros = st.session_state.get("ck_img_parametros")
-        if parametros:
-            with st.expander("🔬 Detalhador Pericial de Imagem (Editável)", expanded=True):
-                st.caption("Ajuste os parâmetros extraídos da imagem.")
-                c1, c2 = st.columns(2)
-                with c1:
-                    p_suj = st.text_area("👤 Sujeito (Biotipo/Roupas):", value=parametros.get("sujeito", ""), height=150)
-                    p_cen = st.text_area("🏞️ Cenário:", value=parametros.get("cenario", ""), height=150)
-                with c2:
-                    p_act = st.text_area("🏃 Ação / Pose:", value=parametros.get("acao", ""), height=100)
-                    p_ilu = st.text_area("💡 Iluminação:", value=parametros.get("iluminacao", ""), height=100)
-                    p_est = st.text_area("📷 Estilo / Câmera:", value=parametros.get("estilo_camera", ""), height=100)
-                if st.button("🔄 Atualizar Narrativa Visual", use_container_width=True):
-                    st.session_state["ck_ideia_input"] = f"{p_suj}, {p_act}. Cenário: {p_cen}. Iluminação: {p_ilu}. Estilo: {p_est}."
-                    st.session_state["ck_img_parametros"] = {"sujeito": p_suj, "acao": p_act, "cenario": p_cen, "iluminacao": p_ilu, "estilo_camera": p_est}
-                    st.rerun()
-
-        st.markdown("---")
-        st.markdown("### 💡 Qual é a NARRATIVA VISUAL do seu prompt?")
-        ideia_input = st.text_area("Descreva ou edite a cena:", key="ck_ideia_input", height=140)
-
-        col_b1, col_b2, col_b3 = st.columns([4, 4, 2])
-        with col_b1: btn_pre = st.button("👁️ Rascunhar Cena (Pré-prompt)", type="primary", use_container_width=True)
-        with col_b2: btn_ava = st.button("🔍 Auditar no Compositômetro", use_container_width=True)
-        with col_b3:
-            if st.button("🗑️ Limpar Tudo", use_container_width=True):
-                st.session_state["ck_ideia_input"] = "" 
-                for k in ["ck_img_parametros","ck_preprompt","ck_preprompt_editado","ck_diagnostico","ck_prompt_final", "ck_sugestoes_marcadas"]: st.session_state.pop(k, None)
-                st.rerun()
+    # --------------------------------------------------------------------------
+    # PASSO 4: RASCUNHO E VALIDAÇÃO (Opcionais Prévios)
+    # --------------------------------------------------------------------------
+    st.markdown("---")
+    st.markdown("### 4️⃣ Passo 4: Rascunho & Validação (Opcional)")
+    col_b1, col_b2 = st.columns(2)
+    with col_b1: btn_pre = st.button("👁️ Rascunhar Cena (Pré-prompt Traduzido)", use_container_width=True)
+    with col_b2: btn_ava = st.button("🔍 Auditar no Compositômetro (Raio-X)", use_container_width=True)
 
     if btn_pre:
-        if not ideia_input.strip(): st.warning("Escreva sua ideia antes.")
+        if not st.session_state.get("ck_ideia_input", "").strip(): st.warning("Escreva a sua Ideia no Passo 1.")
         else:
             with st.spinner("Desenhando a cena..."):
                 try:
-                    p = f"IDEIA:\n{ideia_input.strip()}\n\n[AGENTE: SENSUALIDADE NÍVEL '{sens_escolhida}']: Aplique roupas/pose relativas a este nível substituindo a roupa do usuário se explícito."
-                    if "Literal" in foco_contexto:
-                        p += "\n[AGENTE: CONTEXTO LITERAL]: Seja 100% fiel e obediente à ideia original. Crie APENAS o cenário lógico, físico e elementar inerente à ação. É ESTRITAMENTE PROIBIDO adicionar elementos não solicitados, embelezamentos ou 'fluff' estético."
+                    p = f"IDEIA:\n{st.session_state['ck_ideia_input']}\n\n[AGENTE: SENSUALIDADE NÍVEL '{sens_escolhida}']"
+                    if "Literal" in foco_contexto: p += "\n[AGENTE LITERAL]: Seja 100% fiel, sem floreios estéticos inúteis."
                     txt, prov = _chamar_provedor_ia(SYS_GERADOR_PREPROMPT, p)
-                    st.session_state["ck_ideia"] = ideia_input.strip()
+                    st.session_state["ck_ideia_hist_fix"] = st.session_state['ck_ideia_input']
                     st.session_state["ck_preprompt"] = txt
                     st.session_state["ck_preprompt_editado"] = txt 
                     st.rerun()
                 except Exception as e: st.error(_msg_erro_amigavel(e))
 
     if btn_ava:
-        if not ideia_input.strip(): st.warning("Escreva sua ideia antes.")
+        if not st.session_state.get("ck_ideia_input", "").strip(): st.warning("Escreva a sua Ideia no Passo 1.")
         else:
             with st.spinner("Raio-X em andamento..."):
                 try:
-                    txt, prov = _chamar_provedor_ia(SYS_COMPOSITOMETRO, f"AVALIE:\n{ideia_input.strip()}")
+                    txt, prov = _chamar_provedor_ia(SYS_COMPOSITOMETRO, f"AVALIE:\n{st.session_state['ck_ideia_input']}")
                     diag = parse_json_ia(txt)
-                    if not diag: st.error("⚠️ O Compositômetro retornou um formato inesperado. Tente novamente.")
+                    if not diag: st.error("⚠️ Erro de formato no Raio-X. Tente novamente.")
                     else: st.session_state["ck_diagnostico"] = diag; st.rerun()
                 except Exception as e: st.error(_msg_erro_amigavel(e))
 
+    # Exibição do Rascunho e Raio-X
     if st.session_state.get("ck_preprompt"):
-        with st.container(border=True):
-            st.markdown("### 🎨 Pré-prompt (Cena Traduzida)")
-            st.markdown("<div class='ps-legend'><span><span class='ps-user-word'>Ideia Original</span></span> • <span><span class='ps-ai-word'>Desenvolvimento da IA</span></span></div>", unsafe_allow_html=True)
-            st.markdown(f"<div class='ps-preprompt'>{_ps_markup_origin(st.session_state['ck_preprompt'], st.session_state.get('ck_ideia', ''))}</div>", unsafe_allow_html=True)
-            pre_ed = st.text_area("Ajuste fino manual (Esta caixa será enviada ao Sintetizador):", value=st.session_state.get("ck_preprompt_editado", ""), key="ck_preprompt_editado", height=130)
-            if pre_ed != st.session_state.get("ck_preprompt"): st.session_state["ck_preprompt"] = pre_ed
+        st.markdown("<div class='ps-legend'><span><span class='ps-user-word'>Ideia Original</span></span> • <span><span class='ps-ai-word'>Ajuste da IA</span></span></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='ps-preprompt'>{_ps_markup_origin(st.session_state['ck_preprompt'], st.session_state.get('ck_ideia_hist_fix', ''))}</div>", unsafe_allow_html=True)
+        pre_ed = st.text_area("Ajuste fino do Rascunho (Esta caixa substituirá a Ideia para o Motor Final):", value=st.session_state.get("ck_preprompt_editado", ""), key="ck_preprompt_editado", height=130)
+        if pre_ed != st.session_state.get("ck_preprompt"): st.session_state["ck_preprompt"] = pre_ed
 
     diag = st.session_state.get("ck_diagnostico")
     if diag:
         with st.container(border=True):
-            st.markdown("#### 📊 Raio-X do Compositômetro")
             c1, c2, c3, c4, c5 = st.columns(5)
             def _bdg(s): return ("comp-green","✓") if s in ["Definido","Presente"] else ("comp-amber","!") if s in ["Vago","Estática"] else ("comp-blue","⚙️")
             for col, key, label in zip([c1,c2,c3,c4,c5], ["sujeito_status","acao_status","cenario_status","iluminacao_status","camera_status"], ["Sujeito","Ação","Cenário","Luz","Câmera"]):
                 cl, ic = _bdg(diag.get(key, ""))
                 col.markdown(f"<div class='comp-badge {cl}'>{ic} {label}: {diag.get(key, 'Pendente')}</div>", unsafe_allow_html=True) 
             
-            st.write("")
             if diag.get("diagnostico_texto"): st.caption(f"ℹ️ **Diagnóstico:** {diag.get('diagnostico_texto')}")
             sugestoes = diag.get("sugestoes_cirurgicas", [])
             if sugestoes:
-                st.markdown("##### ✨ Sugestões Cirúrgicas Opcionais:")
+                st.markdown("##### ✨ Sugestões Cirúrgicas Opcionais (Ajudam o Motor):")
                 selecionadas = []
                 for idx, sug in enumerate(sugestoes):
                     if st.checkbox(sug, key=f"sug_chk_{idx}"): selecionadas.append(sug)
                 st.session_state["ck_sugestoes_marcadas"] = selecionadas
             else: st.session_state["ck_sugestoes_marcadas"] = []
 
-    st.write("")
-    col_dest1, col_dest2 = st.columns([7, 3])
-    with col_dest1: dest_sel = st.selectbox("Plataforma / Motor de Imagem Alvo (OBRIGATÓRIO):", OPCOES_DESTINO, index=0, key="ck_destino_select")
+    # --------------------------------------------------------------------------
+    # PASSO 5: MOTOR E SÍNTESE
+    # --------------------------------------------------------------------------
+    st.markdown("---")
+    st.markdown("### 5️⃣ Passo 5: Motor Destino & Síntese Final")
+    col_dest1, col_dest2 = st.columns([6, 4])
+    with col_dest1: dest_sel = st.selectbox("Selecione a Plataforma de Imagem Alvo:", OPCOES_DESTINO, index=0, key="ck_destino_select")
     with col_dest2: 
         st.write("")
         st.write("")
@@ -678,21 +728,22 @@ def renderizar_cockpit():
 
     if btn_exec:
         if dest_sel == "Selecione o Motor Destino...": st.error("🛑 Pare! Selecione para qual motor de IA este prompt será compilado.")
-        elif not ideia_input.strip(): st.warning("Descreva sua ideia antes.")
+        elif not st.session_state.get("ck_ideia_input", "").strip(): st.warning("Descreva a sua Ideia no Passo 1 antes de gerar.")
         else:
-            with st.spinner(f"Compilando sintaxe para {dest_sel}..."):
+            with st.spinner(f"Compilando sintaxe ultra-otimizada para {dest_sel}..."):
                 try:
                     eng = BANCO_DE_MOTORES[dest_sel]
-                    bloco = f"\n\n======================================\n3. SINTAXE NATIVA: {dest_sel}\n======================================\n- POSITIVO: {eng['regra_positivo']}\n- NEGATIVO: {eng.get('regra_negativo', 'N/A')}\n\nSAÍDA OBRIGATÓRIA:\n1. PROMPT (MANDATORY IN ENGLISH)\n2. NEGATIVE PROMPT (MANDATORY IN ENGLISH)\n3. LEGENDA (Português)\n4. HASHTAGS\n💡 DICA TÉCNICA: {eng['dica_tecnica']}"
+                    bloco = f"\n\n======================================\n3. SINTAXE NATIVA: {dest_sel}\n======================================\n- POSITIVO: {eng['regra_positivo']}\n- NEGATIVO FIXO: {eng.get('regra_negativo', 'N/A')}\n\nSAÍDA OBRIGATÓRIA:\n1. PROMPT (ENGLISH)\n2. NEGATIVE PROMPT DINÂMICO (ENGLISH)\n3. LEGENDA\n4. HASHTAGS\n💡 DICA TÉCNICA: {eng['dica_tecnica']}"
                     
-                    txt_b = st.session_state.get("ck_preprompt_editado", ideia_input.strip())
+                    # Usa o pre-prompt editado se existir, senão usa a Ideia do Passo 1
+                    txt_b = st.session_state.get("ck_preprompt_editado", st.session_state.get("ck_ideia_input", ""))
                     sug_aceitas = st.session_state.get("ck_sugestoes_marcadas", [])
-                    sug_str = "\n".join(f"- {s}" for s in sug_aceitas) if sug_aceitas else "Nenhuma sugestão adicional marcada."
+                    sug_str = "\n".join(f"- {s}" for s in sug_aceitas) if sug_aceitas else "Nenhuma sugestão."
                     
-                    p = f"DESTINO: {dest_sel}\nRATING: {sens_escolhida}\n\n1. NARRATIVA VISUAL:\n{txt_b}\n\n2. SUGESTÕES CIRÚRGICAS INCORPORADAS:\n{sug_str}\n\nGere o prompt garantindo a ancoragem de Sujeito."
+                    p = f"DESTINO: {dest_sel}\nRATING: {sens_escolhida}\n\n1. NARRATIVA VISUAL:\n{txt_b}\n\n2. SUGESTÕES CIRÚRGICAS INCORPORADAS:\n{sug_str}"
                     
-                    if "Literal" in foco_contexto: p += "\n[MODO LITERAL ATIVADO]: Você DEVE ignorar diretrizes estéticas excessivas da regra do motor. Remova termos de 'embelezamento' da sintaxe final, focando puramente nos atributos físicos e no cenário lógico elementar."
-                    p += "\n\n⚠️ CRITICAL INSTRUCTION: THE FINAL 'PROMPT' AND 'NEGATIVE' SECTIONS MUST BE GENERATED STRICTLY IN ENGLISH. DO NOT TRANSLATE THEM TO PORTUGUESE."
+                    if "Literal" in foco_contexto: p += "\n[MODO LITERAL ATIVADO]: Remova floreios da sintaxe final. Foque puramente na geometria física."
+                    p += "\n\n⚠️ OBRIGATÓRIO: 'PROMPT' E 'NEGATIVE' EXCLUSIVAMENTE EM INGLÊS."
 
                     res, prov = _chamar_provedor_ia(SYS_MESTRE_CORE + bloco, p)
                     st.session_state["ck_prompt_final"] = res
@@ -701,20 +752,30 @@ def renderizar_cockpit():
                     st.rerun()
                 except Exception as e: st.error(_msg_erro_amigavel(e))
 
+    # OUTPUT FINAL E DOWNLOADS
     if st.session_state.get("ck_prompt_final"):
         st.markdown("---")
         st.markdown(f"### 📋 Prompt Especializado ({st.session_state.get('ck_dest_usado')})")
+        st.caption(f"Gerado via {st.session_state.get('ck_prov_usado')}")
+        
         try: st.code(st.session_state["ck_prompt_final"], language="markdown", wrap_lines=True)
         except Exception: st.markdown(f"<div class='ps-preprompt' style='white-space: pre-wrap; word-wrap: break-word; font-family: monospace;'>{html.escape(st.session_state['ck_prompt_final'])}</div>", unsafe_allow_html=True)
             
         c_save1, c_save2 = st.columns(2)
         with c_save1:
-            if st.button("💾 Salvar no Histórico", use_container_width=True):
+            if st.button("💾 Salvar no Histórico em Nuvem", use_container_width=True):
                 ok_hist, erro_hist = _historico_sheets(st.session_state.get("user_email", ""), st.session_state["ck_prompt_final"], acao="adicionar")
                 if ok_hist: st.success("✅ Prompt salvo no histórico!")
                 else: 
                     if erro_hist and "_truncado" in str(erro_hist): st.warning("⚠️ Prompt truncado no histórico (limite de 25.000 caracteres).")
                     else: st.warning(f"⚠️ {erro_hist or 'Não foi possível salvar.'}")
+        with c_save2:
+            st.download_button(
+                label="📥 Baixar Prompt (.txt)", 
+                data=st.session_state["ck_prompt_final"], 
+                file_name=f"prompt_studio_{int(time.time())}.txt", 
+                use_container_width=True
+            )
 
 # ==============================================================================
 # 9. PONTO DE ENTRADA (VITRINE DINÂMICA E LOGIN)
