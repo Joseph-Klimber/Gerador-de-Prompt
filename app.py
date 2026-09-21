@@ -3,13 +3,10 @@
 Prompt Studio Cockpit — Interface Minimalista de Alta Precisão
 Arquitetura: Shift-Left (Modificadores no Ponto Zero) + BYOK (Traga sua Chave) + Carga Distribuída.
 
-v3.0 — Master UX & Lógica Tri-Core:
-  • Layout Top-Down: 5 Passos cronológicos (Ideia -> Imagem -> Modificadores -> Rascunho -> Síntese)
-  • Negativos Dinâmicos Injetados pelo Motor
-  • Modal de Histórico (st.dialog) e Botões de Download direto (.txt)
-  • Privacidade de UI (E-mail ofuscado)
-  • Slogan BYOK e clareza de contexto adicionados
-  • Mantido o Fallback Tri-Core e Ultra-Densidade Visual (Modelos 3.x Flash/Pro)
+v3.1 — Correção de Lógica de Estado (Streamlit State Sync):
+  • Removidas as colisões de "key vs value" nos widgets text_area.
+  • Injeção programática perfeita (a Extração de Imagem atualiza a Ideia Principal instantaneamente).
+  • Botão de Limpar Ideia otimizado sem exceções de API.
 """
 
 import os
@@ -252,7 +249,6 @@ def _descriptografar(texto):
     except Exception: return texto
 
 def _request_with_retry(method, url, max_retries=2, retry_statuses=(429, 500, 502, 503, 504), **kwargs):
-    """Repete apenas falhas transitórias, sem repetir erros de autenticação."""
     for tentativa in range(max_retries + 1):
         try:
             resposta = requests.request(method, url, **kwargs)
@@ -532,10 +528,9 @@ def processar_imagem_visao(arquivo_imagem, estilo_conversao, nivel_sensualidade,
     elif "Anime" in estilo_conversao: user_prompt += "\n[MODIFICADOR 1: ESTILO]: Traduza para ILUSTRAÇÃO 2D ANIME."
 
     erros = []
-    # Loop seguro com retorno de ponteiro (seek)
     for idx, chave in enumerate(chaves_visao):
         try:
-            arquivo_imagem.seek(0) # <--- CORREÇÃO DE SEGURANÇA (Restaura o buffer)
+            arquivo_imagem.seek(0)
             img_pil = Image.open(arquivo_imagem)
             
             client = genai.Client(api_key=chave)
@@ -559,7 +554,6 @@ def renderizar_sidebar():
     st.sidebar.markdown("<div style='font-size: 0.95rem; color: var(--ps-blue); font-weight: 700; margin-bottom: 1rem;'>A porta é nossa, mas as chaves são suas.</div>", unsafe_allow_html=True)
     st.sidebar.markdown("## ⚙️ Centro de Conexão")
     
-    # E-mail ocultado por privacidade
     user_email_masked = mascarar_email(st.session_state.get('user_email', ''))
     st.sidebar.caption(f"Usuário: **{user_email_masked}**")
     
@@ -618,7 +612,6 @@ def _historico_sheets(email, prompt_texto=None, acao="listar"):
     if resp and resp.get("ok"): return True, resp.get("itens", [])
     return False, []
 
-# Modal Nativo Streamlit para visualizar Histórico
 @st.dialog("📝 Visualizador de Prompt (Histórico)")
 def modal_historico(conteudo):
     st.info("Utilize o ícone de 'Copiar' no canto superior direito do bloco de código abaixo.")
@@ -644,27 +637,25 @@ def renderizar_cockpit():
     st.markdown("<h1 class='ps-title'>Sua Ideia. Seu Motor. Controle Total.</h1>", unsafe_allow_html=True)
     st.markdown("<div class='ps-slogan'>A porta é nossa, mas as chaves são suas.</div>", unsafe_allow_html=True)
 
-    ideia_pendente = st.session_state.pop("_ck_ideia_input_pendente", None)
-    if ideia_pendente is not None:
-        st.session_state["ck_ideia_input"] = ideia_pendente
-        st.session_state.pop("ck_ideia_input_ui", None)
+    # Inicia as chaves de estado de forma segura
+    if "ideia_principal" not in st.session_state:
+        st.session_state.ideia_principal = ""
+    if "ck_preprompt_editado" not in st.session_state:
+        st.session_state.ck_preprompt_editado = ""
     
     # --------------------------------------------------------------------------
     # PASSO 1: A IDEIA (Texto Base)
     # --------------------------------------------------------------------------
     st.markdown("### 1️⃣ Passo 1: A Sua Ideia (A Narrativa Visual)")
     st.caption("O ponto de partida. Descreva o que imagina ou veja a caixa preencher-se magicamente usando o Passo 2.")
-    ideia_input = st.text_area("Insira a sua Ideia:", value=st.session_state.get("ck_ideia_input", ""), key="ck_ideia_input_ui", height=140, label_visibility="collapsed")
     
-    if st.session_state.get("ck_ideia_input_ui") != st.session_state.get("ck_ideia_input", ""):
-        st.session_state["ck_ideia_input"] = st.session_state.get("ck_ideia_input_ui", "")
+    # A caixa de texto reflete a variável de estado sem colisão de chave (sem param key=)
+    texto_digitado = st.text_area("Insira a sua Ideia:", value=st.session_state.ideia_principal, height=140, label_visibility="collapsed")
+    if texto_digitado != st.session_state.ideia_principal:
+        st.session_state.ideia_principal = texto_digitado
 
     if st.button("🗑️ Limpar Ideia", use_container_width=False):
-        st.session_state["ck_ideia_input"] = ""
-        # CORREÇÃO: Previne o StreamlitAPIException de modificação pós-renderização
-        if "ck_ideia_input_ui" in st.session_state:
-            del st.session_state["ck_ideia_input_ui"]
-            
+        st.session_state.ideia_principal = ""
         for k in ["ck_img_parametros","ck_preprompt","ck_preprompt_editado","ck_diagnostico","ck_prompt_final", "ck_sugestoes_marcadas"]: 
             st.session_state.pop(k, None)
         st.rerun()
@@ -697,29 +688,29 @@ def renderizar_cockpit():
                     if res["tipo"] == "json":
                         st.session_state["ck_img_parametros"] = res["dados"]
                         ideia_extraida = f"Sujeito: {res['dados'].get('sujeito','')}\n\nAção: {res['dados'].get('acao','')}\n\nCenário: {res['dados'].get('cenario','')}\n\nIluminação: {res['dados'].get('iluminacao','')}\n\nEstilo: {res['dados'].get('estilo_camera','')}"
-                        st.session_state["_ck_ideia_input_pendente"] = ideia_extraida
+                        st.session_state.ideia_principal = ideia_extraida
                     else:
-                        st.session_state["_ck_ideia_input_pendente"] = res["texto"]
+                        st.session_state.ideia_principal = res["texto"]
                         st.session_state.pop("ck_img_parametros", None)
                         
                     st.session_state.pop("ck_preprompt", None)
                     st.rerun()
                 except Exception as e: st.error(_msg_erro_amigavel(e))
 
-    # Expander de Edição Pericial se houver JSON da imagem
     parametros = st.session_state.get("ck_img_parametros")
     if parametros:
         with st.expander("🔬 Detalhador Pericial Extraído (Editável)", expanded=False):
             c1, c2 = st.columns(2)
             with c1:
-                p_suj = st.text_area("👤 Sujeito:", value=parametros.get("sujeito", ""), height=150, key="imagem_sujeito")
-                p_cen = st.text_area("🏞️ Cenário:", value=parametros.get("cenario", ""), height=150, key="imagem_cenario")
+                p_suj = st.text_area("👤 Sujeito:", value=parametros.get("sujeito", ""), height=150)
+                p_cen = st.text_area("🏞️ Cenário:", value=parametros.get("cenario", ""), height=150)
             with c2:
-                p_act = st.text_area("🏃 Ação:", value=parametros.get("acao", ""), height=100, key="imagem_acao")
-                p_ilu = st.text_area("💡 Iluminação:", value=parametros.get("iluminacao", ""), height=100, key="imagem_iluminacao")
-                p_est = st.text_area("📷 Estilo:", value=parametros.get("estilo_camera", ""), height=100, key="imagem_estilo")
+                p_act = st.text_area("🏃 Ação:", value=parametros.get("acao", ""), height=100)
+                p_ilu = st.text_area("💡 Iluminação:", value=parametros.get("iluminacao", ""), height=100)
+                p_est = st.text_area("📷 Estilo:", value=parametros.get("estilo_camera", ""), height=100)
             if st.button("🔄 Atualizar Caixa da Ideia com estas edições", use_container_width=True):
-                st.session_state["ck_ideia_input"] = f"Sujeito: {p_suj}\n\nAção: {p_act}\n\nCenário: {p_cen}\n\nIluminação: {p_ilu}\n\nEstilo: {p_est}"
+                nova_ideia = f"Sujeito: {p_suj}\n\nAção: {p_act}\n\nCenário: {p_cen}\n\nIluminação: {p_ilu}\n\nEstilo: {p_est}"
+                st.session_state.ideia_principal = nova_ideia
                 st.session_state["ck_img_parametros"] = {"sujeito": p_suj, "acao": p_act, "cenario": p_cen, "iluminacao": p_ilu, "estilo_camera": p_est}
                 st.rerun()
 
@@ -746,36 +737,37 @@ def renderizar_cockpit():
     with col_b2: btn_ava = st.button("🔍 Auditar no Compositômetro (Raio-X)", use_container_width=True)
 
     if btn_pre:
-        if not st.session_state.get("ck_ideia_input", "").strip(): st.warning("Escreva a sua Ideia no Passo 1.")
+        if not st.session_state.ideia_principal.strip(): st.warning("Escreva a sua Ideia no Passo 1.")
         else:
             with st.spinner("Desenhando a cena..."):
                 try:
-                    p = f"IDEIA:\n{st.session_state['ck_ideia_input']}\n\n[AGENTE: SENSUALIDADE NÍVEL '{sens_escolhida}']"
+                    p = f"IDEIA:\n{st.session_state.ideia_principal}\n\n[AGENTE: SENSUALIDADE NÍVEL '{sens_escolhida}']"
                     if "Literal" in foco_contexto: p += "\n[AGENTE LITERAL]: Seja 100% fiel, sem floreios estéticos inúteis."
                     txt, prov = _chamar_provedor_ia(SYS_GERADOR_PREPROMPT, p)
-                    st.session_state["ck_ideia_hist_fix"] = st.session_state['ck_ideia_input']
+                    st.session_state["ck_ideia_hist_fix"] = st.session_state.ideia_principal
                     st.session_state["ck_preprompt"] = txt
-                    st.session_state["ck_preprompt_editado"] = txt 
+                    st.session_state.ck_preprompt_editado = txt 
                     st.rerun()
                 except Exception as e: st.error(_msg_erro_amigavel(e))
 
     if btn_ava:
-        if not st.session_state.get("ck_ideia_input", "").strip(): st.warning("Escreva a sua Ideia no Passo 1.")
+        if not st.session_state.ideia_principal.strip(): st.warning("Escreva a sua Ideia no Passo 1.")
         else:
             with st.spinner("Raio-X em andamento..."):
                 try:
-                    txt, prov = _chamar_provedor_ia(SYS_COMPOSITOMETRO, f"AVALIE:\n{st.session_state['ck_ideia_input']}")
+                    txt, prov = _chamar_provedor_ia(SYS_COMPOSITOMETRO, f"AVALIE:\n{st.session_state.ideia_principal}")
                     diag = parse_json_ia(txt)
                     if not diag: st.error("⚠️ Erro de formato no Raio-X. Tente novamente.")
                     else: st.session_state["ck_diagnostico"] = diag; st.rerun()
                 except Exception as e: st.error(_msg_erro_amigavel(e))
 
-    # Exibição do Rascunho e Raio-X
     if st.session_state.get("ck_preprompt"):
         st.markdown("<div class='ps-legend'><span><span class='ps-user-word'>Ideia Original</span></span> • <span><span class='ps-ai-word'>Ajuste da IA</span></span></div>", unsafe_allow_html=True)
         st.markdown(f"<div class='ps-preprompt'>{_ps_markup_origin(st.session_state['ck_preprompt'], st.session_state.get('ck_ideia_hist_fix', ''))}</div>", unsafe_allow_html=True)
-        pre_ed = st.text_area("Ajuste fino do Rascunho (Esta caixa substituirá a Ideia para o Motor Final):", value=st.session_state.get("ck_preprompt_editado", ""), key="ck_preprompt_editado", height=130)
-        if pre_ed != st.session_state.get("ck_preprompt"): st.session_state["ck_preprompt"] = pre_ed
+        
+        pre_ed_digitado = st.text_area("Ajuste fino do Rascunho (Esta caixa substituirá a Ideia para o Motor Final):", value=st.session_state.ck_preprompt_editado, height=130)
+        if pre_ed_digitado != st.session_state.ck_preprompt_editado:
+            st.session_state.ck_preprompt_editado = pre_ed_digitado
 
     diag = st.session_state.get("ck_diagnostico")
     if diag:
@@ -810,15 +802,14 @@ def renderizar_cockpit():
 
     if btn_exec:
         if dest_sel == "Selecione o Motor Destino...": st.error("🛑 Pare! Selecione para qual motor de IA este prompt será compilado.")
-        elif not st.session_state.get("ck_ideia_input", "").strip(): st.warning("Descreva a sua Ideia no Passo 1 antes de gerar.")
+        elif not st.session_state.ideia_principal.strip(): st.warning("Descreva a sua Ideia no Passo 1 antes de gerar.")
         else:
             with st.spinner(f"Compilando sintaxe ultra-otimizada para {dest_sel}..."):
                 try:
                     eng = BANCO_DE_MOTORES[dest_sel]
                     bloco = f"\n\n======================================\n3. SINTAXE NATIVA: {dest_sel}\n======================================\n- POSITIVO: {eng['regra_positivo']}\n- NEGATIVO FIXO: {eng.get('regra_negativo', 'N/A')}\n\nSAÍDA OBRIGATÓRIA:\n1. PROMPT (ENGLISH)\n2. NEGATIVE PROMPT DINÂMICO (ENGLISH)\n3. LEGENDA\n4. HASHTAGS\n💡 DICA TÉCNICA: {eng['dica_tecnica']}"
                     
-                    # Usa o pre-prompt editado se existir, senão usa a Ideia do Passo 1
-                    txt_b = st.session_state.get("ck_preprompt_editado", st.session_state.get("ck_ideia_input", ""))
+                    txt_b = st.session_state.ck_preprompt_editado if st.session_state.get("ck_preprompt") else st.session_state.ideia_principal
                     sug_aceitas = st.session_state.get("ck_sugestoes_marcadas", [])
                     sug_str = "\n".join(f"- {s}" for s in sug_aceitas) if sug_aceitas else "Nenhuma sugestão."
                     
