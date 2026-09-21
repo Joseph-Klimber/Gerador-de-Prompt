@@ -14,6 +14,7 @@ v3.0 — Master UX & Lógica Tri-Core:
 
 import os
 import json
+import copy
 import random
 import re
 import secrets
@@ -176,21 +177,51 @@ def normalizar_texto(texto):
     )
 
 def parse_json_ia(texto):
-    if not texto: return None
-    limpo = str(texto).strip().strip("`")
-    if limpo.lower().startswith("json"): limpo = limpo[4:].strip()
-    ini = limpo.find("{")
-    if ini >= 0:
-        depth = 0
-        for i in range(ini, len(limpo)):
-            if limpo[i] == "{": depth += 1
-            elif limpo[i] == "}":
-                depth -= 1
-                if depth == 0:
-                    limpo = limpo[ini:i+1]
-                    break
-    try: return json.loads(limpo)
-    except Exception: return None
+    if not texto:
+        return None
+    limpo = str(texto).strip()
+    limpo = re.sub(r"^```(?:json)?\s*", "", limpo, flags=re.IGNORECASE)
+    limpo = re.sub(r"\s*```$", "", limpo).strip()
+
+    try:
+        return json.loads(limpo)
+    except json.JSONDecodeError:
+        pass
+
+    inicio = limpo.find("{")
+    if inicio < 0:
+        return None
+
+    profundidade = 0
+    em_string = False
+    escapado = False
+    fim = None
+    for indice in range(inicio, len(limpo)):
+        caractere = limpo[indice]
+        if em_string:
+            if escapado:
+                escapado = False
+            elif caractere == "\\":
+                escapado = True
+            elif caractere == '"':
+                em_string = False
+            continue
+        if caractere == '"':
+            em_string = True
+        elif caractere == "{":
+            profundidade += 1
+        elif caractere == "}":
+            profundidade -= 1
+            if profundidade == 0:
+                fim = indice + 1
+                break
+
+    if fim is None:
+        return None
+    try:
+        return json.loads(limpo[inicio:fim])
+    except (TypeError, json.JSONDecodeError):
+        return None
 
 def _chave_fernet():
     segredo = None
@@ -220,27 +251,57 @@ def _descriptografar(texto):
     try: return f.decrypt(texto.encode("utf-8")).decode("utf-8")
     except Exception: return texto
 
+def _request_with_retry(method, url, max_retries=2, retry_statuses=(429, 500, 502, 503, 504), **kwargs):
+    """Repete apenas falhas transitórias, sem repetir erros de autenticação."""
+    for tentativa in range(max_retries + 1):
+        try:
+            resposta = requests.request(method, url, **kwargs)
+            if resposta.status_code not in retry_statuses or tentativa == max_retries:
+                return resposta
+            retry_after = resposta.headers.get("Retry-After", "")
+            try:
+                espera = float(retry_after) if retry_after else 2 ** tentativa
+            except (TypeError, ValueError):
+                espera = 2 ** tentativa
+            time.sleep(min(espera, 8.0))
+        except requests.RequestException:
+            if tentativa == max_retries:
+                raise
+            time.sleep(min(2 ** tentativa, 8.0))
+    raise RuntimeError("Falha HTTP sem resposta.")
+
 def _req_apps_script(params, timeout=20):
     try:
-        resp = requests.get(APPS_SCRIPT_URL.strip(), params=params, timeout=timeout, allow_redirects=True)
+        resp = _request_with_retry(
+            "GET", APPS_SCRIPT_URL.strip(), params=params, timeout=timeout,
+            allow_redirects=True
+        )
         if resp.status_code == 200: return resp.json()
         return {"ok": False, "erro": f"Servidor retornou HTTP {resp.status_code}."}
     except Exception as e: return {"ok": False, "erro": f"Falha de conexão com o serviço de dados: {e}"}
 
 def carregar_config(email=None):
+    email_normalizado = (email or "").strip().lower()
+    cache = st.session_state.get("_config_cache", {})
+    item_cache = cache.get(email_normalizado)
+    if item_cache and time.time() - item_cache[0] < 30:
+        return copy.deepcopy(item_cache[1])
+
     config = {
         "chaves": {"Chave 1": "", "Chave 2": ""}, "openrouter_api_key": "",
         "provedor_ia": "Automático", "fallback_automatico": True,
         "gemini_so_visao": False, "modelo_openrouter": "meta-llama/llama-3.1-70b-instruct:free", 
         "modelo_padrao": "gemini-3.5-flash"
     }
-    dados = _req_apps_script({"acao": "carregar_config", "email": (email or "").strip().lower()})
+    dados = _req_apps_script({"acao": "carregar_config", "email": email_normalizado})
     if dados and dados.get("ok") and dados.get("config"):
         try:
             config.update(json.loads(dados["config"]))
             config["chaves"] = {k: _descriptografar(v) for k, v in config.get("chaves", {}).items()}
             if config.get("openrouter_api_key"): config["openrouter_api_key"] = _descriptografar(config["openrouter_api_key"])
-            return config
+            cache[email_normalizado] = (time.time(), copy.deepcopy(config))
+            st.session_state["_config_cache"] = cache
+            return copy.deepcopy(config)
         except Exception: pass
             
     caminho = os.path.join(PASTA_CONFIGS, f"config_{_slug_usuario(email)}.json")
@@ -250,7 +311,9 @@ def carregar_config(email=None):
             config["chaves"] = {k: _descriptografar(v) for k, v in config.get("chaves", {}).items()}
             if config.get("openrouter_api_key"): config["openrouter_api_key"] = _descriptografar(config["openrouter_api_key"])
         except Exception: pass
-    return config
+    cache[email_normalizado] = (time.time(), copy.deepcopy(config))
+    st.session_state["_config_cache"] = cache
+    return copy.deepcopy(config)
 
 def salvar_config(dados, email=None):
     dados = dict(dados)
@@ -259,13 +322,19 @@ def salvar_config(dados, email=None):
     
     payload = {"acao": "salvar_config", "email": (email or "").strip().lower(), "config": json.dumps(dados, ensure_ascii=False)}
     try:
-        resp = requests.post(APPS_SCRIPT_URL.strip(), json=payload, timeout=20, allow_redirects=True)
-        if resp.status_code == 200 and resp.json().get("ok"): return True, None
+        resp = _request_with_retry(
+            "POST", APPS_SCRIPT_URL.strip(), json=payload, timeout=20,
+            allow_redirects=True
+        )
+        if resp.status_code == 200 and resp.json().get("ok"):
+            st.session_state.get("_config_cache", {}).pop((email or "").strip().lower(), None)
+            return True, None
     except Exception: pass
         
     os.makedirs(PASTA_CONFIGS, exist_ok=True)
     with open(os.path.join(PASTA_CONFIGS, f"config_{_slug_usuario(email)}.json"), "w", encoding="utf-8") as f:
         json.dump(dados, f, indent=4, ensure_ascii=False)
+    st.session_state.get("_config_cache", {}).pop((email or "").strip().lower(), None)
     return False, "Erro ao salvar na Nuvem. Cópia salva localmente."
 
 def _extrair_texto_resposta(obj):
@@ -292,7 +361,10 @@ def _msg_erro_amigavel(e):
 def verificar_acesso_sheets(email):
     try:
         params = {"acao": "verificar_acesso", "email": (email or "").strip().lower()}
-        response = requests.get(APPS_SCRIPT_URL.strip(), params=params, timeout=15, allow_redirects=True)
+        response = _request_with_retry(
+            "GET", APPS_SCRIPT_URL.strip(), params=params, timeout=15,
+            allow_redirects=True
+        )
         if response.status_code == 200:
             dados = response.json()
             if not dados.get("encontrado", False): return False, dados.get("expiracao", ""), "⚠️ E-mail não encontrado."
@@ -361,7 +433,9 @@ def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.5-fl
                     "HTTP-Referer": "http" + "s://promptstudio.local",
                     "X-Title": "Prompt Studio Cockpit"
                 }
-                resp = requests.post(url_or, headers=headers, json=payload, timeout=90)
+                resp = _request_with_retry(
+                    "POST", url_or, headers=headers, json=payload, timeout=90
+                )
                 resp.raise_for_status()
                 texto = _extrair_texto_resposta(resp.json())
             
@@ -532,7 +606,10 @@ def _historico_sheets(email, prompt_texto=None, acao="listar"):
         truncado = len(str(prompt_texto)) > MAX_HISTORY_CHARS
         payload = { "acao": "adicionar_historico", "email": email, "prompt": str(prompt_texto)[:MAX_HISTORY_CHARS], "_truncado": truncado }
         try:
-            resp = requests.post(APPS_SCRIPT_URL.strip(), json=payload, timeout=30, allow_redirects=True)
+            resp = _request_with_retry(
+                "POST", APPS_SCRIPT_URL.strip(), json=payload, timeout=30,
+                allow_redirects=True
+            )
             if resp.status_code == 200 and resp.json().get("ok"): return True, None
         except Exception as e: return False, f"Falha de conexão: {e}"
         return False, "Erro ao processar."
@@ -566,6 +643,11 @@ def renderizar_cockpit():
     st.markdown("<div class='ps-kicker'>PROMPT STUDIO COCKPIT · ATRITO ZERO</div>", unsafe_allow_html=True)
     st.markdown("<h1 class='ps-title'>Sua Ideia. Seu Motor. Controle Total.</h1>", unsafe_allow_html=True)
     st.markdown("<div class='ps-slogan'>A porta é nossa, mas as chaves são suas.</div>", unsafe_allow_html=True)
+
+    ideia_pendente = st.session_state.pop("_ck_ideia_input_pendente", None)
+    if ideia_pendente is not None:
+        st.session_state["ck_ideia_input"] = ideia_pendente
+        st.session_state.pop("ck_ideia_input_ui", None)
     
     # --------------------------------------------------------------------------
     # PASSO 1: A IDEIA (Texto Base)
@@ -615,9 +697,9 @@ def renderizar_cockpit():
                     if res["tipo"] == "json":
                         st.session_state["ck_img_parametros"] = res["dados"]
                         ideia_extraida = f"Sujeito: {res['dados'].get('sujeito','')}\n\nAção: {res['dados'].get('acao','')}\n\nCenário: {res['dados'].get('cenario','')}\n\nIluminação: {res['dados'].get('iluminacao','')}\n\nEstilo: {res['dados'].get('estilo_camera','')}"
-                        st.session_state["ck_ideia_input"] = ideia_extraida
+                        st.session_state["_ck_ideia_input_pendente"] = ideia_extraida
                     else:
-                        st.session_state["ck_ideia_input"] = res["texto"]
+                        st.session_state["_ck_ideia_input_pendente"] = res["texto"]
                         st.session_state.pop("ck_img_parametros", None)
                         
                     st.session_state.pop("ck_preprompt", None)
@@ -630,12 +712,12 @@ def renderizar_cockpit():
         with st.expander("🔬 Detalhador Pericial Extraído (Editável)", expanded=False):
             c1, c2 = st.columns(2)
             with c1:
-                p_suj = st.text_area("👤 Sujeito:", value=parametros.get("sujeito", ""), height=150)
-                p_cen = st.text_area("🏞️ Cenário:", value=parametros.get("cenario", ""), height=150)
+                p_suj = st.text_area("👤 Sujeito:", value=parametros.get("sujeito", ""), height=150, key="imagem_sujeito")
+                p_cen = st.text_area("🏞️ Cenário:", value=parametros.get("cenario", ""), height=150, key="imagem_cenario")
             with c2:
-                p_act = st.text_area("🏃 Ação:", value=parametros.get("acao", ""), height=100)
-                p_ilu = st.text_area("💡 Iluminação:", value=parametros.get("iluminacao", ""), height=100)
-                p_est = st.text_area("📷 Estilo:", value=parametros.get("estilo_camera", ""), height=100)
+                p_act = st.text_area("🏃 Ação:", value=parametros.get("acao", ""), height=100, key="imagem_acao")
+                p_ilu = st.text_area("💡 Iluminação:", value=parametros.get("iluminacao", ""), height=100, key="imagem_iluminacao")
+                p_est = st.text_area("📷 Estilo:", value=parametros.get("estilo_camera", ""), height=100, key="imagem_estilo")
             if st.button("🔄 Atualizar Caixa da Ideia com estas edições", use_container_width=True):
                 st.session_state["ck_ideia_input"] = f"Sujeito: {p_suj}\n\nAção: {p_act}\n\nCenário: {p_cen}\n\nIluminação: {p_ilu}\n\nEstilo: {p_est}"
                 st.session_state["ck_img_parametros"] = {"sujeito": p_suj, "acao": p_act, "cenario": p_cen, "iluminacao": p_ilu, "estilo_camera": p_est}
