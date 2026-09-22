@@ -149,6 +149,23 @@ def normalizar_texto(texto):
         if unicodedata.category(c) != "Mn"
     )
 
+def _ps_markup_origin(preprompt, ideia_original):
+    try:
+        if not preprompt:
+            return ""
+        texto_orig = set(normalizar_texto(ideia_original).split())
+        partes = []
+        for token in re.split(r"(\s+)", str(preprompt)):
+            if not token.strip():
+                partes.append(html.escape(token))
+            elif normalizar_texto(token) in texto_orig:
+                partes.append(f"<span class=\"ps-user-word\">{html.escape(token)}</span>")
+            else:
+                partes.append(f"<span class=\"ps-ai-word\">{html.escape(token)}</span>")
+        return "".join(partes)
+    except Exception:
+        return html.escape(str(preprompt or ""))
+
 def parse_json_ia(texto):
     if not texto:
         return None
@@ -305,14 +322,16 @@ def salvar_config(dados, email=None):
             allow_redirects=True
         )
         if resp.status_code == 200 and resp.json().get("ok"):
-            st.session_state.get("_config_cache", {}).pop((email or "").strip().lower(), None)
+            if "_config_cache" in st.session_state:
+                st.session_state["_config_cache"].pop((email or "").strip().lower(), None)
             return True, None
     except Exception: pass
-        
+
     os.makedirs(PASTA_CONFIGS, exist_ok=True)
     with open(os.path.join(PASTA_CONFIGS, f"config_{_slug_usuario(email)}.json"), "w", encoding="utf-8") as f:
         json.dump(dados, f, indent=4, ensure_ascii=False)
-    st.session_state.get("_config_cache", {}).pop((email or "").strip().lower(), None)
+    if "_config_cache" in st.session_state:
+        st.session_state["_config_cache"].pop((email or "").strip().lower(), None)
     return False, "Erro ao salvar na Nuvem. Cópia salva localmente."
 
 def _msg_erro_amigavel(e):
@@ -335,11 +354,28 @@ def verificar_acesso_sheets(email):
             if not dados.get("encontrado", False): return False, dados.get("expiracao", ""), "⚠️ E-mail não encontrado."
             exp = str(dados.get("expiracao", "")).strip()
             if exp:
-                for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d/%m/%Y %H:%M", "%Y-%m-%d %H:%M:%S"):
-                    try:
-                        if datetime.strptime(exp.split("T")[0], fmt).date() < datetime.now().date(): return False, exp, f"⚠️ Acesso expirou em {exp}."
+                exp_candidatos = [exp.strip(), exp.split("T")[0].strip()]
+                if " " in exp and "T" not in exp:
+                    exp_candidatos.append(exp.split(" ")[0].strip())
+                data_expiracao = None
+                for cand in exp_candidatos:
+                    for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%Y/%m/%d"):
+                        try:
+                            data_expiracao = datetime.strptime(cand, fmt).date()
+                            break
+                        except Exception:
+                            continue
+                    if data_expiracao is not None:
                         break
-                    except Exception: continue
+                if data_expiracao is None:
+                    for fmt in ("%d/%m/%Y %H:%M", "%d/%m/%Y %H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+                        try:
+                            data_expiracao = datetime.strptime(exp.replace("T", " ").strip(), fmt).date()
+                            break
+                        except Exception:
+                            continue
+                if data_expiracao is not None and data_expiracao < datetime.now().date():
+                    return False, exp, f"⚠️ Acesso expirou em {exp}."
             return True, exp, None
         return False, "", f"⚠️ Erro do servidor {response.status_code}."
     except Exception as e: return False, "", f"⚠️ Falha na conexão: {e}"
@@ -395,60 +431,108 @@ NUNCA entregue um prompt negativo superficial apenas com a base fixa do motor.
 - Junte o seu 'Negativo Dinâmico' com a base fixa da Regra do Motor.
 """
 
-def _chamar_motor_texto(system_prompt, user_prompt, modelo_gemini="gemini-1.5-flash", temperature=0.25):
-    config = carregar_config(st.session_state.get("user_email", ""))
-    chave_texto = st.session_state.get("input_key_texto", "").strip() or config.get("chaves", {}).get("Chave Texto", "")
-
-    if not chave_texto or genai is None:
-        raise RuntimeError("Nenhuma chave configurada para Texto. Adicione a 'Chave Gemini (Texto)' no painel lateral.")
-
-    sys_final = system_prompt + f"\n\n[REF-VERIF:{secrets.token_hex(8)}]"
-    
-    try:
-        client = genai.Client(api_key=chave_texto)
-        cfg = types.GenerateContentConfig(system_instruction=sys_final, temperature=temperature) if types else {"system_instruction": sys_final, "temperature": temperature}
-        resp = client.models.generate_content(model=modelo_gemini.strip(), contents=user_prompt, config=cfg)
-        texto = getattr(resp, "text", "")
-        texto = str(texto or "").strip()
-        
-        if texto and "[REF-VERIF:" not in texto: 
-            return texto, "Gemini (Texto)"
-            
-        raise RuntimeError("O modelo retornou uma resposta em branco.")
-    except Exception as e: 
-        raise RuntimeError(f"Falha na comunicação de Texto: {str(e)}")
-
-def _chamar_motor_visao(arquivo_imagem, estilo_conversao, nivel_sensualidade, modelo_gemini):
+def _chamar_motor_visao(arquivo_imagem, estilo_conversao, nivel_sensualidade, modelo_gemini=None):
+    """
+    PRIMEIRO GEMINI (Motor de Visão):
+    Responsabilidade: Extração óptica pericial de imagens.
+    Usa OBRIGATORIAMENTE a Chave de Visão e o modelo gemini-3.5-flash.
+    """
     MAX_IMAGE_SIZE_MB = 10
     if arquivo_imagem.size > MAX_IMAGE_SIZE_MB * 1024 * 1024:
         raise RuntimeError(f"🖼️ Imagem limite: {MAX_IMAGE_SIZE_MB} MB.")
     
+    # 1. Isolamento da Chave de API de Visão
     config = carregar_config(st.session_state.get("user_email", ""))
     chave_visao = st.session_state.get("input_key_visao", "").strip() or config.get("chaves", {}).get("Chave Visao", "")
     
     if not chave_visao or genai is None:
         raise RuntimeError("Nenhuma chave configurada para Visão. Adicione a 'Chave Gemini (Visão)' no painel lateral.")
     
-    user_prompt = "Desconstrua pericialmente esta imagem em Ultra-Densidade. \n[MODIFICADOR 2: SENSUALIDADE]: Nível " + str(nivel_sensualidade) + "."
-    if "Fotorrealismo" in estilo_conversao: user_prompt += "\n[MODIFICADOR 1: ESTILO]: Traduza para o MUNDO REAL fotorrealista."
-    elif "Anime" in estilo_conversao: user_prompt += "\n[MODIFICADOR 1: ESTILO]: Traduza para ILUSTRAÇÃO 2D ANIME."
+    # 2. Definição estrita do modelo do Primeiro Gemini
+    modelo_primeiro_gemini = "gemini-3.5-flash"
+    
+    # 3. Construção do Prompt de Extração
+    user_prompt = f"Desconstrua pericialmente esta imagem em Ultra-Densidade. \n[MODIFICADOR 2: SENSUALIDADE]: Nível {nivel_sensualidade}."
+    if "Fotorrealismo" in estilo_conversao: 
+        user_prompt += "\n[MODIFICADOR 1: ESTILO]: Traduza para o MUNDO REAL fotorrealista."
+    elif "Anime" in estilo_conversao: 
+        user_prompt += "\n[MODIFICADOR 1: ESTILO]: Traduza para ILUSTRAÇÃO 2D ANIME."
 
     try:
         arquivo_imagem.seek(0)
         img_pil = Image.open(arquivo_imagem)
         
+        # 4. Instanciação e Chamada (Cliente Isolado)
         client = genai.Client(api_key=chave_visao)
-        cfg = types.GenerateContentConfig(system_instruction=SYS_LEITOR_PARAMETRICO, temperature=0.2)
-        resp = client.models.generate_content(model=modelo_gemini.strip(), contents=[img_pil, user_prompt], config=cfg)
+        cfg = types.GenerateContentConfig(
+            system_instruction=SYS_LEITOR_PARAMETRICO, 
+            temperature=0.2
+        ) if types else {"system_instruction": SYS_LEITOR_PARAMETRICO, "temperature": 0.2}
+        
+        resp = client.models.generate_content(
+            model=modelo_primeiro_gemini, 
+            contents=[img_pil, user_prompt], 
+            config=cfg
+        )
         
         texto = getattr(resp, "text", "") or ""
-        if not texto.strip(): raise RuntimeError("A IA bloqueou a imagem por políticas de segurança.")
+        if not texto.strip(): 
+            raise RuntimeError("A IA bloqueou a imagem por políticas de segurança.")
         
+        # 5. Validação e Retorno (Mantém a compatibilidade com a UI do Passo 2)
         dados = parse_json_ia(texto)
-        if dados: return {"tipo": "json", "dados": dados}
+        if dados: 
+            return {"tipo": "json", "dados": dados}
         return {"tipo": "texto", "texto": texto}
+        
     except Exception as e:
-        raise RuntimeError(f"Falha na leitura óptica (Visão): {str(e)}")
+        raise RuntimeError(f"Falha no Primeiro Gemini (Leitura Óptica): {str(e)}")
+
+
+def _chamar_motor_texto(system_prompt, user_prompt, modelo_gemini=None, temperature=0.25):
+    """
+    SEGUNDO GEMINI (Motor de Texto):
+    Responsabilidade: Engenharia e Síntese de Prompts Textuais.
+    Usa OBRIGATORIAMENTE a Chave de Texto e o modelo gemini-3.8-flash.
+    """
+    # 1. Isolamento da Chave de API de Texto
+    config = carregar_config(st.session_state.get("user_email", ""))
+    chave_texto = st.session_state.get("input_key_texto", "").strip() or config.get("chaves", {}).get("Chave Texto", "")
+
+    if not chave_texto or genai is None:
+        raise RuntimeError("Nenhuma chave configurada para Texto. Adicione a 'Chave Gemini (Texto)' no painel lateral.")
+
+    # 2. Definição estrita do modelo do Segundo Gemini
+    modelo_segundo_gemini = "gemini-3.8-flash"
+
+    # 3. Proteção Anti-Cache (Injeção de Token Dinâmico)
+    sys_final = f"{system_prompt}\n\n[REF-VERIF:{secrets.token_hex(8)}]"
+    
+    try:
+        # 4. Instanciação e Chamada (Cliente Isolado)
+        client = genai.Client(api_key=chave_texto)
+        cfg = types.GenerateContentConfig(
+            system_instruction=sys_final, 
+            temperature=temperature
+        ) if types else {"system_instruction": sys_final, "temperature": temperature}
+        
+        resp = client.models.generate_content(
+            model=modelo_segundo_gemini, 
+            contents=user_prompt, 
+            config=cfg
+        )
+        
+        texto = getattr(resp, "text", "")
+        texto = str(texto or "").strip()
+        
+        # 5. Validação e Retorno (Mantém compatibilidade com Passos 4 e 5)
+        if texto and "[REF-VERIF:" not in texto: 
+            return texto, "Gemini 3.8 (Texto Especializado)"
+            
+        raise RuntimeError("O modelo retornou uma resposta em branco.")
+        
+    except Exception as e: 
+        raise RuntimeError(f"Falha no Segundo Gemini (Engenharia de Texto): {str(e)}")
 
 # ==============================================================================
 # 5. UI: BARRA LATERAL E HISTÓRICO
@@ -466,18 +550,29 @@ def renderizar_sidebar():
 
     config = carregar_config(st.session_state.get("user_email", ""))
     st.sidebar.markdown("---")
+    # Inicializa estado dos widgets antes de criá-los (corrige bug value+key do Streamlit)
+    _cfg_visao = config.get("chaves", {}).get("Chave Visao", "")
+    _cfg_texto = config.get("chaves", {}).get("Chave Texto", "")
+    _cfg_modelo = config.get("modelo_padrao", "gemini-1.5-flash")
+    # Só inicializa na primeira vez ou se veio de troca de usuário; não sobrescreve digitação em andamento
+    _email_sess = st.session_state.get("user_email", "")
+    if st.session_state.get("_sidebar_init_email") != _email_sess or "input_key_visao" not in st.session_state:
+        st.session_state["input_key_visao"] = _cfg_visao
+        st.session_state["input_key_texto"] = _cfg_texto
+        st.session_state["modelo_geral_select"] = _cfg_modelo
+        st.session_state["_sidebar_init_email"] = _email_sess
     
     st.sidebar.markdown("<a href='https://aistudio.google.com/app/apikey' target='_blank' style='color:#059669; text-decoration:none;'>👁️ Google Gemini (Via Visão)</a>", unsafe_allow_html=True)
     st.sidebar.caption("Chave dedicada para leitura de imagens.")
-    k_visao = st.sidebar.text_input("Chave Visão", value=config.get("chaves", {}).get("Chave Visao", ""), type="password", key="input_key_visao", label_visibility="collapsed")
+    k_visao = st.sidebar.text_input("Chave Visão", type="password", key="input_key_visao", label_visibility="collapsed")
     
     st.sidebar.markdown("<br><a href='https://aistudio.google.com/app/apikey' target='_blank' style='color:#2563eb; text-decoration:none;'>📝 Google Gemini (Via Texto)</a>", unsafe_allow_html=True)
     st.sidebar.caption("Chave dedicada para gerar os Prompts Finais.")
-    k_texto = st.sidebar.text_input("Chave Texto", value=config.get("chaves", {}).get("Chave Texto", ""), type="password", key="input_key_texto", label_visibility="collapsed")
+    k_texto = st.sidebar.text_input("Chave Texto", type="password", key="input_key_texto", label_visibility="collapsed")
 
     with st.sidebar.expander("Ferramentas Avançadas", expanded=False):
         st.caption("Insira o nome exato do modelo (Ex: gemini-1.5-flash ou gemini-2.5-flash):")
-        modelo_geral = st.text_input("Modelo Base (Ambas as vias)", value=config.get("modelo_padrao", "gemini-1.5-flash"), key="modelo_geral_select")
+        modelo_geral = st.text_input("Modelo Base (Ambas as vias)", key="modelo_geral_select")
 
     if st.sidebar.button("💾 Conectar Motores Isolados", type="primary", use_container_width=True):
         dados_salvos = {
@@ -533,6 +628,18 @@ def renderizar_cockpit():
     st.markdown("<h1 class='ps-title'>Sua Ideia. Seu Motor. Controle Total.</h1>", unsafe_allow_html=True)
     st.markdown("<div class='ps-slogan'>A porta é nossa, mas as chaves são suas.</div>", unsafe_allow_html=True)
 
+    # Aplicar valores pendentes agendados no run anterior (evita StreamlitAPIException ao alterar widget após criação)
+    for _pk, _rk in [
+        ("_pending_ck_ideia_input", "ck_ideia_input"),
+        ("_pending_ck_preprompt_editado", "ck_preprompt_editado"),
+        ("_pending_img_suj", "img_suj"),
+        ("_pending_img_cen", "img_cen"),
+        ("_pending_img_act", "img_act"),
+        ("_pending_img_ilu", "img_ilu"),
+        ("_pending_img_est", "img_est"),
+    ]:
+        if _pk in st.session_state:
+            st.session_state[_rk] = st.session_state.pop(_pk)
     # Inicialização das chaves de memória ancoradas (State Sync Seguro)
     if "ck_ideia_input" not in st.session_state: st.session_state.ck_ideia_input = ""
     if "ck_preprompt_editado" not in st.session_state: st.session_state.ck_preprompt_editado = ""
@@ -541,6 +648,10 @@ def renderizar_cockpit():
     if "img_act" not in st.session_state: st.session_state.img_act = ""
     if "img_ilu" not in st.session_state: st.session_state.img_ilu = ""
     if "img_est" not in st.session_state: st.session_state.img_est = ""
+    # Defaults dos modificadores antes do Passo 2 (garante leitura consistente na extração óptica)
+    if "ck_estilo_conversao" not in st.session_state: st.session_state.ck_estilo_conversao = "Manter Estilo Original"
+    if "ck_foco_contexto" not in st.session_state: st.session_state.ck_foco_contexto = "Harmônico (Preencher/Embelezar)"
+    if "ck_sens_slider" not in st.session_state: st.session_state.ck_sens_slider = OPCOES_SENSUALIDADE[1]
     
     # --------------------------------------------------------------------------
     # PASSO 1: A IDEIA (Texto Base)
@@ -552,9 +663,18 @@ def renderizar_cockpit():
     st.text_area("Insira a sua Ideia:", key="ck_ideia_input", height=140, label_visibility="collapsed")
 
     if st.button("🗑️ Limpar Ideia", use_container_width=False):
-        st.session_state.ck_ideia_input = ""
-        for k in ["ck_img_parametros", "ck_preprompt", "ck_preprompt_editado", "ck_diagnostico", "ck_prompt_final", "ck_sugestoes_marcadas"]: 
+        for k in ["ck_img_parametros", "ck_preprompt", "ck_preprompt_editado", "ck_diagnostico", "ck_prompt_final", "ck_sugestoes_marcadas",
+                  "ck_ideia_input", "img_suj", "img_cen", "img_act", "img_ilu", "img_est",
+                  "_pending_ck_ideia_input", "_pending_ck_preprompt_editado", "_pending_img_suj", "_pending_img_cen", "_pending_img_act", "_pending_img_ilu", "_pending_img_est"]:
             st.session_state.pop(k, None)
+        # Agenda valores limpos para o próximo run (evita StreamlitAPIException)
+        st.session_state["_pending_ck_ideia_input"] = ""
+        st.session_state["_pending_ck_preprompt_editado"] = ""
+        st.session_state["_pending_img_suj"] = ""
+        st.session_state["_pending_img_cen"] = ""
+        st.session_state["_pending_img_act"] = ""
+        st.session_state["_pending_img_ilu"] = ""
+        st.session_state["_pending_img_est"] = ""
         st.rerun()
 
     # --------------------------------------------------------------------------
@@ -584,17 +704,16 @@ def renderizar_cockpit():
                     
                     if res["tipo"] == "json":
                         st.session_state["ck_img_parametros"] = res["dados"]
-                        # Injeta nas chaves do Detalhador
-                        st.session_state.img_suj = res["dados"].get("sujeito", "")
-                        st.session_state.img_cen = res["dados"].get("cenario", "")
-                        st.session_state.img_act = res["dados"].get("acao", "")
-                        st.session_state.img_ilu = res["dados"].get("iluminacao", "")
-                        st.session_state.img_est = res["dados"].get("estilo_camera", "")
-                        # Preenche a Ideia Principal
-                        ideia_extraida = f"Sujeito: {st.session_state.img_suj}\n\nAção: {st.session_state.img_act}\n\nCenário: {st.session_state.img_cen}\n\nIluminação: {st.session_state.img_ilu}\n\nEstilo: {st.session_state.img_est}"
-                        st.session_state.ck_ideia_input = ideia_extraida
+                        # Agenda para o próximo run (evita StreamlitAPIException: widget já instanciado)
+                        st.session_state["_pending_img_suj"] = res["dados"].get("sujeito", "")
+                        st.session_state["_pending_img_cen"] = res["dados"].get("cenario", "")
+                        st.session_state["_pending_img_act"] = res["dados"].get("acao", "")
+                        st.session_state["_pending_img_ilu"] = res["dados"].get("iluminacao", "")
+                        st.session_state["_pending_img_est"] = res["dados"].get("estilo_camera", "")
+                        ideia_extraida = f"Sujeito: {res['dados'].get('sujeito','')}\n\nAção: {res['dados'].get('acao','')}\n\nCenário: {res['dados'].get('cenario','')}\n\nIluminação: {res['dados'].get('iluminacao','')}\n\nEstilo: {res['dados'].get('estilo_camera','')}"
+                        st.session_state["_pending_ck_ideia_input"] = ideia_extraida
                     else:
-                        st.session_state.ck_ideia_input = res["texto"]
+                        st.session_state["_pending_ck_ideia_input"] = res["texto"]
                         st.session_state.pop("ck_img_parametros", None)
                         
                     st.session_state.pop("ck_preprompt", None)
@@ -613,7 +732,7 @@ def renderizar_cockpit():
                 st.text_area("📷 Estilo:", key="img_est", height=100)
             if st.button("🔄 Atualizar Caixa da Ideia com estas edições", use_container_width=True):
                 nova_ideia = f"Sujeito: {st.session_state.img_suj}\n\nAção: {st.session_state.img_act}\n\nCenário: {st.session_state.img_cen}\n\nIluminação: {st.session_state.img_ilu}\n\nEstilo: {st.session_state.img_est}"
-                st.session_state.ck_ideia_input = nova_ideia
+                st.session_state["_pending_ck_ideia_input"] = nova_ideia
                 st.rerun()
 
     # --------------------------------------------------------------------------
@@ -650,7 +769,7 @@ def renderizar_cockpit():
                     
                     st.session_state["ck_ideia_hist_fix"] = st.session_state.ck_ideia_input
                     st.session_state["ck_preprompt"] = txt
-                    st.session_state.ck_preprompt_editado = txt 
+                    st.session_state["_pending_ck_preprompt_editado"] = txt 
                     st.rerun()
                 except Exception as e: st.error(_msg_erro_amigavel(e))
 
@@ -736,8 +855,7 @@ def renderizar_cockpit():
         st.markdown(f"### 📋 Prompt Especializado ({st.session_state.get('ck_dest_usado')})")
         st.caption(f"Gerado via {st.session_state.get('ck_prov_usado')}")
         
-        try: st.code(st.session_state["ck_prompt_final"], language="markdown", wrap_lines=True)
-        except Exception: st.markdown(f"<div class='ps-preprompt' style='white-space: pre-wrap; word-wrap: break-word; font-family: monospace;'>{html.escape(st.session_state['ck_prompt_final'])}</div>", unsafe_allow_html=True)
+        st.code(st.session_state["ck_prompt_final"], language="markdown")
             
         c_save1, c_save2 = st.columns(2)
         with c_save1:
