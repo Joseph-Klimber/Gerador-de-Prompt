@@ -578,7 +578,7 @@ def _chamar_motor_texto(system_prompt, user_prompt, modelo_gemini=None, temperat
     """
     SEGUNDO GEMINI (Motor de Texto):
     Responsabilidade: Engenharia e Síntese de Prompts Textuais.
-    Usa OBRIGATORIAMENTE a Chave de Texto e o modelo gemini-3.8-flash.
+    Usa OBRIGATORIAMENTE a Chave de Texto e o modelo gemini-3.5-flash.
     """
     # 1. Isolamento da Chave de API de Texto
     config = carregar_config(st.session_state.get("user_email", ""))
@@ -588,7 +588,7 @@ def _chamar_motor_texto(system_prompt, user_prompt, modelo_gemini=None, temperat
         raise RuntimeError("Nenhuma chave configurada para Texto. Adicione a 'Chave Gemini (Texto)' no painel lateral.")
 
     # 2. Definição estrita do modelo do Segundo Gemini
-    modelo_segundo_gemini = "gemini-3.8-flash"
+    modelo_segundo_gemini = "gemini-3.5-flash"
 
     # 3. Proteção Anti-Cache (Injeção de Token Dinâmico)
     sys_final = f"{system_prompt}\n\n[REF-VERIF:{secrets.token_hex(8)}]"
@@ -605,7 +605,7 @@ def _chamar_motor_texto(system_prompt, user_prompt, modelo_gemini=None, temperat
         
         # 5. Validação e Retorno (Mantém compatibilidade com Passos 4 e 5)
         if texto and "[REF-VERIF:" not in texto: 
-            return texto, "Gemini 3.8 (Texto Especializado)"
+            return texto, "Gemini 3.5 (Texto Especializado)"
             
         raise RuntimeError("O modelo retornou uma resposta em branco.")
         
