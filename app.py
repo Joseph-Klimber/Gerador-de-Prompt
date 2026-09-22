@@ -3,11 +3,10 @@
 Prompt Studio Cockpit — Interface Minimalista de Alta Precisão
 Arquitetura: Separação de Responsabilidades (Visão vs Texto) + BYOK (Traga sua Chave).
 
-v4.0 — Google Pure-Core & State Sync:
-  • Eliminada dependência de terceiros (OpenRouter removido).
-  • Arquitetura de Cotas Isoladas: 1 Chave para Visão, 1 Chave para Texto.
-  • Resolução definitiva do Bug de Estado (Textos injetados instantaneamente na UI).
-  • Campo de Modelo livre (Input) para evitar erros 404 em atualizações da Google.
+v4.1 — Correção Definitiva de State Sync:
+  • Removida a "key" problemática da caixa de texto principal para evitar StreamlitAPIException.
+  • Injeção de texto extraído da imagem de forma instantânea e segura.
+  • Arquitetura Pure-Core mantida intacta.
 """
 
 import os
@@ -534,7 +533,7 @@ def renderizar_cockpit():
     st.markdown("<div class='ps-slogan'>A porta é nossa, mas as chaves são suas.</div>", unsafe_allow_html=True)
 
     # Inicialização das chaves de memória ancoradas (State Sync Seguro)
-    if "ck_ideia_input" not in st.session_state: st.session_state.ck_ideia_input = ""
+    if "ideia_principal" not in st.session_state: st.session_state.ideia_principal = ""
     if "ck_preprompt_editado" not in st.session_state: st.session_state.ck_preprompt_editado = ""
     if "img_suj" not in st.session_state: st.session_state.img_suj = ""
     if "img_cen" not in st.session_state: st.session_state.img_cen = ""
@@ -548,11 +547,13 @@ def renderizar_cockpit():
     st.markdown("### 1️⃣ Passo 1: A Sua Ideia (A Narrativa Visual)")
     st.caption("O ponto de partida. Descreva o que imagina ou veja a caixa preencher-se magicamente usando o Passo 2.")
     
-    # Caixa de texto ligada diretamente à chave interna do Streamlit
-    st.text_area("Insira a sua Ideia:", key="ck_ideia_input", height=140, label_visibility="collapsed")
+    # Caixa de texto ligada diretamente à variável (SEM parâmetro key= para evitar conflitos)
+    texto_digitado = st.text_area("Insira a sua Ideia:", value=st.session_state.ideia_principal, height=140, label_visibility="collapsed")
+    if texto_digitado != st.session_state.ideia_principal:
+        st.session_state.ideia_principal = texto_digitado
 
     if st.button("🗑️ Limpar Ideia", use_container_width=False):
-        st.session_state.ck_ideia_input = ""
+        st.session_state.ideia_principal = ""
         for k in ["ck_img_parametros", "ck_preprompt", "ck_preprompt_editado", "ck_diagnostico", "ck_prompt_final", "ck_sugestoes_marcadas"]: 
             st.session_state.pop(k, None)
         st.rerun()
@@ -590,11 +591,11 @@ def renderizar_cockpit():
                         st.session_state.img_act = res["dados"].get("acao", "")
                         st.session_state.img_ilu = res["dados"].get("iluminacao", "")
                         st.session_state.img_est = res["dados"].get("estilo_camera", "")
-                        # Preenche a Ideia Principal
+                        # Preenche a Ideia Principal instantaneamente
                         ideia_extraida = f"Sujeito: {st.session_state.img_suj}\n\nAção: {st.session_state.img_act}\n\nCenário: {st.session_state.img_cen}\n\nIluminação: {st.session_state.img_ilu}\n\nEstilo: {st.session_state.img_est}"
-                        st.session_state.ck_ideia_input = ideia_extraida
+                        st.session_state.ideia_principal = ideia_extraida
                     else:
-                        st.session_state.ck_ideia_input = res["texto"]
+                        st.session_state.ideia_principal = res["texto"]
                         st.session_state.pop("ck_img_parametros", None)
                         
                     st.session_state.pop("ck_preprompt", None)
@@ -613,7 +614,7 @@ def renderizar_cockpit():
                 st.text_area("📷 Estilo:", key="img_est", height=100)
             if st.button("🔄 Atualizar Caixa da Ideia com estas edições", use_container_width=True):
                 nova_ideia = f"Sujeito: {st.session_state.img_suj}\n\nAção: {st.session_state.img_act}\n\nCenário: {st.session_state.img_cen}\n\nIluminação: {st.session_state.img_ilu}\n\nEstilo: {st.session_state.img_est}"
-                st.session_state.ck_ideia_input = nova_ideia
+                st.session_state.ideia_principal = nova_ideia
                 st.rerun()
 
     # --------------------------------------------------------------------------
@@ -639,28 +640,28 @@ def renderizar_cockpit():
     with col_b2: btn_ava = st.button("🔍 Auditar no Compositômetro (Raio-X)", use_container_width=True)
 
     if btn_pre:
-        if not st.session_state.ck_ideia_input.strip(): st.warning("Escreva a sua Ideia no Passo 1.")
+        if not st.session_state.ideia_principal.strip(): st.warning("Escreva a sua Ideia no Passo 1.")
         else:
             with st.spinner("Desenhando a cena com o Motor de Texto..."):
                 try:
-                    p = f"IDEIA:\n{st.session_state.ck_ideia_input}\n\n[AGENTE: SENSUALIDADE NÍVEL '{sens_escolhida}']"
+                    p = f"IDEIA:\n{st.session_state.ideia_principal}\n\n[AGENTE: SENSUALIDADE NÍVEL '{sens_escolhida}']"
                     if "Literal" in foco_contexto: p += "\n[AGENTE LITERAL]: Seja 100% fiel, sem floreios estéticos inúteis."
                     modelo_base = st.session_state.get("modelo_geral_select", "gemini-1.5-flash")
                     txt, prov = _chamar_motor_texto(SYS_GERADOR_PREPROMPT, p, modelo_gemini=modelo_base)
                     
-                    st.session_state["ck_ideia_hist_fix"] = st.session_state.ck_ideia_input
+                    st.session_state["ck_ideia_hist_fix"] = st.session_state.ideia_principal
                     st.session_state["ck_preprompt"] = txt
                     st.session_state.ck_preprompt_editado = txt 
                     st.rerun()
                 except Exception as e: st.error(_msg_erro_amigavel(e))
 
     if btn_ava:
-        if not st.session_state.ck_ideia_input.strip(): st.warning("Escreva a sua Ideia no Passo 1.")
+        if not st.session_state.ideia_principal.strip(): st.warning("Escreva a sua Ideia no Passo 1.")
         else:
             with st.spinner("Raio-X em andamento com o Motor de Texto..."):
                 try:
                     modelo_base = st.session_state.get("modelo_geral_select", "gemini-1.5-flash")
-                    txt, prov = _chamar_motor_texto(SYS_COMPOSITOMETRO, f"AVALIE:\n{st.session_state.ck_ideia_input}", modelo_gemini=modelo_base)
+                    txt, prov = _chamar_motor_texto(SYS_COMPOSITOMETRO, f"AVALIE:\n{st.session_state.ideia_principal}", modelo_gemini=modelo_base)
                     diag = parse_json_ia(txt)
                     if not diag: st.error("⚠️ Erro de formato no Raio-X. Tente novamente.")
                     else: st.session_state["ck_diagnostico"] = diag; st.rerun()
@@ -670,7 +671,9 @@ def renderizar_cockpit():
         st.markdown("<div class='ps-legend'><span><span class='ps-user-word'>Ideia Original</span></span> • <span><span class='ps-ai-word'>Ajuste da IA</span></span></div>", unsafe_allow_html=True)
         st.markdown(f"<div class='ps-preprompt'>{_ps_markup_origin(st.session_state['ck_preprompt'], st.session_state.get('ck_ideia_hist_fix', ''))}</div>", unsafe_allow_html=True)
         
-        st.text_area("Ajuste fino do Rascunho (Esta caixa substituirá a Ideia para o Motor Final):", key="ck_preprompt_editado", height=130)
+        pre_ed_digitado = st.text_area("Ajuste fino do Rascunho (Esta caixa substituirá a Ideia para o Motor Final):", value=st.session_state.ck_preprompt_editado, height=130)
+        if pre_ed_digitado != st.session_state.ck_preprompt_editado:
+            st.session_state.ck_preprompt_editado = pre_ed_digitado
 
     diag = st.session_state.get("ck_diagnostico")
     if diag:
@@ -705,14 +708,14 @@ def renderizar_cockpit():
 
     if btn_exec:
         if dest_sel == "Selecione o Motor Destino...": st.error("🛑 Pare! Selecione para qual motor de IA este prompt será compilado.")
-        elif not st.session_state.ck_ideia_input.strip(): st.warning("Descreva a sua Ideia no Passo 1 antes de gerar.")
+        elif not st.session_state.ideia_principal.strip(): st.warning("Descreva a sua Ideia no Passo 1 antes de gerar.")
         else:
             with st.spinner(f"Compilando sintaxe ultra-otimizada para {dest_sel}..."):
                 try:
                     eng = BANCO_DE_MOTORES[dest_sel]
                     bloco = f"\n\n======================================\n3. SINTAXE NATIVA: {dest_sel}\n======================================\n- POSITIVO: {eng['regra_positivo']}\n- NEGATIVO FIXO: {eng.get('regra_negativo', 'N/A')}\n\nSAÍDA OBRIGATÓRIA:\n1. PROMPT (ENGLISH)\n2. NEGATIVE PROMPT DINÂMICO (ENGLISH)\n3. LEGENDA\n4. HASHTAGS\n💡 DICA TÉCNICA: {eng['dica_tecnica']}"
                     
-                    txt_b = st.session_state.ck_preprompt_editado if st.session_state.get("ck_preprompt") else st.session_state.ck_ideia_input
+                    txt_b = st.session_state.ck_preprompt_editado if st.session_state.get("ck_preprompt") else st.session_state.ideia_principal
                     sug_aceitas = st.session_state.get("ck_sugestoes_marcadas", [])
                     sug_str = "\n".join(f"- {s}" for s in sug_aceitas) if sug_aceitas else "Nenhuma sugestão."
                     
