@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 """
 Prompt Studio Cockpit — Interface Minimalista de Alta Precisão
-Arquitetura: Shift-Left (Modificadores no Ponto Zero) + BYOK (Traga sua Chave) + Carga Distribuída.
+Arquitetura: Separação de Responsabilidades (Visão vs Texto) + BYOK (Traga sua Chave).
 
-v3.1 — Correção de Lógica de Estado (Streamlit State Sync):
-  • Removidas as colisões de "key vs value" nos widgets text_area.
-  • Injeção programática perfeita (a Extração de Imagem atualiza a Ideia Principal instantaneamente).
-  • Botão de Limpar Ideia otimizado sem exceções de API.
+v4.0 — Google Pure-Core & State Sync:
+  • Eliminada dependência de terceiros (OpenRouter removido).
+  • Arquitetura de Cotas Isoladas: 1 Chave para Visão, 1 Chave para Texto.
+  • Resolução definitiva do Bug de Estado (Textos injetados instantaneamente na UI).
+  • Campo de Modelo livre (Input) para evitar erros 404 em atualizações da Google.
 """
 
 import os
@@ -84,10 +85,10 @@ st.markdown(
 # ==============================================================================
 # 2. CONSTANTES E DICIONÁRIO BLINDADO
 # ==============================================================================
-APPS_SCRIPT_URL = "http" + "s://script.google.com/macros/s/AKfycbzgEj3YPwqiUbiueyu8wjZ9ZZK0Rcc6G3kucysRSJ2gNmzRzUdMuLqv_q55N1kSO8PQ/exec"
-LINK_KIWIFY_15_DIAS = "http" + "s://pay.kiwify.com.br/MXVL98k"
-LINK_KIWIFY_30_DIAS = "http" + "s://pay.kiwify.com.br/dyfEGe5"
-LINK_KIWIFY_90_DIAS = "http" + "s://pay.kiwify.com.br/xo0m3rF"
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzgEj3YPwqiUbiueyu8wjZ9ZZK0Rcc6G3kucysRSJ2gNmzRzUdMuLqv_q55N1kSO8PQ/exec"
+LINK_KIWIFY_15_DIAS = "https://pay.kiwify.com.br/MXVL98k"
+LINK_KIWIFY_30_DIAS = "https://pay.kiwify.com.br/dyfEGe5"
+LINK_KIWIFY_90_DIAS = "https://pay.kiwify.com.br/xo0m3rF"
 
 PASTA_CONFIGS = "configs_usuarios"
 
@@ -125,31 +126,6 @@ BANCO_DE_MOTORES = {
         "regra_positivo": "Traduza a cena integralmente. FÓRMULA: 'A breathtaking photo of [Sujeito + Roupas fiéis], who is [Ação], located in [Cenário Detalhado]. The lighting is [Iluminação]. Shot on [Câmera]'.",
         "regra_negativo": "Base: ugly, deformed, poorly drawn, bad anatomy, missing limbs, mutated hands, unnatural proportions, amateur, watermark.",
         "dica_tecnica": "Refiner em 20% ajuda nos detalhes de rostos."
-    },
-    "Ideogram 4": {
-        "regra_positivo": "Traduza a cena com foco em diagramação e design. Qualquer texto escrito solicitado DEVE ficar ENTRE ASPAS DUPLAS (ex: wearing a shirt that says \"HELLO\").",
-        "regra_negativo": None,
-        "dica_tecnica": "Perfeito para criar placas, logos e textos perfeitamente legíveis."
-    },
-    "Krea 2": {
-        "regra_positivo": "Traduza a cena dividindo a estrutura mentalmente: Foreground (primeiro plano), Midground, Background. Palavras em inglês com forte impacto.",
-        "regra_negativo": "blurry, low quality, deformed geometry, muddy colors, bad proportions, unnatural lighting.",
-        "dica_tecnica": "Otimizado para a engine de upscaling e latência zero do Krea."
-    },
-    "Qwen / Tongyi Wanxiang": {
-        "regra_positivo": "Traduza para um inglês estruturado: Sujeito -> Ação -> Ambiente. Evite jargões exaustivos de lente. Seja literal e direto ao ponto.",
-        "regra_negativo": "poor quality, bad anatomy, watermark, text, out of frame, mutation.",
-        "dica_tecnica": "Modelos Qwen asiáticos respondem melhor à clareza do que à estética carregada."
-    },
-    "Ernie (ViLG)": {
-        "regra_positivo": "Traduza a cena recebida de forma clara em inglês, especificando a relação de proximidade espacial entre sujeito e cenário. Use termos de arte tradicionais.",
-        "regra_negativo": "ugly, disfigured, low resolution, bad hands, deformed faces.",
-        "dica_tecnica": "Baidu Ernie prefere prompts físicos diretos."
-    },
-    "Z-Image": {
-        "regra_positivo": "Traduza a narrativa para um inglês hiper-realista. Foque na coerência do sujeito informado e adicione texturas 8k e iluminação volumétrica.",
-        "regra_negativo": "noisy, oversaturated, unrealistic, bad anatomy, bad lighting, watermark.",
-        "dica_tecnica": "Z-Image processa bem materiais reflexivos e texturas."
     }
 }
 
@@ -226,8 +202,7 @@ def _chave_fernet():
     except Exception: pass
     if not segredo: segredo = os.environ.get("PS_FERNET_KEY")
     if not segredo:
-        st.error("🔒 Chave de criptografia não configurada.")
-        st.stop()
+        return None
     try:
         from cryptography.fernet import Fernet
         import base64
@@ -284,17 +259,20 @@ def carregar_config(email=None):
         return copy.deepcopy(item_cache[1])
 
     config = {
-        "chaves": {"Chave 1": "", "Chave 2": ""}, "openrouter_api_key": "",
-        "provedor_ia": "Automático", "fallback_automatico": True,
-        "gemini_so_visao": False, "modelo_openrouter": "meta-llama/llama-3.1-70b-instruct:free", 
-        "modelo_padrao": "gemini-3.5-flash"
+        "chaves": {"Chave Visao": "", "Chave Texto": ""},
+        "modelo_padrao": "gemini-1.5-flash"
     }
     dados = _req_apps_script({"acao": "carregar_config", "email": email_normalizado})
     if dados and dados.get("ok") and dados.get("config"):
         try:
-            config.update(json.loads(dados["config"]))
+            loaded_config = json.loads(dados["config"])
+            if "Chave 1" in loaded_config.get("chaves", {}):
+                loaded_config["chaves"]["Chave Visao"] = loaded_config["chaves"].pop("Chave 1")
+            if "Chave 2" in loaded_config.get("chaves", {}):
+                loaded_config["chaves"]["Chave Texto"] = loaded_config["chaves"].pop("Chave 2")
+                
+            config.update(loaded_config)
             config["chaves"] = {k: _descriptografar(v) for k, v in config.get("chaves", {}).items()}
-            if config.get("openrouter_api_key"): config["openrouter_api_key"] = _descriptografar(config["openrouter_api_key"])
             cache[email_normalizado] = (time.time(), copy.deepcopy(config))
             st.session_state["_config_cache"] = cache
             return copy.deepcopy(config)
@@ -303,9 +281,14 @@ def carregar_config(email=None):
     caminho = os.path.join(PASTA_CONFIGS, f"config_{_slug_usuario(email)}.json")
     if os.path.exists(caminho):
         try:
-            with open(caminho, "r", encoding="utf-8") as f: config.update(json.load(f))
+            with open(caminho, "r", encoding="utf-8") as f: 
+                loaded_config = json.load(f)
+                if "Chave 1" in loaded_config.get("chaves", {}):
+                    loaded_config["chaves"]["Chave Visao"] = loaded_config["chaves"].pop("Chave 1")
+                if "Chave 2" in loaded_config.get("chaves", {}):
+                    loaded_config["chaves"]["Chave Texto"] = loaded_config["chaves"].pop("Chave 2")
+                config.update(loaded_config)
             config["chaves"] = {k: _descriptografar(v) for k, v in config.get("chaves", {}).items()}
-            if config.get("openrouter_api_key"): config["openrouter_api_key"] = _descriptografar(config["openrouter_api_key"])
         except Exception: pass
     cache[email_normalizado] = (time.time(), copy.deepcopy(config))
     st.session_state["_config_cache"] = cache
@@ -314,7 +297,6 @@ def carregar_config(email=None):
 def salvar_config(dados, email=None):
     dados = dict(dados)
     dados["chaves"] = {k: _criptografar(v) for k, v in dados.get("chaves", {}).items()}
-    if dados.get("openrouter_api_key"): dados["openrouter_api_key"] = _criptografar(dados["openrouter_api_key"])
     
     payload = {"acao": "salvar_config", "email": (email or "").strip().lower(), "config": json.dumps(dados, ensure_ascii=False)}
     try:
@@ -333,26 +315,13 @@ def salvar_config(dados, email=None):
     st.session_state.get("_config_cache", {}).pop((email or "").strip().lower(), None)
     return False, "Erro ao salvar na Nuvem. Cópia salva localmente."
 
-def _extrair_texto_resposta(obj):
-    if isinstance(obj, str): return obj.strip()
-    if isinstance(obj, list): return "\n".join(p for p in [_extrair_texto_resposta(i) for i in obj] if p).strip()
-    if isinstance(obj, dict):
-        for k in ("text", "content", "output_text", "response", "generated_text", "message", "choices", "result"):
-            if k in obj and obj[k]: return _extrair_texto_resposta(obj[k])
-    return ""
-
 def _msg_erro_amigavel(e):
     texto = str(e)
-    if "Nenhuma chave configurada" in texto: return "🔑 **Nenhum motor conectado.** Cole sua chave na barra lateral."
-    if "REF-VERIF" in texto or "Falha de Comunicação" in texto:
-        detalhes = texto.split("Detalhes:")[-1].strip() if "Detalhes:" in texto else ""
-        return f"⚠️ **Falha ao chamar motores de IA.** Verifique conexão e chaves. {detalhes[:200]}"
-    if "401" in texto or "Unauthorized" in texto: return "🔑 **Chave/Token inválido ou expirado.**"
-    if "404" in texto or "not found" in texto.lower(): return "⚠️ **Modelo não encontrado (404).** A versão requisitada não existe."
-    if "429" in texto or "quota" in texto.lower(): return "⏳ **Limite de uso temporário atingido (429).** Aguarde a renovação da cota."
-    if "503" in texto or "overloaded" in texto.lower(): return "🔌 **Servidor sobrecarregado (503).** O fallback deve assumir."
-    if "timeout" in texto.lower(): return "⏱️ **Tempo esgotado na chamada.** Tente novamente."
-    return f"⚠️ **Erro Sistémico.** {texto[:300]}"
+    if "401" in texto or "Unauthorized" in texto: return "🔑 **Chave inválida ou expirada.**"
+    if "404" in texto or "not found" in texto.lower(): return "⚠️ **Modelo não encontrado (404).** Digite a versão correta do modelo nas configurações."
+    if "429" in texto or "quota" in texto.lower(): return "⏳ **Limite de uso da API atingido (429).** A sua cota gratuita para esta chave terminou por hoje."
+    if "503" in texto or "overloaded" in texto.lower(): return "🔌 **Servidores do Google sobrecarregados (503).** Tente novamente em instantes."
+    return f"⚠️ **Erro Sistémico:** {texto[:300]}"
 
 def verificar_acesso_sheets(email):
     try:
@@ -376,89 +345,8 @@ def verificar_acesso_sheets(email):
     except Exception as e: return False, "", f"⚠️ Falha na conexão: {e}"
 
 # ==============================================================================
-# 3. MOTOR DE CHAMADA TRI-CORE COM REDUNDÂNCIA
+# 3. MOTORES PURE-CORE (SEPARADOS)
 # ==============================================================================
-def _chamar_provedor_ia(system_prompt, user_prompt, modelo_gemini="gemini-3.5-flash", temperature=0.25):
-    config = carregar_config(st.session_state.get("user_email", ""))
-    
-    g_key_1 = st.session_state.get("input_key_1", "").strip() or config.get("chaves", {}).get("Chave 1", "")
-    or_key = st.session_state.get("input_openrouter_api", "").strip() or config.get("openrouter_api_key", "")
-    g_key_2 = st.session_state.get("input_key_2", "").strip() or config.get("chaves", {}).get("Chave 2", "")
-
-    provedores = []
-    if g_key_1 and genai is not None:
-        provedores.append(("Gemini (Principal)", g_key_1))
-    if or_key:
-        provedores.append(("OpenRouter", or_key))
-    if g_key_2 and genai is not None:
-        provedores.append(("Gemini (Reserva)", g_key_2))
-
-    if not provedores:
-        raise RuntimeError("Nenhuma chave configurada. Acesse as configurações no painel lateral.")
-
-    escolha_manual = st.session_state.get("ps_provedor_manual", "Automático")
-    if escolha_manual != "Automático":
-        provedores = sorted(provedores, key=lambda x: 0 if x[0] == escolha_manual else 1)
-    elif st.session_state.get("gemini_so_visao", config.get("gemini_so_visao", False)):
-        provedores = [p for p in provedores if "OpenRouter" in p[0]] + [p for p in provedores if "Gemini" in p[0]]
-
-    if not st.session_state.get("fallback_automatico", config.get("fallback_automatico", True)):
-        provedores = provedores[:1]
-
-    sys_final = system_prompt + f"\n\n[REF-VERIF:{secrets.token_hex(8)}]"
-    erros = []
-    
-    for nome, cred in provedores:
-        try:
-            if "Gemini" in nome:
-                client = genai.Client(api_key=cred)
-                cfg = types.GenerateContentConfig(system_instruction=sys_final, temperature=temperature) if types else {"system_instruction": sys_final, "temperature": temperature}
-                resp = client.models.generate_content(model=modelo_gemini, contents=user_prompt, config=cfg)
-                texto = getattr(resp, "text", "")
-                
-            elif nome == "OpenRouter":
-                url_or = "http" + "s://openrouter.ai/api/v1/chat/completions"
-                modelo_or = config.get("modelo_openrouter", "meta-llama/llama-3.1-70b-instruct:free")
-                payload = {
-                    "model": modelo_or,
-                    "messages": [{"role": "system", "content": sys_final}, {"role": "user", "content": user_prompt}], 
-                    "temperature": temperature
-                }
-                headers = {
-                    "Authorization": f"Bearer {cred}",
-                    "HTTP-Referer": "http" + "s://promptstudio.local",
-                    "X-Title": "Prompt Studio Cockpit"
-                }
-                resp = _request_with_retry(
-                    "POST", url_or, headers=headers, json=payload, timeout=90
-                )
-                resp.raise_for_status()
-                texto = _extrair_texto_resposta(resp.json())
-            
-            texto = str(texto or "").strip()
-            if texto and "[REF-VERIF:" not in texto: return texto, nome
-        except Exception as e: 
-            erros.append(f"{nome}: {str(e)}")
-
-    raise RuntimeError("Falha de Comunicação. Detalhes: " + " | ".join(erros))
-
-# ==============================================================================
-# 4. ENGENHARIA DE PROMPT MESTRE E LEITURA DE IMAGEM
-# ==============================================================================
-PS_STOPWORDS = {"a","o","e","de","da","do","das","dos","um","uma","em","no","na","nos","nas","por","para","com","sem","que","se","ao","aos","as","os","é","ser","sob","sobre","como","mais","sua","seu","dele","dela","esse","esta","isso","este","isto","muito","pouco","já"}
-
-def _ps_markup_origin(preprompt_text, original_text):
-    clean = str(preprompt_text or "")
-    norm_orig = { normalizar_texto(w) for w in re.findall(r"[\wÀ-ÿ'-]+", original_text or "") if len(w) > 2 and w.lower() not in PS_STOPWORDS }
-    pieces = []
-    for token in re.split(r"(\s+|[^\wÀ-ÿ'-]+)", clean):
-        if not token: continue
-        if re.match(r"^[\wÀ-ÿ'-]+$", token):
-            norm_token = normalizar_texto(token)
-            pieces.append(f'<span class="ps-user-word">{html.escape(token)}</span>' if norm_token in norm_orig else f'<span class="ps-ai-word">{html.escape(token)}</span>')
-        else: pieces.append(html.escape(token))
-    return "".join(pieces)
-
 SYS_GERADOR_PREPROMPT = r"""Você é o Diretor de Arte Óptica e Composição Visual do Prompt Studio.
 Gere um PRÉ-PROMPT visual completo, cinematográfico e coeso em Português a partir da ideia do usuário.
 REGRAS MANDATÓRIAS:
@@ -474,7 +362,7 @@ SYS_LEITOR_PARAMETRICO = r"""Você é o Motor de Extração Óptica de Ultra-Den
 Sua missão é realizar uma varredura microscópica da imagem e desconstruí-la com precisão forense. Não resuma.
 
 REGRAS DE EXTRAÇÃO:
-1. SUJEITO: Especifique etnia, formato do rosto, cor exata dos olhos e micro-expressões. Descreva a roupa detalhando os materiais (ex: couro sintético, látex reflexivo, algodão desgastado), texturas, costuras, logotipos, caimento, dobras e acessórios.
+1. SUJEITO: Especifique etnia, formato do rosto, cor exata dos olhos e micro-expressões. Descreva a roupa detalhando os materiais (ex: couro sintético, látex reflexivo), texturas, costuras, logotipos, caimento, dobras e acessórios.
 2. AÇÃO/POSE: Mapeie a geometria corporal exata.
 3. CENÁRIO: Divida em Foreground, Midground e Background.
 4. ILUMINAÇÃO: Mapeie a luz principal, sombras e reflexos especulares.
@@ -497,55 +385,70 @@ Sua missão é compilar o prompt na sintaxe do motor destino com FIDELIDADE ABSO
 - Nível 1/2: 'rating_safe'
 - Nível 3/4: 'rating_questionable, nsfw'
 - Nível 5: 'rating_explicit, nude, nsfw, uncensored'
-- Nível 6 (Dual): VERSÃO A (Censurada) e VERSÃO B (Explícita)
 
 =============================================================================
 3. NEGATIVO DINÂMICO (OBRIGATÓRIO E PROFUNDO)
 =============================================================================
 NUNCA entregue um prompt negativo superficial apenas com a base fixa do motor.
-- Avalie o que foi pedido no positivo.
 - INJETE DINAMICAMENTE tags opostas que estragariam o resultado.
 - Ex: Se positivo é fotorrealista, o negativo DEVE ter 'anime, cartoon, 3d render, illustration'.
-- Ex: Se a cena é clara e iluminada, o negativo DEVE ter 'dark, gloomy, deep shadows'.
 - Junte o seu 'Negativo Dinâmico' com a base fixa da Regra do Motor.
 """
 
-def processar_imagem_visao(arquivo_imagem, estilo_conversao, nivel_sensualidade, modelo_gemini):
+def _chamar_motor_texto(system_prompt, user_prompt, modelo_gemini="gemini-1.5-flash", temperature=0.25):
+    config = carregar_config(st.session_state.get("user_email", ""))
+    chave_texto = st.session_state.get("input_key_texto", "").strip() or config.get("chaves", {}).get("Chave Texto", "")
+
+    if not chave_texto or genai is None:
+        raise RuntimeError("Nenhuma chave configurada para Texto. Adicione a 'Chave Gemini (Texto)' no painel lateral.")
+
+    sys_final = system_prompt + f"\n\n[REF-VERIF:{secrets.token_hex(8)}]"
+    
+    try:
+        client = genai.Client(api_key=chave_texto)
+        cfg = types.GenerateContentConfig(system_instruction=sys_final, temperature=temperature) if types else {"system_instruction": sys_final, "temperature": temperature}
+        resp = client.models.generate_content(model=modelo_gemini.strip(), contents=user_prompt, config=cfg)
+        texto = getattr(resp, "text", "")
+        texto = str(texto or "").strip()
+        
+        if texto and "[REF-VERIF:" not in texto: 
+            return texto, "Gemini (Texto)"
+            
+        raise RuntimeError("O modelo retornou uma resposta em branco.")
+    except Exception as e: 
+        raise RuntimeError(f"Falha na comunicação de Texto: {str(e)}")
+
+def _chamar_motor_visao(arquivo_imagem, estilo_conversao, nivel_sensualidade, modelo_gemini):
     MAX_IMAGE_SIZE_MB = 10
     if arquivo_imagem.size > MAX_IMAGE_SIZE_MB * 1024 * 1024:
         raise RuntimeError(f"🖼️ Imagem limite: {MAX_IMAGE_SIZE_MB} MB.")
     
     config = carregar_config(st.session_state.get("user_email", ""))
-    k1 = st.session_state.get("input_key_1", "").strip() or config.get("chaves", {}).get("Chave 1", "")
-    k2 = st.session_state.get("input_key_2", "").strip() or config.get("chaves", {}).get("Chave 2", "")
+    chave_visao = st.session_state.get("input_key_visao", "").strip() or config.get("chaves", {}).get("Chave Visao", "")
     
-    chaves_visao = [k for k in [k1, k2] if k]
-    if not chaves_visao or genai is None:
-        raise RuntimeError("Chave Gemini necessária para visão. Conecte no painel lateral.")
+    if not chave_visao or genai is None:
+        raise RuntimeError("Nenhuma chave configurada para Visão. Adicione a 'Chave Gemini (Visão)' no painel lateral.")
     
     user_prompt = "Desconstrua pericialmente esta imagem em Ultra-Densidade. \n[MODIFICADOR 2: SENSUALIDADE]: Nível " + str(nivel_sensualidade) + "."
     if "Fotorrealismo" in estilo_conversao: user_prompt += "\n[MODIFICADOR 1: ESTILO]: Traduza para o MUNDO REAL fotorrealista."
     elif "Anime" in estilo_conversao: user_prompt += "\n[MODIFICADOR 1: ESTILO]: Traduza para ILUSTRAÇÃO 2D ANIME."
 
-    erros = []
-    for idx, chave in enumerate(chaves_visao):
-        try:
-            arquivo_imagem.seek(0)
-            img_pil = Image.open(arquivo_imagem)
-            
-            client = genai.Client(api_key=chave)
-            cfg = types.GenerateContentConfig(system_instruction=SYS_LEITOR_PARAMETRICO, temperature=0.2)
-            resp = client.models.generate_content(model=modelo_gemini, contents=[img_pil, user_prompt], config=cfg)
-            
-            texto = getattr(resp, "text", "") or ""
-            if not texto.strip(): raise RuntimeError("A IA bloqueou a imagem.")
-            dados = parse_json_ia(texto)
-            if dados: return {"tipo": "json", "dados": dados}
-            return {"tipo": "texto", "texto": texto}
-        except Exception as e:
-            erros.append(f"Gemini {idx+1}: {str(e)}")
-
-    raise RuntimeError("Falha na leitura óptica: " + " | ".join(erros))
+    try:
+        arquivo_imagem.seek(0)
+        img_pil = Image.open(arquivo_imagem)
+        
+        client = genai.Client(api_key=chave_visao)
+        cfg = types.GenerateContentConfig(system_instruction=SYS_LEITOR_PARAMETRICO, temperature=0.2)
+        resp = client.models.generate_content(model=modelo_gemini.strip(), contents=[img_pil, user_prompt], config=cfg)
+        
+        texto = getattr(resp, "text", "") or ""
+        if not texto.strip(): raise RuntimeError("A IA bloqueou a imagem por políticas de segurança.")
+        
+        dados = parse_json_ia(texto)
+        if dados: return {"tipo": "json", "dados": dados}
+        return {"tipo": "texto", "texto": texto}
+    except Exception as e:
+        raise RuntimeError(f"Falha na leitura óptica (Visão): {str(e)}")
 
 # ==============================================================================
 # 5. UI: BARRA LATERAL E HISTÓRICO
@@ -564,32 +467,25 @@ def renderizar_sidebar():
     config = carregar_config(st.session_state.get("user_email", ""))
     st.sidebar.markdown("---")
     
-    st.sidebar.markdown("<a href='http" + "s://aistudio.google.com/app/apikey' target='_blank' style='color:#2563eb; text-decoration:none;'>🔑 Google Gemini (Principal)</a>", unsafe_allow_html=True)
-    k1 = st.sidebar.text_input("Chave Gemini 1", value=config.get("chaves", {}).get("Chave 1", ""), type="password", key="input_key_1", label_visibility="collapsed")
+    st.sidebar.markdown("<a href='https://aistudio.google.com/app/apikey' target='_blank' style='color:#059669; text-decoration:none;'>👁️ Google Gemini (Via Visão)</a>", unsafe_allow_html=True)
+    st.sidebar.caption("Chave dedicada para leitura de imagens.")
+    k_visao = st.sidebar.text_input("Chave Visão", value=config.get("chaves", {}).get("Chave Visao", ""), type="password", key="input_key_visao", label_visibility="collapsed")
     
-    st.sidebar.markdown("<br><a href='http" + "s://openrouter.ai/keys' target='_blank' style='color:#10b981; text-decoration:none;'>🌐 OpenRouter (Llama 70B Gratuito)</a>", unsafe_allow_html=True)
-    k_or = st.sidebar.text_input("Chave OpenRouter", value=config.get("openrouter_api_key", ""), type="password", key="input_openrouter_api", label_visibility="collapsed")
-
-    st.sidebar.markdown("<br><span style='color:#b45309; font-weight:600;'>🛡️ Google Gemini (Reserva / Opcional)</span>", unsafe_allow_html=True)
-    k2 = st.sidebar.text_input("Chave Gemini 2", value=config.get("chaves", {}).get("Chave 2", ""), type="password", key="input_key_2", label_visibility="collapsed")
+    st.sidebar.markdown("<br><a href='https://aistudio.google.com/app/apikey' target='_blank' style='color:#2563eb; text-decoration:none;'>📝 Google Gemini (Via Texto)</a>", unsafe_allow_html=True)
+    st.sidebar.caption("Chave dedicada para gerar os Prompts Finais.")
+    k_texto = st.sidebar.text_input("Chave Texto", value=config.get("chaves", {}).get("Chave Texto", ""), type="password", key="input_key_texto", label_visibility="collapsed")
 
     with st.sidebar.expander("Ferramentas Avançadas", expanded=False):
-            st.selectbox("Provedor Prioritário", ["Automático", "Gemini (Principal)", "OpenRouter", "Gemini (Reserva)"], key="ps_provedor_manual")
-            gemini_so_visao_chk = st.checkbox("🛡️ Priorizar OpenRouter para Texto (Poupa Cota)", value=config.get("gemini_so_visao", False), key="gemini_so_visao")
-            fallback_chk = st.checkbox("Fallback Automático", value=config.get("fallback_automatico", True), key="fallback_automatico")
-            st.selectbox("Modelo de Visão (Gemini)", ["gemini-3.5-flash", "gemini-3.1-pro"], index=0, key="modelo_visao_select")
+        st.caption("Insira o nome exato do modelo (Ex: gemini-1.5-flash ou gemini-2.5-flash):")
+        modelo_geral = st.text_input("Modelo Base (Ambas as vias)", value=config.get("modelo_padrao", "gemini-1.5-flash"), key="modelo_geral_select")
 
-    if st.sidebar.button("💾 Conectar Motores", type="primary", use_container_width=True):
+    if st.sidebar.button("💾 Conectar Motores Isolados", type="primary", use_container_width=True):
         dados_salvos = {
-            "chaves": {"Chave 1": k1, "Chave 2": k2}, 
-            "openrouter_api_key": k_or,
-            "provedor_ia": st.session_state.get("ps_provedor_manual", "Automático"),
-            "fallback_automatico": fallback_chk, "gemini_so_visao": gemini_so_visao_chk,
-            "modelo_openrouter": "meta-llama/llama-3.1-70b-instruct:free",
-            "modelo_padrao": "gemini-3.5-flash", "usar_busca_web": False
+            "chaves": {"Chave Visao": k_visao, "Chave Texto": k_texto}, 
+            "modelo_padrao": modelo_geral.strip()
         }
         ok_salvo, erro_salvo = salvar_config(dados_salvos, st.session_state.get("user_email", ""))
-        if ok_salvo: st.sidebar.success("✅ Motores conectados e prontos!")
+        if ok_salvo: st.sidebar.success("✅ Motores conectados com sucesso!")
         else: st.sidebar.warning(f"⚠️ {erro_salvo}")
 
 def _historico_sheets(email, prompt_texto=None, acao="listar"):
@@ -630,18 +526,21 @@ def renderizar_historico():
                 modal_historico(item.get("prompt", ""))
 
 # ==============================================================================
-# 6. UI: COCKPIT PRINCIPAL (FUNIL UX 5 PASSOS)
+# 6. UI: COCKPIT PRINCIPAL (FUNIL UX 5 PASSOS COM STATE SYNC)
 # ==============================================================================
 def renderizar_cockpit():
     st.markdown("<div class='ps-kicker'>PROMPT STUDIO COCKPIT · ATRITO ZERO</div>", unsafe_allow_html=True)
     st.markdown("<h1 class='ps-title'>Sua Ideia. Seu Motor. Controle Total.</h1>", unsafe_allow_html=True)
     st.markdown("<div class='ps-slogan'>A porta é nossa, mas as chaves são suas.</div>", unsafe_allow_html=True)
 
-    # Inicia as chaves de estado de forma segura
-    if "ideia_principal" not in st.session_state:
-        st.session_state.ideia_principal = ""
-    if "ck_preprompt_editado" not in st.session_state:
-        st.session_state.ck_preprompt_editado = ""
+    # Inicialização das chaves de memória ancoradas (State Sync Seguro)
+    if "ck_ideia_input" not in st.session_state: st.session_state.ck_ideia_input = ""
+    if "ck_preprompt_editado" not in st.session_state: st.session_state.ck_preprompt_editado = ""
+    if "img_suj" not in st.session_state: st.session_state.img_suj = ""
+    if "img_cen" not in st.session_state: st.session_state.img_cen = ""
+    if "img_act" not in st.session_state: st.session_state.img_act = ""
+    if "img_ilu" not in st.session_state: st.session_state.img_ilu = ""
+    if "img_est" not in st.session_state: st.session_state.img_est = ""
     
     # --------------------------------------------------------------------------
     # PASSO 1: A IDEIA (Texto Base)
@@ -649,14 +548,12 @@ def renderizar_cockpit():
     st.markdown("### 1️⃣ Passo 1: A Sua Ideia (A Narrativa Visual)")
     st.caption("O ponto de partida. Descreva o que imagina ou veja a caixa preencher-se magicamente usando o Passo 2.")
     
-    # A caixa de texto reflete a variável de estado sem colisão de chave (sem param key=)
-    texto_digitado = st.text_area("Insira a sua Ideia:", value=st.session_state.ideia_principal, height=140, label_visibility="collapsed")
-    if texto_digitado != st.session_state.ideia_principal:
-        st.session_state.ideia_principal = texto_digitado
+    # Caixa de texto ligada diretamente à chave interna do Streamlit
+    st.text_area("Insira a sua Ideia:", key="ck_ideia_input", height=140, label_visibility="collapsed")
 
     if st.button("🗑️ Limpar Ideia", use_container_width=False):
-        st.session_state.ideia_principal = ""
-        for k in ["ck_img_parametros","ck_preprompt","ck_preprompt_editado","ck_diagnostico","ck_prompt_final", "ck_sugestoes_marcadas"]: 
+        st.session_state.ck_ideia_input = ""
+        for k in ["ck_img_parametros", "ck_preprompt", "ck_preprompt_editado", "ck_diagnostico", "ck_prompt_final", "ck_sugestoes_marcadas"]: 
             st.session_state.pop(k, None)
         st.rerun()
 
@@ -665,53 +562,58 @@ def renderizar_cockpit():
     # --------------------------------------------------------------------------
     st.markdown("---")
     st.markdown("### 2️⃣ Passo 2: Referência Óptica (Opcional)")
-    st.caption("Sem inspiração para escrever? Faça upload de uma imagem. O Gemini lerá os micro-detalhes e injetará no Passo 1.")
+    st.caption("Sem inspiração para escrever? Faça upload de uma imagem. A Via de Visão extrairá os micro-detalhes para o Passo 1.")
     
     col_img1, col_img2 = st.columns([4, 6])
     with col_img1: 
         img_file = st.file_uploader("Upload de Referência", type=["png", "jpg", "jpeg", "webp"], key="ck_img_uploader", label_visibility="collapsed")
     with col_img2:
         st.write(" ")
-        btn_ler = st.button("👁️ Extrair Imagem (Ultra-Densidade)", use_container_width=True)
+        btn_ler = st.button("👁️ Extrair Imagem (Motor de Visão)", use_container_width=True)
 
     if btn_ler:
         if not img_file: st.warning("Selecione uma imagem primeiro.")
         else:
             with st.spinner("Analisando matriz óptica com Varredura Ultra-Densa..."):
                 try:
-                    modelo_visao = st.session_state.get("modelo_visao_select", "gemini-3.5-flash")
+                    modelo_base = st.session_state.get("modelo_geral_select", "gemini-1.5-flash")
                     estilo_conversao = st.session_state.get("ck_estilo_conversao", "Manter Estilo Original")
                     sens_escolhida = st.session_state.get("ck_sens_slider", OPCOES_SENSUALIDADE[1])
                     
-                    res = processar_imagem_visao(img_file, estilo_conversao, sens_escolhida, modelo_visao)
+                    res = _chamar_motor_visao(img_file, estilo_conversao, sens_escolhida, modelo_base)
                     
                     if res["tipo"] == "json":
                         st.session_state["ck_img_parametros"] = res["dados"]
-                        ideia_extraida = f"Sujeito: {res['dados'].get('sujeito','')}\n\nAção: {res['dados'].get('acao','')}\n\nCenário: {res['dados'].get('cenario','')}\n\nIluminação: {res['dados'].get('iluminacao','')}\n\nEstilo: {res['dados'].get('estilo_camera','')}"
-                        st.session_state.ideia_principal = ideia_extraida
+                        # Injeta nas chaves do Detalhador
+                        st.session_state.img_suj = res["dados"].get("sujeito", "")
+                        st.session_state.img_cen = res["dados"].get("cenario", "")
+                        st.session_state.img_act = res["dados"].get("acao", "")
+                        st.session_state.img_ilu = res["dados"].get("iluminacao", "")
+                        st.session_state.img_est = res["dados"].get("estilo_camera", "")
+                        # Preenche a Ideia Principal
+                        ideia_extraida = f"Sujeito: {st.session_state.img_suj}\n\nAção: {st.session_state.img_act}\n\nCenário: {st.session_state.img_cen}\n\nIluminação: {st.session_state.img_ilu}\n\nEstilo: {st.session_state.img_est}"
+                        st.session_state.ck_ideia_input = ideia_extraida
                     else:
-                        st.session_state.ideia_principal = res["texto"]
+                        st.session_state.ck_ideia_input = res["texto"]
                         st.session_state.pop("ck_img_parametros", None)
                         
                     st.session_state.pop("ck_preprompt", None)
                     st.rerun()
                 except Exception as e: st.error(_msg_erro_amigavel(e))
 
-    parametros = st.session_state.get("ck_img_parametros")
-    if parametros:
+    if st.session_state.get("ck_img_parametros"):
         with st.expander("🔬 Detalhador Pericial Extraído (Editável)", expanded=False):
             c1, c2 = st.columns(2)
             with c1:
-                p_suj = st.text_area("👤 Sujeito:", value=parametros.get("sujeito", ""), height=150)
-                p_cen = st.text_area("🏞️ Cenário:", value=parametros.get("cenario", ""), height=150)
+                st.text_area("👤 Sujeito:", key="img_suj", height=150)
+                st.text_area("🏞️ Cenário:", key="img_cen", height=150)
             with c2:
-                p_act = st.text_area("🏃 Ação:", value=parametros.get("acao", ""), height=100)
-                p_ilu = st.text_area("💡 Iluminação:", value=parametros.get("iluminacao", ""), height=100)
-                p_est = st.text_area("📷 Estilo:", value=parametros.get("estilo_camera", ""), height=100)
+                st.text_area("🏃 Ação:", key="img_act", height=100)
+                st.text_area("💡 Iluminação:", key="img_ilu", height=100)
+                st.text_area("📷 Estilo:", key="img_est", height=100)
             if st.button("🔄 Atualizar Caixa da Ideia com estas edições", use_container_width=True):
-                nova_ideia = f"Sujeito: {p_suj}\n\nAção: {p_act}\n\nCenário: {p_cen}\n\nIluminação: {p_ilu}\n\nEstilo: {p_est}"
-                st.session_state.ideia_principal = nova_ideia
-                st.session_state["ck_img_parametros"] = {"sujeito": p_suj, "acao": p_act, "cenario": p_cen, "iluminacao": p_ilu, "estilo_camera": p_est}
+                nova_ideia = f"Sujeito: {st.session_state.img_suj}\n\nAção: {st.session_state.img_act}\n\nCenário: {st.session_state.img_cen}\n\nIluminação: {st.session_state.img_ilu}\n\nEstilo: {st.session_state.img_est}"
+                st.session_state.ck_ideia_input = nova_ideia
                 st.rerun()
 
     # --------------------------------------------------------------------------
@@ -733,29 +635,32 @@ def renderizar_cockpit():
     st.markdown("---")
     st.markdown("### 4️⃣ Passo 4: Rascunho & Validação (Opcional)")
     col_b1, col_b2 = st.columns(2)
-    with col_b1: btn_pre = st.button("👁️ Rascunhar Cena (Pré-prompt Traduzido)", use_container_width=True)
+    with col_b1: btn_pre = st.button("👁️ Rascunhar Cena (Via Motor de Texto)", use_container_width=True)
     with col_b2: btn_ava = st.button("🔍 Auditar no Compositômetro (Raio-X)", use_container_width=True)
 
     if btn_pre:
-        if not st.session_state.ideia_principal.strip(): st.warning("Escreva a sua Ideia no Passo 1.")
+        if not st.session_state.ck_ideia_input.strip(): st.warning("Escreva a sua Ideia no Passo 1.")
         else:
-            with st.spinner("Desenhando a cena..."):
+            with st.spinner("Desenhando a cena com o Motor de Texto..."):
                 try:
-                    p = f"IDEIA:\n{st.session_state.ideia_principal}\n\n[AGENTE: SENSUALIDADE NÍVEL '{sens_escolhida}']"
+                    p = f"IDEIA:\n{st.session_state.ck_ideia_input}\n\n[AGENTE: SENSUALIDADE NÍVEL '{sens_escolhida}']"
                     if "Literal" in foco_contexto: p += "\n[AGENTE LITERAL]: Seja 100% fiel, sem floreios estéticos inúteis."
-                    txt, prov = _chamar_provedor_ia(SYS_GERADOR_PREPROMPT, p)
-                    st.session_state["ck_ideia_hist_fix"] = st.session_state.ideia_principal
+                    modelo_base = st.session_state.get("modelo_geral_select", "gemini-1.5-flash")
+                    txt, prov = _chamar_motor_texto(SYS_GERADOR_PREPROMPT, p, modelo_gemini=modelo_base)
+                    
+                    st.session_state["ck_ideia_hist_fix"] = st.session_state.ck_ideia_input
                     st.session_state["ck_preprompt"] = txt
                     st.session_state.ck_preprompt_editado = txt 
                     st.rerun()
                 except Exception as e: st.error(_msg_erro_amigavel(e))
 
     if btn_ava:
-        if not st.session_state.ideia_principal.strip(): st.warning("Escreva a sua Ideia no Passo 1.")
+        if not st.session_state.ck_ideia_input.strip(): st.warning("Escreva a sua Ideia no Passo 1.")
         else:
-            with st.spinner("Raio-X em andamento..."):
+            with st.spinner("Raio-X em andamento com o Motor de Texto..."):
                 try:
-                    txt, prov = _chamar_provedor_ia(SYS_COMPOSITOMETRO, f"AVALIE:\n{st.session_state.ideia_principal}")
+                    modelo_base = st.session_state.get("modelo_geral_select", "gemini-1.5-flash")
+                    txt, prov = _chamar_motor_texto(SYS_COMPOSITOMETRO, f"AVALIE:\n{st.session_state.ck_ideia_input}", modelo_gemini=modelo_base)
                     diag = parse_json_ia(txt)
                     if not diag: st.error("⚠️ Erro de formato no Raio-X. Tente novamente.")
                     else: st.session_state["ck_diagnostico"] = diag; st.rerun()
@@ -765,9 +670,7 @@ def renderizar_cockpit():
         st.markdown("<div class='ps-legend'><span><span class='ps-user-word'>Ideia Original</span></span> • <span><span class='ps-ai-word'>Ajuste da IA</span></span></div>", unsafe_allow_html=True)
         st.markdown(f"<div class='ps-preprompt'>{_ps_markup_origin(st.session_state['ck_preprompt'], st.session_state.get('ck_ideia_hist_fix', ''))}</div>", unsafe_allow_html=True)
         
-        pre_ed_digitado = st.text_area("Ajuste fino do Rascunho (Esta caixa substituirá a Ideia para o Motor Final):", value=st.session_state.ck_preprompt_editado, height=130)
-        if pre_ed_digitado != st.session_state.ck_preprompt_editado:
-            st.session_state.ck_preprompt_editado = pre_ed_digitado
+        st.text_area("Ajuste fino do Rascunho (Esta caixa substituirá a Ideia para o Motor Final):", key="ck_preprompt_editado", height=130)
 
     diag = st.session_state.get("ck_diagnostico")
     if diag:
@@ -802,14 +705,14 @@ def renderizar_cockpit():
 
     if btn_exec:
         if dest_sel == "Selecione o Motor Destino...": st.error("🛑 Pare! Selecione para qual motor de IA este prompt será compilado.")
-        elif not st.session_state.ideia_principal.strip(): st.warning("Descreva a sua Ideia no Passo 1 antes de gerar.")
+        elif not st.session_state.ck_ideia_input.strip(): st.warning("Descreva a sua Ideia no Passo 1 antes de gerar.")
         else:
             with st.spinner(f"Compilando sintaxe ultra-otimizada para {dest_sel}..."):
                 try:
                     eng = BANCO_DE_MOTORES[dest_sel]
                     bloco = f"\n\n======================================\n3. SINTAXE NATIVA: {dest_sel}\n======================================\n- POSITIVO: {eng['regra_positivo']}\n- NEGATIVO FIXO: {eng.get('regra_negativo', 'N/A')}\n\nSAÍDA OBRIGATÓRIA:\n1. PROMPT (ENGLISH)\n2. NEGATIVE PROMPT DINÂMICO (ENGLISH)\n3. LEGENDA\n4. HASHTAGS\n💡 DICA TÉCNICA: {eng['dica_tecnica']}"
                     
-                    txt_b = st.session_state.ck_preprompt_editado if st.session_state.get("ck_preprompt") else st.session_state.ideia_principal
+                    txt_b = st.session_state.ck_preprompt_editado if st.session_state.get("ck_preprompt") else st.session_state.ck_ideia_input
                     sug_aceitas = st.session_state.get("ck_sugestoes_marcadas", [])
                     sug_str = "\n".join(f"- {s}" for s in sug_aceitas) if sug_aceitas else "Nenhuma sugestão."
                     
@@ -818,7 +721,9 @@ def renderizar_cockpit():
                     if "Literal" in foco_contexto: p += "\n[MODO LITERAL ATIVADO]: Remova floreios da sintaxe final. Foque puramente na geometria física."
                     p += "\n\n⚠️ OBRIGATÓRIO: 'PROMPT' E 'NEGATIVE' EXCLUSIVAMENTE EM INGLÊS."
 
-                    res, prov = _chamar_provedor_ia(SYS_MESTRE_CORE + bloco, p)
+                    modelo_base = st.session_state.get("modelo_geral_select", "gemini-1.5-flash")
+                    res, prov = _chamar_motor_texto(SYS_MESTRE_CORE + bloco, p, modelo_gemini=modelo_base)
+                    
                     st.session_state["ck_prompt_final"] = res
                     st.session_state["ck_prov_usado"] = prov
                     st.session_state["ck_dest_usado"] = dest_sel
