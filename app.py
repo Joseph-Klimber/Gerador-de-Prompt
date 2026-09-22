@@ -304,10 +304,13 @@ def carregar_config(email=None):
     email_normalizado = (email or "").strip().lower()
     cache = st.session_state.get("_config_cache", {})
     item_cache = cache.get(email_normalizado)
-    if item_cache and time.time() - item_cache[0] < 30:
+    
+    # Alterado de 30 para 600 segundos (10 minutos) para evitar estrangulamento da UI
+    if item_cache and time.time() - item_cache[0] < 600:
         return copy.deepcopy(item_cache[1])
 
     config = {
+# ... mantenha o resto da função inalterada ...
         "chaves": {"Chave Visao": "", "Chave Texto": ""},
         "modelo_padrao": MODELO_TEXTO_PADRAO,
         "modelo_visao": MODELO_VISAO_PADRAO,
