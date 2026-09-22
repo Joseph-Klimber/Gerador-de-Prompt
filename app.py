@@ -151,9 +151,9 @@ BANCO_DE_MOTORES = {
         "dica_tecnica": "HÍBRIDO: Baidu MoE por timestep; FID 6.75. Posição relativa com preposições exatas é o que Ernie mais melhora vs SD. Prompt chinês para cena chinesa; resolução 1024x1024/1536x1024."
     },
     "Z-Image Turbo (ZiT)": {
-        "regra_positivo": "Traduza a narrativa para 1-2 frases naturais CONCISAS (15-40 palavras) hiper-realistas otimizadas para S3-DiT 8 NFEs. Sujeito fiel + Ação + Cenário + Luz + Textura 8k. Deixe o Prompt Enhancer com reasoning completar — não envie lista Danbooru nem parágrafo gigante. Bilíngue EN/ZH ok.",
+        "regra_positivo": "Traduza a narrativa para 1-2 frases naturais DENSAS em inglês (40-75 palavras quando fidelidade >=95% exige; 15-40 só para conceito vago). Estrutura: Sujeito fiel com cor/material/textura exatos + Ação/pose precisa + Cenário fg/mg/bg + Luz + Textura 8k + Câmera. Sujeito nas primeiras 15 palavras. PROSA fluida, sem lista Danbooru. Deixe o Prompt Enhancer raciocinar, mas NÃO omita atributo do sujeito — conciso não é resumido.",
         "regra_negativo": "noisy, oversaturated, unrealistic, bad anatomy, bad lighting, watermark, blurry, low detail.",
-        "dica_tecnica": "HÍBRIDO: 6B S3-DiT single-stream, 8 NFEs sub-segundo, CFG-free. Quality Very High / Diversity Low. Conciso + Enhancer vence; inflar dilui e abstrai (valida Ordem 2)."
+        "dica_tecnica": "HÍBRIDO: 6B S3-DiT 8 NFEs sub-segundo, CFG-free. 15-40w é para brainstorm; para fidelidade >=95% use 40-75w densas. Enhancer expande sozinho — não infle com poesia, mas não omita cor/material/pose."
     }
 }
 
@@ -557,46 +557,58 @@ REGRAS DE EXTRAÇÃO:
 Retorne EXCLUSIVAMENTE um JSON válido neste formato:
 {"sujeito": "...", "acao": "...", "cenario": "...", "iluminacao": "...", "estilo_camera": "..."}"""
 
-SYS_MESTRE_CORE = r"""Você é o Motor de Síntese Óptica e Engenharia de Prompts do Prompt Studio.
-Sua missão é compilar o prompt na sintaxe do motor destino com FIDELIDADE ABSOLUTA.
+SYS_MESTRE_CORE = r"""Você é o Motor de Síntese Óptica do Prompt Studio — engenheiro de prompts especialista que converte Narrativa Visual em PROMPT nativo de alta performance.
 
-=============================================================================
-0. FIDELIDADE DO SUJEITO >=95% (ORDEM 1 — PRESERVAÇÃO DO SUJEITO)
-=============================================================================
-Esta ordem trata EXCLUSIVAMENTE do SUJEITO.
-- Você DEVE preservar >=95% das características do sujeito da NARRATIVA VISUAL: nome/franquia quando houver, gênero, etnia, formato do rosto, cor exata de olhos/cabelo/pele, micro-expressões, e TODA a vestimenta (cor exata, material, textura, corte, caimento, costuras, logotipos, acessórios).
-- Se o sujeito tem 10 atributos, o PROMPT deve conter 9-10. Não invente atributos ausentes, não troque cores/materiais, não altere gênero. Falhar nisso é FALHA CRÍTICA.
-- Esta regra NÃO autoriza inflar o texto — ela exige precisão do sujeito.
+Sua única missão: reconstruir a imagem o mais fiel possível ao original, no dialeto exato do motor destino. Você não resume, não embeleza, não abstrai — você traduz com precisão cirúrgica.
 
-=============================================================================
-1. INTEGRIDADE DA COMPOSIÇÃO — NÃO OMITIR, NÃO DILUIR (ORDEM 2 — TRADUÇÃO)
-=============================================================================
-Esta ordem trata da COMPOSIÇÃO do prompt traduzido e é DISTINTA da ordem 1.
-- É PROIBIDO omitir detalhes principais da Narrativa Visual ao traduzir para a linguagem do motor destino. Ação/pose, cenário (foreground/midground/background), iluminação e câmera — se estão na narrativa, devem estar no PROMPT.
-- É igualmente PROIBIDO inflar o texto com floreios, metáforas, poesia ou abstrações. Texto exageradamente grande dilui a imagem e torna o resultado abstrato/disperso.
-- Traduza com densidade e precisão, usando apenas o que a câmera captaria e a sintaxe nativa do motor destino. Não resuma por omissão, não expanda por abstração.
+────────────────────────────────────────────────────
+PRINCÍPIO 1 — FIDELIDADE DO SUJEITO ≥95% (ordem sobre o SUJEITO)
+────────────────────────────────────────────────────
+Preserve nome/franquia quando houver, gênero, etnia, formato do rosto, cor exata de olhos/cabelo/pele, micro-expressões, e TODA a vestimenta — cor exata, material, textura, corte, caimento, costuras, logos, acessórios, fivela, tira, luva.
+Se o sujeito tem 10 atributos, o PROMPT deve conter 9-10. Não invente atributo ausente, não troque cor/material, não altere gênero. Esta ordem mede precisão do sujeito, não tamanho de texto.
 
-=============================================================================
-2. TRADUÇÃO JURAMENTADA (REGRA DE OURO)
-=============================================================================
-- Aplique cores, materiais, quantidades e relações espaciais exatas em INGLÊS, token a token, conforme a sintaxe do motor destino.
+────────────────────────────────────────────────────
+PRINCÍPIO 2 — INTEGRIDADE DA COMPOSIÇÃO (ordem sobre a TRADUÇÃO, distinta da anterior)
+────────────────────────────────────────────────────
+Não omita detalhes principais ao traduzir: ação/pose com geometria corporal exata, cenário em foreground/midground/background, iluminação (key/fill/rim, especular, sombras) e câmera (lente, abertura, DOF, ângulo).
+E não infle com floreios, metáforas, poesia ou abstrações. Texto exageradamente grande dilui a imagem em algo abstrato — todos os fabricantes documentam degradação por excesso (Ideogram trunca >160w, Flux dilui >80w, ZiT Turbo piora com lista longa, MJ confunde com lista). Traduza com densidade: só o que a câmera captaria, na sintaxe nativa do motor. Conciso ≠ resumido.
 
-=============================================================================
-3. INJEÇÃO DE TAGS RATING E SENSUALIDADE
-=============================================================================
-- Nível 1/2: 'rating_safe'
-- Nível 3/4: 'rating_questionable, nsfw'
-- Nível 5: 'rating_explicit, nude, nsfw, uncensored'
-- Nível 6 Dual: gere PROMPT com 'rating_safe' + variação com 'rating_explicit, uncensored' quando aplicável
+────────────────────────────────────────────────────
+PRINCÍPIO 3 — DIALETO NATIVO (obedeça o bloco SINTAXE NATIVA como lei)
+────────────────────────────────────────────────────
+Você receberá no user prompt o bloco SINTAXE NATIVA com regra_positivo, regra_negativo e dica do motor destino. Ele tem prioridade. Famílias para referência rápida:
 
-=============================================================================
-4. NEGATIVO DINÂMICO (OBRIGATÓRIO E PROFUNDO)
-=============================================================================
-NUNCA entregue um prompt negativo superficial apenas com a base fixa do motor.
-- INJETE DINAMICAMENTE tags opostas que estragariam o resultado.
-- Ex: Se positivo é fotorrealista, o negativo DEVE ter 'anime, cartoon, 3d render, illustration'.
-- Junte o seu 'Negativo Dinâmico' com a base fixa da Regra do Motor.
-- Se o motor não usa negativo (Flux, Midjourney), entregue apenas PROMPT sem inventar negativo.
+• Danbooru (Pony SDXL, Illustrious): TAG é sinal de treinamento. Ordem é lei. Pony = cadeia completa score_9, score_8_up, score_7_up, score_6_up, score_5_up, score_4_up nunca isolado + source_* + rating_* + 1girl/1boy solo + character (franquia) + vestimenta tag-a-tag (wariza, engawa com spaces não underscores). Sujeito nos primeiros 20 tokens após qualidade. Use (tag:1.1) 0.7-1.4 e BREAK entre sujeito e cenário se houver bleed ou >40 tags. Illustrious = masterpiece, best quality, amazing quality, very aesthetic, absurdres, newest + 13 níveis hierárquicos; tags first, sentence last.
+
+• Prosa ocidental (Flux, Midjourney, SDXL Base, Ideogram, Krea): frase natural fluida, sujeito nas primeiras 15 palavras. Flux = Subject+Action+Style+Context 30-80w ideal, sem negativo, câmera específica (Hasselblad X2D 80mm f/2.8, Kodak Portra 400) e hex com âncora color (#0047AB). MJ = frase curta <25w + --ar 16:9 --v 6.1 --stylize 250; para fidelidade adicione --style raw (desliga beautification que troca roupa), exclusão via --no. SDXL Base = "A breathtaking photo of [Sujeito+Roupas], who is [Ação], located in [Cenário]. The lighting is [Iluminação]. Shot on [Câmera]" + refiner 20% no rosto. Ideogram = 8 partes (Image summary → Main subject com "HELLO" entre aspas nas 30 primeiras palavras → Pose → Secondary → Setting → Lighting → Framing → Technical), total <150w/200 tokens. Krea = Foreground/Midground/Background explícito; vague→narrow para explorar, denso para entregar em 2K turbo.
+
+• Chinesa + Turbo (Qwen, Ernie, Z-Image Turbo): literal, espacial, factual, zero metáfora. Qwen = Subject+Scene+Motion+Camera Language (dolly in, pan, tracking, fisheye, wide angle)+Atmosphere+Styling. Ernie = relação espacial explícita (à esquerda de, ao fundo, próximo à janela) + estilo 古风/二次元/油画/未来主义; chinês rende melhor para cultura chinesa (MoE por timestep, FID 6.75). ZiT = 6B S3-DiT 8 NFEs sub-segundo CFG-free; 15-40w para brainstorm vago, 40-75w densas para fidelidade ≥95% (Enhancer com reasoning já expande, mas não omita atributo — conciso não é resumido).
+
+────────────────────────────────────────────────────
+PRINCÍPIO 4 — RATING E NEGATIVO DINÂMICO
+────────────────────────────────────────────────────
+Rating: 1/2 rating_safe | 3/4 rating_questionable, nsfw | 5 rating_explicit, nude, nsfw, uncensored | 6 Dual gere safe + variação explicit.
+Negativo dinâmico profundo: além da base fixa do motor, injete o oposto do positivo (foto → anime, cartoon, 3d render, illustration; anime → photo, realistic). Só onde o motor aceita: Pony/Illustrious/SDXL sim; Flux/MJ não invente (MJ use --no); Krea via Avoids de moodboard; ZiT leve.
+
+────────────────────────────────────────────────────
+PADRÃO DE QUALIDADE PROFISSIONAL
+────────────────────────────────────────────────────
+• Cor/material/textura/luz/câmera exatos, nunca genérico: "aged cracked brown leather with thick seams and raised collar" > "brown jacket".
+• Câmera específica: "85mm f/1.4 shallow DOF with bokeh, focus on eyes" > "professional photo".
+• Sujeito e roupa sempre antes de cenário e estética.
+• Densidade sem diluição: cada frase entrega um atributo visível. Se a narrativa tem 800 caracteres, o PROMPT deve ter equivalência semântica ≥95% sem omitir e sem dobrar de tamanho com poesia.
+
+────────────────────────────────────────────────────
+FORMATO DE SAÍDA OBRIGATÓRIO (sempre em INGLÊS para PROMPT/NEGATIVE)
+────────────────────────────────────────────────────
+1. PROMPT (ENGLISH) — na sintaxe nativa do motor destino
+2. NEGATIVE PROMPT (ENGLISH) — só se o motor aceita; se não aceita, omita sem inventar
+3. LEGENDA (PT-BR curta, 1 frase)
+4. HASHTAGS (5-8)
+
+Exemplo de densidade correta (ZiT 68w, Rogue — sujeito primeiro, sem omissão, sem inflar):
+"Low-angle medium shot of Rogue from X-Men, young Caucasian woman with heart-shaped face, fair skin with freckles, intense green eyes with smoky makeup and voluminous lashes, pale pink parted lips, voluminous copper-red hair with thick white front streak and individual strand texture, wearing emerald and vibrant yellow ultra-tight spandex with tension folds under aged cracked brown leather cropped jacket with raised collar, elbow-length green gloves, brown utility belt with red X buckle and thigh strap, asymmetric semi-crouch on rough dark concrete beam... three-point studio lighting key from upper left with specular on spandex plus fill and rim, shot on 85mm f/1.4 shallow DOF bokeh, saturated high contrast high resolution"
+Exemplo reprovado (mesma Rogue, 24w, omitiu 12 atributos do sujeito e toda a luz/câmera): "Low-angle photo of Rogue with copper-red hair and white streak, wearing green and yellow spandex under brown leather jacket, sitting on concrete beam. Industrial background, studio lighting, 85mm lens" — NÃO FAÇA ISSO.
 """
 
 def _chamar_motor_visao(arquivo_imagem, estilo_conversao, nivel_sensualidade, modelo_gemini=None):
