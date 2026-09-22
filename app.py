@@ -446,17 +446,16 @@ def _build_gemini_config(system_instruction, model_id, temperature=None):
         if not eh_gemini3 and temperature is not None:
             cfg["temperature"] = temperature
         return cfg
-    # Gemini 3.x: temperature/top_p/top_k deprecados -> usar thinking_level
+    
+    # Gemini 3.x: Reduzir o nível de thinking para "low" para restaurar a velocidade normal,
+    # ou omitir se o modelo for standard flash.
     if eh_gemini3:
         try:
-            # medium = padrão equilibrado (docs); low seria mais rápido
-            thinking = types.ThinkingConfig(thinking_level="medium")
+            # "low" restaura grande parte da velocidade original
+            thinking = types.ThinkingConfig(thinking_level="low")
             return types.GenerateContentConfig(system_instruction=system_instruction, thinking_config=thinking)
         except Exception:
-            try:
-                return types.GenerateContentConfig(system_instruction=system_instruction, thinking_config=types.ThinkingConfig(thinking_level="low"))
-            except Exception:
-                return types.GenerateContentConfig(system_instruction=system_instruction)
+            return types.GenerateContentConfig(system_instruction=system_instruction)
     else:
         kwargs = {"system_instruction": system_instruction}
         if temperature is not None:
