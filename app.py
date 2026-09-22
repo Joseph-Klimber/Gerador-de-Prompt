@@ -77,6 +77,9 @@ st.markdown(
     .comp-green { background-color: rgba(5, 150, 105, 0.1); color: #10b981; border: 1px solid rgba(5, 150, 105, 0.3); }
     .comp-amber { background-color: rgba(217, 119, 6, 0.1); color: #f59e0b; border: 1px solid rgba(217, 119, 6, 0.3); }
     .comp-blue  { background-color: rgba(37, 99, 235, 0.1); color: #3b82f6; border: 1px solid rgba(37, 99, 235, 0.3); }
+    .ps-final-box { background: var(--secondary-background-color); border: 1px solid rgba(128,128,128,0.25); border-radius: 12px; padding: 1.1rem 1.25rem; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 0.88rem; line-height: 1.65; color: var(--text-color); white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; max-height: 520px; overflow-y: auto; }
+    [data-testid="stCode"] pre { white-space: pre-wrap !important; word-break: break-word !important; overflow-wrap: anywhere !important; }
+    [data-testid="stCode"] code { white-space: pre-wrap !important; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -556,9 +559,17 @@ SYS_MESTRE_CORE = r"""Você é o Motor de Síntese Óptica e Engenharia de Promp
 Sua missão é compilar o prompt na sintaxe do motor destino com FIDELIDADE ABSOLUTA.
 
 =============================================================================
+0. PROTOCOLO ANTI-RESUMO — FIDELIDADE >=95% (REGRA SUPREMA, NÃO NEGOCIÁVEL)
+=============================================================================
+- É ESTRITAMENTE PROIBIDO resumir, comprimir, generalizar, abreviar ou omitir qualquer detalhe da NARRATIVA VISUAL.
+- Você DEVE preservar >=95% do conteúdo semântico: todo sujeito (nome, franquia, gênero, etnia, cabelo, olhos, pele), toda peça de roupa (cor exata, material, textura, corte, caimento, logotipo, acessório), toda ação/pose, todo elemento de cenário (foreground/midground/background), toda luz e toda câmera.
+- Se a narrativa tem 10 atributos, o PROMPT deve conter 9-10. Se tem 100 palavras, o PROMPT deve ter equivalência >=95 palavras sem perda. Contar e conferir antes de responder.
+- Traduza, não resuma. Expanda com termos técnicos do motor destino se necessário, mas NUNCA reduza. Falhar nisso é FALHA CRÍTICA.
+
+=============================================================================
 1. TRADUÇÃO JURAMENTADA DA CENA (REGRA DE OURO)
 =============================================================================
-- Extraia 100% das informações da NARRATIVA VISUAL (Sujeito, Roupa, Cenário, Luz) e aplique-as no prompt em inglês.
+- Extraia 100% das informações da NARRATIVA VISUAL (Sujeito, Roupa, Cenário, Luz) e aplique-as no prompt em INGLÊS, token a token, com cores, materiais e quantidades exatas.
 
 =============================================================================
 2. INJEÇÃO DE TAGS RATING E SENSUALIDADE
@@ -566,6 +577,7 @@ Sua missão é compilar o prompt na sintaxe do motor destino com FIDELIDADE ABSO
 - Nível 1/2: 'rating_safe'
 - Nível 3/4: 'rating_questionable, nsfw'
 - Nível 5: 'rating_explicit, nude, nsfw, uncensored'
+- Nível 6 Dual: gere PROMPT com 'rating_safe' + variação com 'rating_explicit, uncensored' quando aplicável
 
 =============================================================================
 3. NEGATIVO DINÂMICO (OBRIGATÓRIO E PROFUNDO)
@@ -574,6 +586,7 @@ NUNCA entregue um prompt negativo superficial apenas com a base fixa do motor.
 - INJETE DINAMICAMENTE tags opostas que estragariam o resultado.
 - Ex: Se positivo é fotorrealista, o negativo DEVE ter 'anime, cartoon, 3d render, illustration'.
 - Junte o seu 'Negativo Dinâmico' com a base fixa da Regra do Motor.
+- Se o motor não usa negativo (Flux, Midjourney), entregue apenas PROMPT sem inventar negativo.
 """
 
 def _chamar_motor_visao(arquivo_imagem, estilo_conversao, nivel_sensualidade, modelo_gemini=None):
@@ -751,42 +764,17 @@ def renderizar_sidebar():
         if ok_salvo: st.sidebar.success("✅ Motores conectados com sucesso!")
         else: st.sidebar.warning(f"⚠️ {erro_salvo}")
 
+# Histórico em nuvem DESATIVADO por política (BYOK — prompts ficam só no download local)
+# Mantidos como stubs para compatibilidade; não chamam Apps Script para prompts.
 def _historico_sheets(email, prompt_texto=None, acao="listar"):
-    email = (email or "").strip().lower()
-    if acao == "adicionar":
-        if not prompt_texto or not str(prompt_texto).strip(): return False, "Nenhum prompt."
-        MAX_HISTORY_CHARS = 25000
-        truncado = len(str(prompt_texto)) > MAX_HISTORY_CHARS
-        payload = { "acao": "adicionar_historico", "email": email, "prompt": str(prompt_texto)[:MAX_HISTORY_CHARS], "_truncado": truncado }
-        try:
-            resp = _request_with_retry(
-                "POST", APPS_SCRIPT_URL.strip(), json=payload, timeout=30,
-                allow_redirects=True
-            )
-            if resp.status_code == 200 and resp.json().get("ok"): return True, None
-        except Exception as e: return False, f"Falha de conexão: {e}"
-        return False, "Erro ao processar."
-    params = {"acao": "listar_historico", "email": email}
-    resp = _req_apps_script(params, timeout=20)
-    if resp and resp.get("ok"): return True, resp.get("itens", [])
     return False, []
 
 @st.dialog("📝 Visualizador de Prompt (Histórico)")
 def modal_historico(conteudo):
-    st.info("Utilize o ícone de 'Copiar' no canto superior direito do bloco de código abaixo.")
-    st.code(conteudo, language="markdown")
-    st.download_button("📥 Baixar este Prompt (.txt)", data=conteudo, file_name=f"prompt_historico_{int(time.time())}.txt", use_container_width=True)
+    st.info("Histórico em nuvem desativado. Use o botão Baixar no prompt final.")
 
 def renderizar_historico():
-    with st.sidebar.expander("🕘 Histórico de Prompts", expanded=False):
-        ok, itens = _historico_sheets(st.session_state.get("user_email", ""), acao="listar")
-        if not ok: st.caption("Histórico indisponível."); return
-        if not itens: st.caption("Nenhum prompt salvo ainda."); return
-        for item in itens[-10:]:
-            ts = item.get("quando", "")[:16]
-            preview = str(item.get("prompt", ""))[:60].replace("\n", " ")
-            if st.button(f"{ts} — {preview}...", key=f"hist_{item.get('id', ts)}", use_container_width=True):
-                modal_historico(item.get("prompt", ""))
+    return  # Histórico desativado — nada é salvo no servidor
 
 # ==============================================================================
 # 6. UI: COCKPIT PRINCIPAL (FUNIL UX 5 PASSOS COM STATE SYNC)
@@ -1003,10 +991,10 @@ def renderizar_cockpit():
                     sug_aceitas = st.session_state.get("ck_sugestoes_marcadas", [])
                     sug_str = "\n".join(f"- {s}" for s in sug_aceitas) if sug_aceitas else "Nenhuma sugestão."
                     
-                    p = f"DESTINO: {dest_sel}\nRATING: {sens_escolhida}\n\n1. NARRATIVA VISUAL:\n{txt_b}\n\n2. SUGESTÕES CIRÚRGICAS INCORPORADAS:\n{sug_str}"
+                    p = f"DESTINO: {dest_sel}\nRATING: {sens_escolhida}\n\n1. NARRATIVA VISUAL (TRADUZIR INTEGRALMENTE — >=95% FIDELIDADE, NÃO RESUMIR):\n{txt_b}\n\n2. SUGESTÕES CIRÚRGICAS INCORPORADAS:\n{sug_str}"
                     
-                    if "Literal" in foco_contexto: p += "\n[MODO LITERAL ATIVADO]: Remova floreios da sintaxe final. Foque puramente na geometria física."
-                    p += "\n\n⚠️ OBRIGATÓRIO: 'PROMPT' E 'NEGATIVE' EXCLUSIVAMENTE EM INGLÊS."
+                    if "Literal" in foco_contexto: p += "\n[MODO LITERAL ATIVADO]: Remova apenas floreios poéticos, MAS MANTENHA 100% da geometria física, cores, materiais e quantidades. LITERAL NÃO É RESUMO."
+                    p += "\n\n⚠️ REGRAS FINAIS OBRIGATÓRIAS:\n- FIDELIDADE >=95%: traduza CADA atributo da Narrativa Visual sem omitir nada.\n- 'PROMPT' E 'NEGATIVE' EXCLUSIVAMENTE EM INGLÊS.\n- NUNCA resuma; se a narrativa tem 800 caracteres, o PROMPT deve ter equivalência semântica >=95%."
 
                     modelo_base = st.session_state.get("modelo_texto_select", MODELO_TEXTO_PADRAO)
                     res, prov = _chamar_motor_texto(SYS_MESTRE_CORE + bloco, p, modelo_gemini=modelo_base)
@@ -1017,29 +1005,28 @@ def renderizar_cockpit():
                     st.rerun()
                 except Exception as e: st.error(_msg_erro_amigavel(e))
 
-    # OUTPUT FINAL E DOWNLOADS
+    # OUTPUT FINAL — BOX COM QUEBRA AUTOMÁTICA + DOWNLOAD LOCAL (SEM NUVEM)
     if st.session_state.get("ck_prompt_final"):
         st.markdown("---")
         st.markdown(f"### 📋 Prompt Especializado ({st.session_state.get('ck_dest_usado')})")
-        st.caption(f"Gerado via {st.session_state.get('ck_prov_usado')}")
-        
-        st.code(st.session_state["ck_prompt_final"], language="markdown")
-            
-        c_save1, c_save2 = st.columns(2)
-        with c_save1:
-            if st.button("💾 Salvar no Histórico em Nuvem", use_container_width=True):
-                ok_hist, erro_hist = _historico_sheets(st.session_state.get("user_email", ""), st.session_state["ck_prompt_final"], acao="adicionar")
-                if ok_hist: st.success("✅ Prompt salvo no histórico!")
-                else: 
-                    if erro_hist and "_truncado" in str(erro_hist): st.warning("⚠️ Prompt truncado no histórico (limite de 25.000 caracteres).")
-                    else: st.warning(f"⚠️ {erro_hist or 'Não foi possível salvar.'}")
-        with c_save2:
+        st.caption(f"Gerado via {st.session_state.get('ck_prov_usado')} · Download local — nada é salvo no servidor")
+        # Box com quebra automática (sem scroll horizontal)
+        _final_txt = st.session_state["ck_prompt_final"]
+        st.markdown(f"<div class='ps-final-box'>{html.escape(_final_txt)}</div>", unsafe_allow_html=True)
+        st.caption("↔️ Quebra automática ativa — sem rolagem horizontal. Use o botão para baixar.")
+        col_dl1, col_dl2 = st.columns([3, 1])
+        with col_dl1:
             st.download_button(
                 label="📥 Baixar Prompt (.txt)", 
-                data=st.session_state["ck_prompt_final"], 
+                data=_final_txt, 
                 file_name=f"prompt_studio_{int(time.time())}.txt", 
                 use_container_width=True
             )
+        with col_dl2:
+            # Atalho de cópia: exibe em text_area selecionável como fallback
+            with st.popover("📋 Copiar", use_container_width=True):
+                st.text_area("Copie o prompt:", value=_final_txt, height=220, key="ck_copy_area")
+                st.caption("Ctrl+A → Ctrl+C")
 
 # ==============================================================================
 # 9. PONTO DE ENTRADA (VITRINE DINÂMICA E LOGIN)
@@ -1089,4 +1076,4 @@ else:
     st.markdown("<div class='ps-brand'>PROMPT STUDIO COCKPIT</div>", unsafe_allow_html=True)
     st.markdown("<div class='ps-header-note'>IDE Paramétrica de Geração de Prompts (BYOK)</div>", unsafe_allow_html=True)
     renderizar_cockpit()
-    renderizar_historico()
+    # renderizar_historico() desativado por política
