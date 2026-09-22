@@ -3,10 +3,10 @@
 Prompt Studio Cockpit — Interface Minimalista de Alta Precisão
 Arquitetura: Separação de Responsabilidades (Visão vs Texto) + BYOK (Traga sua Chave).
 
-v4.1 — Correção Definitiva de State Sync:
-  • Removida a "key" problemática da caixa de texto principal para evitar StreamlitAPIException.
-  • Injeção de texto extraído da imagem de forma instantânea e segura.
-  • Arquitetura Pure-Core mantida intacta.
+v4.3 — Google Pure-Core & Modelos 3.x Restaurados:
+  • Filtros de segurança do Gemini desativados (BLOCK_NONE) nas vias de Texto e Visão.
+  • Resolução do erro "resposta em branco" gerado pelos filtros padrão.
+  • Identificadores de API restaurados para a família validada pelo utilizador (3.5-flash e 3.1-pro).
 """
 
 import os
@@ -259,7 +259,7 @@ def carregar_config(email=None):
 
     config = {
         "chaves": {"Chave Visao": "", "Chave Texto": ""},
-        "modelo_padrao": "gemini-1.5-flash"
+        "modelo_padrao": "gemini-3.5-flash"
     }
     dados = _req_apps_script({"acao": "carregar_config", "email": email_normalizado})
     if dados and dados.get("ok") and dados.get("config"):
@@ -344,7 +344,7 @@ def verificar_acesso_sheets(email):
     except Exception as e: return False, "", f"⚠️ Falha na conexão: {e}"
 
 # ==============================================================================
-# 3. MOTORES PURE-CORE (SEPARADOS)
+# 3. MOTORES PURE-CORE (SEPARADOS COM DESBLOQUEIO DE SEGURANÇA)
 # ==============================================================================
 SYS_GERADOR_PREPROMPT = r"""Você é o Diretor de Arte Óptica e Composição Visual do Prompt Studio.
 Gere um PRÉ-PROMPT visual completo, cinematográfico e coeso em Português a partir da ideia do usuário.
@@ -394,7 +394,33 @@ NUNCA entregue um prompt negativo superficial apenas com a base fixa do motor.
 - Junte o seu 'Negativo Dinâmico' com a base fixa da Regra do Motor.
 """
 
-def _chamar_motor_texto(system_prompt, user_prompt, modelo_gemini="gemini-1.5-flash", temperature=0.25):
+def _get_safety_config(system_instruction, temperature):
+    """Gera a configuração com os filtros de segurança do Google desativados (BLOCK_NONE)"""
+    if types:
+        safety_settings = [
+            types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_NONE"),
+            types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_NONE"),
+            types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_NONE"),
+            types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_NONE"),
+        ]
+        return types.GenerateContentConfig(
+            system_instruction=system_instruction,
+            temperature=temperature,
+            safety_settings=safety_settings
+        )
+    else:
+        return {
+            "system_instruction": system_instruction,
+            "temperature": temperature,
+            "safety_settings": [
+                {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
+            ]
+        }
+
+def _chamar_motor_texto(system_prompt, user_prompt, modelo_gemini="gemini-3.5-flash", temperature=0.25):
     config = carregar_config(st.session_state.get("user_email", ""))
     chave_texto = st.session_state.get("input_key_texto", "").strip() or config.get("chaves", {}).get("Chave Texto", "")
 
@@ -405,7 +431,8 @@ def _chamar_motor_texto(system_prompt, user_prompt, modelo_gemini="gemini-1.5-fl
     
     try:
         client = genai.Client(api_key=chave_texto)
-        cfg = types.GenerateContentConfig(system_instruction=sys_final, temperature=temperature) if types else {"system_instruction": sys_final, "temperature": temperature}
+        cfg = _get_safety_config(sys_final, temperature)
+        
         resp = client.models.generate_content(model=modelo_gemini.strip(), contents=user_prompt, config=cfg)
         texto = getattr(resp, "text", "")
         texto = str(texto or "").strip()
@@ -413,7 +440,7 @@ def _chamar_motor_texto(system_prompt, user_prompt, modelo_gemini="gemini-1.5-fl
         if texto and "[REF-VERIF:" not in texto: 
             return texto, "Gemini (Texto)"
             
-        raise RuntimeError("O modelo retornou uma resposta em branco.")
+        raise RuntimeError("O modelo retornou uma resposta em branco (Possível bloqueio de segurança regional).")
     except Exception as e: 
         raise RuntimeError(f"Falha na comunicação de Texto: {str(e)}")
 
@@ -437,7 +464,8 @@ def _chamar_motor_visao(arquivo_imagem, estilo_conversao, nivel_sensualidade, mo
         img_pil = Image.open(arquivo_imagem)
         
         client = genai.Client(api_key=chave_visao)
-        cfg = types.GenerateContentConfig(system_instruction=SYS_LEITOR_PARAMETRICO, temperature=0.2)
+        cfg = _get_safety_config(SYS_LEITOR_PARAMETRICO, 0.2)
+        
         resp = client.models.generate_content(model=modelo_gemini.strip(), contents=[img_pil, user_prompt], config=cfg)
         
         texto = getattr(resp, "text", "") or ""
@@ -475,8 +503,8 @@ def renderizar_sidebar():
     k_texto = st.sidebar.text_input("Chave Texto", value=config.get("chaves", {}).get("Chave Texto", ""), type="password", key="input_key_texto", label_visibility="collapsed")
 
     with st.sidebar.expander("Ferramentas Avançadas", expanded=False):
-        st.caption("Insira o nome exato do modelo (Ex: gemini-1.5-flash ou gemini-2.5-flash):")
-        modelo_geral = st.text_input("Modelo Base (Ambas as vias)", value=config.get("modelo_padrao", "gemini-1.5-flash"), key="modelo_geral_select")
+        st.caption("Insira o nome exato do modelo (Ex: gemini-3.5-flash ou gemini-3.1-pro):")
+        modelo_geral = st.text_input("Modelo Base (Ambas as vias)", value=config.get("modelo_padrao", "gemini-3.5-flash"), key="modelo_geral_select")
 
     if st.sidebar.button("💾 Conectar Motores Isolados", type="primary", use_container_width=True):
         dados_salvos = {
@@ -532,7 +560,6 @@ def renderizar_cockpit():
     st.markdown("<h1 class='ps-title'>Sua Ideia. Seu Motor. Controle Total.</h1>", unsafe_allow_html=True)
     st.markdown("<div class='ps-slogan'>A porta é nossa, mas as chaves são suas.</div>", unsafe_allow_html=True)
 
-    # Inicialização das chaves de memória ancoradas (State Sync Seguro)
     if "ideia_principal" not in st.session_state: st.session_state.ideia_principal = ""
     if "ck_preprompt_editado" not in st.session_state: st.session_state.ck_preprompt_editado = ""
     if "img_suj" not in st.session_state: st.session_state.img_suj = ""
@@ -547,7 +574,6 @@ def renderizar_cockpit():
     st.markdown("### 1️⃣ Passo 1: A Sua Ideia (A Narrativa Visual)")
     st.caption("O ponto de partida. Descreva o que imagina ou veja a caixa preencher-se magicamente usando o Passo 2.")
     
-    # Caixa de texto ligada diretamente à variável (SEM parâmetro key= para evitar conflitos)
     texto_digitado = st.text_area("Insira a sua Ideia:", value=st.session_state.ideia_principal, height=140, label_visibility="collapsed")
     if texto_digitado != st.session_state.ideia_principal:
         st.session_state.ideia_principal = texto_digitado
@@ -577,7 +603,7 @@ def renderizar_cockpit():
         else:
             with st.spinner("Analisando matriz óptica com Varredura Ultra-Densa..."):
                 try:
-                    modelo_base = st.session_state.get("modelo_geral_select", "gemini-1.5-flash")
+                    modelo_base = st.session_state.get("modelo_geral_select", "gemini-3.5-flash")
                     estilo_conversao = st.session_state.get("ck_estilo_conversao", "Manter Estilo Original")
                     sens_escolhida = st.session_state.get("ck_sens_slider", OPCOES_SENSUALIDADE[1])
                     
@@ -585,13 +611,11 @@ def renderizar_cockpit():
                     
                     if res["tipo"] == "json":
                         st.session_state["ck_img_parametros"] = res["dados"]
-                        # Injeta nas chaves do Detalhador
                         st.session_state.img_suj = res["dados"].get("sujeito", "")
                         st.session_state.img_cen = res["dados"].get("cenario", "")
                         st.session_state.img_act = res["dados"].get("acao", "")
                         st.session_state.img_ilu = res["dados"].get("iluminacao", "")
                         st.session_state.img_est = res["dados"].get("estilo_camera", "")
-                        # Preenche a Ideia Principal instantaneamente
                         ideia_extraida = f"Sujeito: {st.session_state.img_suj}\n\nAção: {st.session_state.img_act}\n\nCenário: {st.session_state.img_cen}\n\nIluminação: {st.session_state.img_ilu}\n\nEstilo: {st.session_state.img_est}"
                         st.session_state.ideia_principal = ideia_extraida
                     else:
@@ -646,7 +670,7 @@ def renderizar_cockpit():
                 try:
                     p = f"IDEIA:\n{st.session_state.ideia_principal}\n\n[AGENTE: SENSUALIDADE NÍVEL '{sens_escolhida}']"
                     if "Literal" in foco_contexto: p += "\n[AGENTE LITERAL]: Seja 100% fiel, sem floreios estéticos inúteis."
-                    modelo_base = st.session_state.get("modelo_geral_select", "gemini-1.5-flash")
+                    modelo_base = st.session_state.get("modelo_geral_select", "gemini-3.5-flash")
                     txt, prov = _chamar_motor_texto(SYS_GERADOR_PREPROMPT, p, modelo_gemini=modelo_base)
                     
                     st.session_state["ck_ideia_hist_fix"] = st.session_state.ideia_principal
@@ -660,7 +684,7 @@ def renderizar_cockpit():
         else:
             with st.spinner("Raio-X em andamento com o Motor de Texto..."):
                 try:
-                    modelo_base = st.session_state.get("modelo_geral_select", "gemini-1.5-flash")
+                    modelo_base = st.session_state.get("modelo_geral_select", "gemini-3.5-flash")
                     txt, prov = _chamar_motor_texto(SYS_COMPOSITOMETRO, f"AVALIE:\n{st.session_state.ideia_principal}", modelo_gemini=modelo_base)
                     diag = parse_json_ia(txt)
                     if not diag: st.error("⚠️ Erro de formato no Raio-X. Tente novamente.")
@@ -724,7 +748,7 @@ def renderizar_cockpit():
                     if "Literal" in foco_contexto: p += "\n[MODO LITERAL ATIVADO]: Remova floreios da sintaxe final. Foque puramente na geometria física."
                     p += "\n\n⚠️ OBRIGATÓRIO: 'PROMPT' E 'NEGATIVE' EXCLUSIVAMENTE EM INGLÊS."
 
-                    modelo_base = st.session_state.get("modelo_geral_select", "gemini-1.5-flash")
+                    modelo_base = st.session_state.get("modelo_geral_select", "gemini-3.5-flash")
                     res, prov = _chamar_motor_texto(SYS_MESTRE_CORE + bloco, p, modelo_gemini=modelo_base)
                     
                     st.session_state["ck_prompt_final"] = res
