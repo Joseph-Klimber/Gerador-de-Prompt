@@ -627,18 +627,22 @@ def _chamar_motor_visao(arquivo_imagem, estilo_conversao, nivel_sensualidade, mo
     try:
         arquivo_imagem.seek(0)
         img_pil = Image.open(arquivo_imagem)
-        # Normaliza imagem grande (evita payload >4MB que gera 503 em free tier)
+       # Normaliza imagem grande (evita payload >4MB que gera 503 em free tier)
         try:
             img_pil.load()
             max_lado = 1536
             if max(img_pil.size) > max_lado:
                 ratio = max_lado / max(img_pil.size)
                 novo = (int(img_pil.size[0] * ratio), int(img_pil.size[1] * ratio))
-                img_pil = img_pil.resize(novo, Image.LANCZOS)
+                
+                # CORREÇÃO: Compatibilidade com versões Pillow recentes e antigas
+                resample_filter = getattr(Image, 'Resampling', Image).LANCZOS
+                img_pil = img_pil.resize(novo, resample_filter)
+                
             if img_pil.mode not in ("RGB", "RGBA"):
                 img_pil = img_pil.convert("RGB")
-        except Exception:
-            pass
+        except Exception as img_err:
+            pass # Continua se falhar o resize
         
         # 4. Instanciação e Chamada (Cliente Isolado) com retry 503/429
         client = genai.Client(api_key=chave_visao)
