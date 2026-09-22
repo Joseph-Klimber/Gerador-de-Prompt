@@ -334,13 +334,93 @@ def salvar_config(dados, email=None):
         st.session_state["_config_cache"].pop((email or "").strip().lower(), None)
     return False, "Erro ao salvar na Nuvem. Cópia salva localmente."
 
+def _extrair_retry_after_segundos(erro_str):
+    try:
+        m = re.search(r"retry[^0-9]*([0-9]+(?:\.[0-9]+)?)\s*s", erro_str, re.IGNORECASE)
+        if m:
+            return min(float(m.group(1)), 30.0)
+        m2 = re.search(r"Retry-After:\s*([0-9]+)", erro_str, re.IGNORECASE)
+        if m2:
+            return min(float(m2.group(1)), 30.0)
+    except Exception:
+        pass
+    return None
+
+def _eh_erro_transitorio_gemini(e):
+    s = str(e).lower()
+    # 400/validation: não adianta retentar (ex: temperature em 3.8)
+    if any(k in s for k in ("invalid argument", "validation", "not supported", "unsupported", "unknown field")):
+        return False
+    if any(k in s for k in ("503", "429", "500", "502", "504", "overloaded", "unavailable", "resource exhausted", "internal error", "deadline exceeded")):
+        # se a mensagem citar parâmetro deprecado, é erro permanente -> não retenta
+        if any(p in s for p in ("temperature", "top_p", "top_k", "candidate_count", "thinking")):
+            # se for 503 mas menciona parâmetro, é validação mapeada como 503
+            if "temperature" in s or "not supported" in s or "unsupported" in s:
+                return False
+        return True
+    # SDK google-genai lança ServerError / APIError com code 503
+    try:
+        code = getattr(e, "code", None) or getattr(e, "status_code", None) or getattr(getattr(e, "response", None), "status_code", None)
+        if code in (429, 500, 502, 503, 504):
+            # checar novamente mensagem de validação
+            if any(p in s for p in ("temperature", "candidate_count")) and "not supported" in s:
+                return False
+            return True
+    except Exception:
+        pass
+    return False
+
+def _build_gemini_config(system_instruction, model_id, temperature=None):
+    """Monta GenerateContentConfig compatível com Gemini 3.x (sem temperature)."""
+    eh_gemini3 = str(model_id or "").startswith("gemini-3")
+    if types is None:
+        cfg = {"system_instruction": system_instruction}
+        if not eh_gemini3 and temperature is not None:
+            cfg["temperature"] = temperature
+        return cfg
+    # Gemini 3.x: temperature/top_p/top_k deprecados -> usar thinking_level
+    if eh_gemini3:
+        try:
+            # medium = padrão equilibrado (docs); low seria mais rápido
+            thinking = types.ThinkingConfig(thinking_level="medium")
+            return types.GenerateContentConfig(system_instruction=system_instruction, thinking_config=thinking)
+        except Exception:
+            try:
+                return types.GenerateContentConfig(system_instruction=system_instruction, thinking_config=types.ThinkingConfig(thinking_level="low"))
+            except Exception:
+                return types.GenerateContentConfig(system_instruction=system_instruction)
+    else:
+        kwargs = {"system_instruction": system_instruction}
+        if temperature is not None:
+            kwargs["temperature"] = temperature
+        return types.GenerateContentConfig(**kwargs)
+
+def _gerar_com_retry(client, model, contents, config, tentativas=3):
+    ultimo_erro = None
+    for tentativa in range(tentativas):
+        try:
+            return client.models.generate_content(model=model, contents=contents, config=config)
+        except Exception as e:
+            ultimo_erro = e
+            if not _eh_erro_transitorio_gemini(e) or tentativa == tentativas - 1:
+                raise
+            retry_after = _extrair_retry_after_segundos(str(e))
+            espera = retry_after if retry_after is not None else (2 ** (tentativa + 1)) + random.uniform(0, 1.0)
+            espera = min(espera, 20.0)
+            time.sleep(espera)
+    raise ultimo_erro
+
 def _msg_erro_amigavel(e):
     texto = str(e)
-    if "401" in texto or "Unauthorized" in texto: return "🔑 **Chave inválida ou expirada.**"
-    if "404" in texto or "not found" in texto.lower(): return "⚠️ **Modelo não encontrado (404).** Digite a versão correta do modelo nas configurações."
-    if "429" in texto or "quota" in texto.lower(): return "⏳ **Limite de uso da API atingido (429).** A sua cota gratuita para esta chave terminou por hoje."
-    if "503" in texto or "overloaded" in texto.lower(): return "🔌 **Servidores do Google sobrecarregados (503).** Tente novamente em instantes."
-    return f"⚠️ **Erro Sistémico:** {texto[:300]}"
+    if "401" in texto or "Unauthorized" in texto or "403" in texto:
+        return "🔑 **Chave inválida, sem permissão ou expirada.** Gere outra em aistudio.google.com/app/apikey e conecte novamente."
+    if "404" in texto or "not found" in texto.lower():
+        return "⚠️ **Modelo não encontrado (404).** O id 'gemini-3.5-flash' / 'gemini-3.8-flash' pode não estar liberado para sua chave/região. Teste 'gemini-2.5-flash' em Ferramentas Avançadas ou aguarde liberação."
+    if "429" in texto or "quota" in texto.lower() or "resource exhausted" in texto.lower():
+        return "⏳ **Limite de uso da API atingido (429/Quota).** Sua cota gratuita para esta chave acabou. Troque a chave, aguarde o reset (24h) ou use outra conta."
+    if "503" in texto or "overloaded" in texto.lower() or "unavailable" in texto.lower():
+        return "🔌 **Servidores do Google sobrecarregados (503).** O código já tentou 3 vezes com backoff. Se persiste por minutos/horas: é sobrecarga regional da Google ou modelo em rollout — tente 'gemini-2.5-flash' como fallback, troque de chave/projeto ou aguarde 5-10 min."
+    return f"⚠️ **Erro Sistémico:** {texto[:500]}"
 
 def verificar_acesso_sheets(email):
     try:
@@ -461,19 +541,24 @@ def _chamar_motor_visao(arquivo_imagem, estilo_conversao, nivel_sensualidade, mo
     try:
         arquivo_imagem.seek(0)
         img_pil = Image.open(arquivo_imagem)
+        # Normaliza imagem grande (evita payload >4MB que gera 503 em free tier)
+        try:
+            img_pil.load()
+            max_lado = 1536
+            if max(img_pil.size) > max_lado:
+                ratio = max_lado / max(img_pil.size)
+                novo = (int(img_pil.size[0] * ratio), int(img_pil.size[1] * ratio))
+                img_pil = img_pil.resize(novo, Image.LANCZOS)
+            if img_pil.mode not in ("RGB", "RGBA"):
+                img_pil = img_pil.convert("RGB")
+        except Exception:
+            pass
         
-        # 4. Instanciação e Chamada (Cliente Isolado)
+        # 4. Instanciação e Chamada (Cliente Isolado) com retry 503/429
         client = genai.Client(api_key=chave_visao)
-        cfg = types.GenerateContentConfig(
-            system_instruction=SYS_LEITOR_PARAMETRICO, 
-            temperature=0.2
-        ) if types else {"system_instruction": SYS_LEITOR_PARAMETRICO, "temperature": 0.2}
+        cfg = _build_gemini_config(SYS_LEITOR_PARAMETRICO, modelo_primeiro_gemini, temperature=0.2)
         
-        resp = client.models.generate_content(
-            model=modelo_primeiro_gemini, 
-            contents=[img_pil, user_prompt], 
-            config=cfg
-        )
+        resp = _gerar_com_retry(client, modelo_primeiro_gemini, [img_pil, user_prompt], cfg)
         
         texto = getattr(resp, "text", "") or ""
         if not texto.strip(): 
@@ -509,18 +594,11 @@ def _chamar_motor_texto(system_prompt, user_prompt, modelo_gemini=None, temperat
     sys_final = f"{system_prompt}\n\n[REF-VERIF:{secrets.token_hex(8)}]"
     
     try:
-        # 4. Instanciação e Chamada (Cliente Isolado)
+        # 4. Instanciação e Chamada (Cliente Isolado) com retry 503/429
         client = genai.Client(api_key=chave_texto)
-        cfg = types.GenerateContentConfig(
-            system_instruction=sys_final, 
-            temperature=temperature
-        ) if types else {"system_instruction": sys_final, "temperature": temperature}
+        cfg = _build_gemini_config(sys_final, modelo_segundo_gemini, temperature=temperature)
         
-        resp = client.models.generate_content(
-            model=modelo_segundo_gemini, 
-            contents=user_prompt, 
-            config=cfg
-        )
+        resp = _gerar_com_retry(client, modelo_segundo_gemini, user_prompt, cfg)
         
         texto = getattr(resp, "text", "")
         texto = str(texto or "").strip()
