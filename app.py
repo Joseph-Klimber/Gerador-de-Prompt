@@ -126,10 +126,39 @@ BANCO_DE_MOTORES = {
         "regra_positivo": "Traduza a cena integralmente. FÓRMULA: 'A breathtaking photo of [Sujeito + Roupas fiéis], who is [Ação], located in [Cenário Detalhado]. The lighting is [Iluminação]. Shot on [Câmera]'.",
         "regra_negativo": "Base: ugly, deformed, poorly drawn, bad anatomy, missing limbs, mutated hands, unnatural proportions, amateur, watermark.",
         "dica_tecnica": "Refiner em 20% ajuda nos detalhes de rostos."
+    },
+    "Ideogram 4": {
+        "regra_positivo": 'Traduza a cena com foco em diagramação e design. Qualquer texto escrito solicitado DEVE ficar ENTRE ASPAS DUPLAS (ex: wearing a shirt that says "HELLO").',
+        "regra_negativo": None,
+        "dica_tecnica": "Perfeito para criar placas, logos e textos perfeitamente legíveis."
+    },
+    "Krea 2": {
+        "regra_positivo": "Traduza a cena dividindo a estrutura mentalmente: Foreground (primeiro plano), Midground, Background. Palavras em inglês com forte impacto.",
+        "regra_negativo": "blurry, low quality, deformed geometry, muddy colors, bad proportions, unnatural lighting.",
+        "dica_tecnica": "Otimizado para a engine de upscaling e latência zero do Krea."
+    },
+    "Qwen / Tongyi Wanxiang": {
+        "regra_positivo": "Traduza para um inglês estruturado: Sujeito -> Ação -> Ambiente. Evite jargões exaustivos de lente. Seja literal e direto ao ponto.",
+        "regra_negativo": "poor quality, bad anatomy, watermark, text, out of frame, mutation.",
+        "dica_tecnica": "Modelos Qwen asiáticos respondem melhor à clareza do que à estética carregada."
+    },
+    "Ernie (ViLG)": {
+        "regra_positivo": "Traduza a cena recebida de forma clara em inglês, especificando a relação de proximidade espacial entre sujeito e cenário. Use termos de arte tradicionais.",
+        "regra_negativo": "ugly, disfigured, low resolution, bad hands, deformed faces.",
+        "dica_tecnica": "Baidu Ernie prefere prompts físicos diretos. Evite metáforas."
+    },
+    "Z-Image Turbo (ZiT)": {
+        "regra_positivo": "Traduza a narrativa para um inglês natural, conciso e hiper-realista otimizado para S3-DiT 8 NFEs. Foque na coerência do sujeito, texturas 8k e iluminação volumétrica. Use prosa fluida e direta, evite enxurrada de tags Danbooru.",
+        "regra_negativo": "noisy, oversaturated, unrealistic, bad anatomy, bad lighting, watermark, blurry, low detail.",
+        "dica_tecnica": "Z-Image Turbo (ZiT) — 6B Tongyi-MAI, S3-DiT com DMD desacoplado, 8 NFEs sub-segundo. Prompts curtos e naturais superam listas longas."
     }
 }
 
 OPCOES_DESTINO = ["Selecione o Motor Destino..."] + list(BANCO_DE_MOTORES.keys())
+
+OPCOES_GEMINI_3 = ["gemini-3.5-flash", "gemini-3.6-flash", "gemini-3.7-flash"]
+MODELO_VISAO_PADRAO = "gemini-3.5-flash"
+MODELO_TEXTO_PADRAO = "gemini-3.7-flash"
 
 # ==============================================================================
 # 2.1 FUNÇÕES PURAS E SEGURANÇA
@@ -277,7 +306,9 @@ def carregar_config(email=None):
 
     config = {
         "chaves": {"Chave Visao": "", "Chave Texto": ""},
-        "modelo_padrao": "gemini-1.5-flash"
+        "modelo_padrao": MODELO_TEXTO_PADRAO,
+        "modelo_visao": MODELO_VISAO_PADRAO,
+        "modelo_texto": MODELO_TEXTO_PADRAO,
     }
     dados = _req_apps_script({"acao": "carregar_config", "email": email_normalizado})
     if dados and dados.get("ok") and dados.get("config"):
@@ -289,6 +320,28 @@ def carregar_config(email=None):
                 loaded_config["chaves"]["Chave Texto"] = loaded_config["chaves"].pop("Chave 2")
                 
             config.update(loaded_config)
+            # Migração legado: modelo_padrao -> modelo_visao/modelo_texto (só 3.5/3.6/3.7)
+            if "modelo_visao" not in config or config.get("modelo_visao") not in OPCOES_GEMINI_3:
+                legado = config.get("modelo_padrao", "")
+                if legado in OPCOES_GEMINI_3:
+                    config["modelo_visao"] = legado
+                elif legado == "gemini-3.8-flash":
+                    config["modelo_visao"] = "gemini-3.7-flash"
+                elif legado in ("gemini-3.5-flash-lite", "gemini-1.5-flash", "gemini-2.5-flash"):
+                    config["modelo_visao"] = MODELO_VISAO_PADRAO
+                else:
+                    config["modelo_visao"] = MODELO_VISAO_PADRAO
+            if "modelo_texto" not in config or config.get("modelo_texto") not in OPCOES_GEMINI_3:
+                legado = config.get("modelo_padrao", "")
+                if legado in OPCOES_GEMINI_3:
+                    config["modelo_texto"] = legado
+                elif legado == "gemini-3.8-flash":
+                    config["modelo_texto"] = "gemini-3.7-flash"
+                elif legado in ("gemini-3.5-flash-lite", "gemini-1.5-flash", "gemini-2.5-flash"):
+                    config["modelo_texto"] = MODELO_TEXTO_PADRAO
+                else:
+                    config["modelo_texto"] = MODELO_TEXTO_PADRAO
+            config["modelo_padrao"] = config.get("modelo_texto", MODELO_TEXTO_PADRAO)
             config["chaves"] = {k: _descriptografar(v) for k, v in config.get("chaves", {}).items()}
             cache[email_normalizado] = (time.time(), copy.deepcopy(config))
             st.session_state["_config_cache"] = cache
@@ -305,6 +358,18 @@ def carregar_config(email=None):
                 if "Chave 2" in loaded_config.get("chaves", {}):
                     loaded_config["chaves"]["Chave Texto"] = loaded_config["chaves"].pop("Chave 2")
                 config.update(loaded_config)
+            # Migração legado (arquivo local)
+            if "modelo_visao" not in config or config.get("modelo_visao") not in OPCOES_GEMINI_3:
+                _leg = config.get("modelo_padrao", "")
+                config["modelo_visao"] = _leg if _leg in OPCOES_GEMINI_3 else MODELO_VISAO_PADRAO
+                if _leg == "gemini-3.8-flash":
+                    config["modelo_visao"] = "gemini-3.7-flash"
+            if "modelo_texto" not in config or config.get("modelo_texto") not in OPCOES_GEMINI_3:
+                _leg = config.get("modelo_padrao", "")
+                config["modelo_texto"] = _leg if _leg in OPCOES_GEMINI_3 else MODELO_TEXTO_PADRAO
+                if _leg == "gemini-3.8-flash":
+                    config["modelo_texto"] = "gemini-3.7-flash"
+            config["modelo_padrao"] = config.get("modelo_texto", MODELO_TEXTO_PADRAO)
             config["chaves"] = {k: _descriptografar(v) for k, v in config.get("chaves", {}).items()}
         except Exception: pass
     cache[email_normalizado] = (time.time(), copy.deepcopy(config))
@@ -415,11 +480,11 @@ def _msg_erro_amigavel(e):
     if "401" in texto or "Unauthorized" in texto or "403" in texto:
         return "🔑 **Chave inválida, sem permissão ou expirada.** Gere outra em aistudio.google.com/app/apikey e conecte novamente."
     if "404" in texto or "not found" in texto.lower():
-        return "⚠️ **Modelo não encontrado (404).** O id 'gemini-3.5-flash' / 'gemini-3.8-flash' pode não estar liberado para sua chave/região. Teste 'gemini-2.5-flash' em Ferramentas Avançadas ou aguarde liberação."
+        return "⚠️ **Modelo não encontrado (404).** O id selecionado (gemini-3.5/3.6/3.7-flash) pode não estar liberado para sua chave/região. Tente outro dos 3 em Ferramentas Avançadas."
     if "429" in texto or "quota" in texto.lower() or "resource exhausted" in texto.lower():
         return "⏳ **Limite de uso da API atingido (429/Quota).** Sua cota gratuita para esta chave acabou. Troque a chave, aguarde o reset (24h) ou use outra conta."
     if "503" in texto or "overloaded" in texto.lower() or "unavailable" in texto.lower():
-        return "🔌 **Servidores do Google sobrecarregados (503).** O código já tentou 3 vezes com backoff. Se persiste por minutos/horas: é sobrecarga regional da Google ou modelo em rollout — tente 'gemini-2.5-flash' como fallback, troque de chave/projeto ou aguarde 5-10 min."
+        return "🔌 **Servidores do Google sobrecarregados (503).** O código já tentou 3 vezes com backoff. Se persiste: é sobrecarga regional ou rollout — tente outro modelo (3.5/3.6/3.7) em Ferramentas Avançadas, troque de chave/projeto ou aguarde 5-10 min."
     return f"⚠️ **Erro Sistémico:** {texto[:500]}"
 
 def verificar_acesso_sheets(email):
@@ -515,7 +580,7 @@ def _chamar_motor_visao(arquivo_imagem, estilo_conversao, nivel_sensualidade, mo
     """
     PRIMEIRO GEMINI (Motor de Visão):
     Responsabilidade: Extração óptica pericial de imagens.
-    Usa OBRIGATORIAMENTE a Chave de Visão e o modelo gemini-3.5-flash.
+    Usa a Chave de Visão e o modelo selecionado (gemini-3.5/3.6/3.7-flash).
     """
     MAX_IMAGE_SIZE_MB = 10
     if arquivo_imagem.size > MAX_IMAGE_SIZE_MB * 1024 * 1024:
@@ -528,8 +593,14 @@ def _chamar_motor_visao(arquivo_imagem, estilo_conversao, nivel_sensualidade, mo
     if not chave_visao or genai is None:
         raise RuntimeError("Nenhuma chave configurada para Visão. Adicione a 'Chave Gemini (Visão)' no painel lateral.")
     
-    # 2. Definição estrita do modelo do Primeiro Gemini
-    modelo_primeiro_gemini = "gemini-3.5-flash"
+    # 2. Modelo de Visão selecionável (3.5/3.6/3.7)
+    modelo_primeiro_gemini = (modelo_gemini or "").strip() if modelo_gemini else ""
+    if not modelo_primeiro_gemini:
+        modelo_primeiro_gemini = (st.session_state.get("modelo_visao_select") or "").strip()
+    if not modelo_primeiro_gemini:
+        modelo_primeiro_gemini = config.get("modelo_visao", MODELO_VISAO_PADRAO)
+    if modelo_primeiro_gemini not in OPCOES_GEMINI_3:
+        modelo_primeiro_gemini = MODELO_VISAO_PADRAO
     
     # 3. Construção do Prompt de Extração
     user_prompt = f"Desconstrua pericialmente esta imagem em Ultra-Densidade. \n[MODIFICADOR 2: SENSUALIDADE]: Nível {nivel_sensualidade}."
@@ -578,7 +649,7 @@ def _chamar_motor_texto(system_prompt, user_prompt, modelo_gemini=None, temperat
     """
     SEGUNDO GEMINI (Motor de Texto):
     Responsabilidade: Engenharia e Síntese de Prompts Textuais.
-    Usa OBRIGATORIAMENTE a Chave de Texto e o modelo gemini-3.5-flash.
+    Usa a Chave de Texto e o modelo selecionado (gemini-3.5/3.6/3.7-flash).
     """
     # 1. Isolamento da Chave de API de Texto
     config = carregar_config(st.session_state.get("user_email", ""))
@@ -587,8 +658,14 @@ def _chamar_motor_texto(system_prompt, user_prompt, modelo_gemini=None, temperat
     if not chave_texto or genai is None:
         raise RuntimeError("Nenhuma chave configurada para Texto. Adicione a 'Chave Gemini (Texto)' no painel lateral.")
 
-    # 2. Definição estrita do modelo do Segundo Gemini
-    modelo_segundo_gemini = "gemini-3.5-flash"
+    # 2. Modelo de Texto selecionável (3.5/3.6/3.7)
+    modelo_segundo_gemini = (modelo_gemini or "").strip() if modelo_gemini else ""
+    if not modelo_segundo_gemini:
+        modelo_segundo_gemini = (st.session_state.get("modelo_texto_select") or "").strip()
+    if not modelo_segundo_gemini:
+        modelo_segundo_gemini = config.get("modelo_texto", MODELO_TEXTO_PADRAO)
+    if modelo_segundo_gemini not in OPCOES_GEMINI_3:
+        modelo_segundo_gemini = MODELO_TEXTO_PADRAO
 
     # 3. Proteção Anti-Cache (Injeção de Token Dinâmico)
     sys_final = f"{system_prompt}\n\n[REF-VERIF:{secrets.token_hex(8)}]"
@@ -605,7 +682,7 @@ def _chamar_motor_texto(system_prompt, user_prompt, modelo_gemini=None, temperat
         
         # 5. Validação e Retorno (Mantém compatibilidade com Passos 4 e 5)
         if texto and "[REF-VERIF:" not in texto: 
-            return texto, "Gemini 3.5 (Texto Especializado)"
+            return texto, f"{modelo_segundo_gemini} (Texto)"
             
         raise RuntimeError("O modelo retornou uma resposta em branco.")
         
@@ -631,14 +708,23 @@ def renderizar_sidebar():
     # Inicializa estado dos widgets antes de criá-los (corrige bug value+key do Streamlit)
     _cfg_visao = config.get("chaves", {}).get("Chave Visao", "")
     _cfg_texto = config.get("chaves", {}).get("Chave Texto", "")
-    _cfg_modelo = config.get("modelo_padrao", "gemini-1.5-flash")
-    # Só inicializa na primeira vez ou se veio de troca de usuário; não sobrescreve digitação em andamento
+    _cfg_modelo_visao = config.get("modelo_visao", MODELO_VISAO_PADRAO)
+    if _cfg_modelo_visao not in OPCOES_GEMINI_3:
+        _cfg_modelo_visao = MODELO_VISAO_PADRAO
+    _cfg_modelo_texto = config.get("modelo_texto", MODELO_TEXTO_PADRAO)
+    if _cfg_modelo_texto not in OPCOES_GEMINI_3:
+        _cfg_modelo_texto = MODELO_TEXTO_PADRAO
     _email_sess = st.session_state.get("user_email", "")
     if st.session_state.get("_sidebar_init_email") != _email_sess or "input_key_visao" not in st.session_state:
         st.session_state["input_key_visao"] = _cfg_visao
         st.session_state["input_key_texto"] = _cfg_texto
-        st.session_state["modelo_geral_select"] = _cfg_modelo
+        st.session_state["modelo_visao_select"] = _cfg_modelo_visao
+        st.session_state["modelo_texto_select"] = _cfg_modelo_texto
         st.session_state["_sidebar_init_email"] = _email_sess
+    if st.session_state.get("modelo_visao_select") not in OPCOES_GEMINI_3:
+        st.session_state["modelo_visao_select"] = _cfg_modelo_visao
+    if st.session_state.get("modelo_texto_select") not in OPCOES_GEMINI_3:
+        st.session_state["modelo_texto_select"] = _cfg_modelo_texto
     
     st.sidebar.markdown("<a href='https://aistudio.google.com/app/apikey' target='_blank' style='color:#059669; text-decoration:none;'>👁️ Google Gemini (Via Visão)</a>", unsafe_allow_html=True)
     st.sidebar.caption("Chave dedicada para leitura de imagens.")
@@ -649,13 +735,17 @@ def renderizar_sidebar():
     k_texto = st.sidebar.text_input("Chave Texto", type="password", key="input_key_texto", label_visibility="collapsed")
 
     with st.sidebar.expander("Ferramentas Avançadas", expanded=False):
-        st.caption("Insira o nome exato do modelo (Ex: gemini-1.5-flash ou gemini-2.5-flash):")
-        modelo_geral = st.text_input("Modelo Base (Ambas as vias)", key="modelo_geral_select")
+        st.caption("Modelos Gemini 3 — escolha independente por estágio (só 3.5 / 3.6 / 3.7):")
+        modelo_visao = st.selectbox("Modelo Visão (Passo 2 — extração de imagem)", OPCOES_GEMINI_3, key="modelo_visao_select", help="Usado na Referência Óptica")
+        modelo_texto = st.selectbox("Modelo Texto (Passos 4 e 5 — rascunho, Raio-X e síntese)", OPCOES_GEMINI_3, key="modelo_texto_select", help="Usado no Rascunho, Compositômetro e Prompt Final")
+        modelo_geral = modelo_texto
 
     if st.sidebar.button("💾 Conectar Motores Isolados", type="primary", use_container_width=True):
         dados_salvos = {
-            "chaves": {"Chave Visao": k_visao, "Chave Texto": k_texto}, 
-            "modelo_padrao": modelo_geral.strip()
+            "chaves": {"Chave Visao": k_visao, "Chave Texto": k_texto},
+            "modelo_visao": modelo_visao,
+            "modelo_texto": modelo_texto,
+            "modelo_padrao": modelo_texto,
         }
         ok_salvo, erro_salvo = salvar_config(dados_salvos, st.session_state.get("user_email", ""))
         if ok_salvo: st.sidebar.success("✅ Motores conectados com sucesso!")
@@ -774,7 +864,7 @@ def renderizar_cockpit():
         else:
             with st.spinner("Analisando matriz óptica com Varredura Ultra-Densa..."):
                 try:
-                    modelo_base = st.session_state.get("modelo_geral_select", "gemini-1.5-flash")
+                    modelo_base = st.session_state.get("modelo_visao_select", MODELO_VISAO_PADRAO)
                     estilo_conversao = st.session_state.get("ck_estilo_conversao", "Manter Estilo Original")
                     sens_escolhida = st.session_state.get("ck_sens_slider", OPCOES_SENSUALIDADE[1])
                     
@@ -842,7 +932,7 @@ def renderizar_cockpit():
                 try:
                     p = f"IDEIA:\n{st.session_state.ck_ideia_input}\n\n[AGENTE: SENSUALIDADE NÍVEL '{sens_escolhida}']"
                     if "Literal" in foco_contexto: p += "\n[AGENTE LITERAL]: Seja 100% fiel, sem floreios estéticos inúteis."
-                    modelo_base = st.session_state.get("modelo_geral_select", "gemini-1.5-flash")
+                    modelo_base = st.session_state.get("modelo_texto_select", MODELO_TEXTO_PADRAO)
                     txt, prov = _chamar_motor_texto(SYS_GERADOR_PREPROMPT, p, modelo_gemini=modelo_base)
                     
                     st.session_state["ck_ideia_hist_fix"] = st.session_state.ck_ideia_input
@@ -856,7 +946,7 @@ def renderizar_cockpit():
         else:
             with st.spinner("Raio-X em andamento com o Motor de Texto..."):
                 try:
-                    modelo_base = st.session_state.get("modelo_geral_select", "gemini-1.5-flash")
+                    modelo_base = st.session_state.get("modelo_texto_select", MODELO_TEXTO_PADRAO)
                     txt, prov = _chamar_motor_texto(SYS_COMPOSITOMETRO, f"AVALIE:\n{st.session_state.ck_ideia_input}", modelo_gemini=modelo_base)
                     diag = parse_json_ia(txt)
                     if not diag: st.error("⚠️ Erro de formato no Raio-X. Tente novamente.")
@@ -918,7 +1008,7 @@ def renderizar_cockpit():
                     if "Literal" in foco_contexto: p += "\n[MODO LITERAL ATIVADO]: Remova floreios da sintaxe final. Foque puramente na geometria física."
                     p += "\n\n⚠️ OBRIGATÓRIO: 'PROMPT' E 'NEGATIVE' EXCLUSIVAMENTE EM INGLÊS."
 
-                    modelo_base = st.session_state.get("modelo_geral_select", "gemini-1.5-flash")
+                    modelo_base = st.session_state.get("modelo_texto_select", MODELO_TEXTO_PADRAO)
                     res, prov = _chamar_motor_texto(SYS_MESTRE_CORE + bloco, p, modelo_gemini=modelo_base)
                     
                     st.session_state["ck_prompt_final"] = res
