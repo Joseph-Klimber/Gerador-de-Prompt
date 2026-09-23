@@ -468,6 +468,15 @@ def _gerar_com_retry(client, model, contents, config, tentativas=3):
             time.sleep(espera)
     raise ultimo_erro
 
+def _msg_erro_diagnostico(e):
+    """Retorna texto cru da exceção para diagnóstico — reproduz [[thought:diagnostic]]"""
+    try:
+        raw = str(e)
+        code = getattr(e, "code", None) or getattr(e, "status_code", None) or getattr(getattr(e, "response", None), "status_code", None) or "?"
+        return f"RAW [{code}]: {raw[:1200]}"
+    except Exception:
+        return str(e)[:1200]
+
 def _msg_erro_amigavel(e):
     texto = str(e)
     if "401" in texto or "Unauthorized" in texto or "403" in texto:
@@ -545,64 +554,19 @@ REGRAS DE EXTRAÇÃO:
 Retorne EXCLUSIVAMENTE um JSON válido neste formato:
 {"sujeito": "...", "acao": "...", "cenario": "...", "iluminacao": "...", "estilo_camera": "..."}"""
 
-SYS_MESTRE_CORE = r"""Você é o Motor de Síntese Óptica e Engenharia de Prompts do Prompt Studio.
-Sua missão é compilar o prompt na sintaxe do motor destino com FIDELIDADE ABSOLUTA. Você é um tradutor do pré-prompt, não um inventor — extraia 100% e traduza, nunca resuma, esqueça ou substitua o sujeito original.
+SYS_MESTRE_CORE = r"""Você é o Motor de Síntese Óptica do Prompt Studio. Traduza a Narrativa Visual para PROMPT nativo com FIDELIDADE ABSOLUTA. Você é tradutor, não inventor.
 
-────────────────────────────────────────────────────
-1. TRADUÇÃO JURAMENTADA DA CENA (REGRA DE OURO — duas ordens distintas)
-────────────────────────────────────────────────────
-ORDEM 1 — FIDELIDADE DO SUJEITO ≥95% (só sujeito):
-Preserve nome/franquia quando houver, gênero, etnia, formato do rosto, cor exata de olhos/cabelo/pele, micro-expressões, e TODA a vestimenta — cor exata, material, textura, corte, caimento, costuras, logos, acessórios, fivela, tira, luva. Se o sujeito tem 10 atributos, o PROMPT deve conter 9-10. Não invente atributo ausente, não troque cor/material, não altere gênero. Esta ordem mede precisão do sujeito, não tamanho de texto.
+ORDEM 1 — FIDELIDADE DO SUJEITO ≥95% (só sujeito): preserve nome/franquia, gênero, etnia, rosto, olhos/cabelo/pele, micro-expressões e TODA vestimenta (cor, material, textura, corte, caimento, costuras, logos, fivela, tira, luva). Não invente, não troque cor/material, não altere gênero. Mede precisão do sujeito, não tamanho de texto.
 
-ORDEM 2 — INTEGRIDADE DA COMPOSIÇÃO (tradução, distinta da anterior):
-Não omita detalhes principais ao traduzir: ação/pose com geometria exata, cenário em foreground/midground/background, iluminação (key/fill/rim, especular, sombras) e câmera (lente, abertura, DOF, ângulo). E não infle com floreios, metáforas, poesia ou abstrações. Texto exageradamente grande dilui a imagem em algo abstrato — todos os fabricantes documentam degradação por excesso (Ideogram trunca >160w, Flux dilui >80w, ZiT Turbo piora com lista longa, MJ confunde com lista). Traduza com densidade: só o que a câmera captaria, na sintaxe nativa do motor. Conciso ≠ resumido.
+ORDEM 2 — INTEGRIDADE DA COMPOSIÇÃO (tradução, distinta da anterior): não omita ação/pose (geometria exata), cenário fg/mg/bg, luz (key/fill/rim, especular) e câmera (lente, abertura, DOF, ângulo). E não infle com poesia/metáfora/abstração — texto grande dilui em abstrato (Ideogram >160w trunca, Flux >80w dilui, ZiT/MJ confundem). Só o que a câmera captaria, no dialeto do motor. Conciso ≠ resumido.
 
-Regra de ouro: aplique cores, materiais, quantidades e relações espaciais exatas em INGLÊS, token a token, conforme a sintaxe do motor destino.
+Regra: cores/materiais/quantidades/posições exatas em INGLÊS, token a token. Obedeça o bloco SINTAXE NATIVA (regra_positivo/negativo/dica) como lei — ele já traz o dialeto híbrido do motor.
 
-────────────────────────────────────────────────────
-2. INJEÇÃO DE TAGS RATING E SENSUALIDADE (figurino já resolvido globalmente — aqui só injeta rating)
-────────────────────────────────────────────────────
-ATENÇÃO: A narrativa de figurino já foi resolvida globalmente. Sua função aqui é APENAS injetar as Tags de Rating — não redesenhe roupa:
-- Nível 1/2: Injetar 'rating_safe'.
-- Nível 3/4: Injetar 'rating_questionable, nsfw'.
-- Nível 5: Injetar 'rating_explicit, nude, nsfw, uncensored'. Use tags Danbooru para anatomia exposta quando o motor for Danbooru (Pony/Illustrious).
-- Nível 6 (Dual): Gere VERSÃO A (Censurada, rating_safe) e VERSÃO B (Explícita, rating_explicit, uncensored).
+RATING: 1/2 rating_safe | 3/4 rating_questionable, nsfw | 5 rating_explicit, nude, nsfw, uncensored (Danbooru se Pony/Illustrious) | 6 Dual: Versão A safe + B explicit.
+NEGATIVO dinâmico profundo só onde aceita (Pony/Illustrious/SDXL sim; Flux/MJ não invente — MJ use --no; Krea via Avoids; ZiT leve).
 
-────────────────────────────────────────────────────
-3. DIALETO NATIVO (obedeça o bloco SINTAXE NATIVA como lei — instruído pelos dossiês)
-────────────────────────────────────────────────────
-Você receberá no user prompt o bloco SINTAXE NATIVA com regra_positivo, regra_negativo e dica do motor destino. Ele tem prioridade. Guia rápido por família:
-
-• Danbooru (Pony SDXL, Illustrious): TAG é sinal de treinamento. Ordem é lei. Pony = cadeia completa score_9, score_8_up, score_7_up, score_6_up, score_5_up, score_4_up nunca isolado + source_* + rating_* + 1girl/1boy solo + character (franquia) + vestimenta tag-a-tag (wariza, engawa com spaces não underscores). Sujeito nos primeiros 20 tokens. Use (tag:1.1) 0.7-1.4 e BREAK entre sujeito e cenário se bleed ou >40 tags. Illustrious = masterpiece, best quality, amazing quality, very aesthetic, absurdres, newest + 13 níveis; tags first, sentence last.
-
-• Prosa ocidental (Flux, Midjourney, SDXL Base, Ideogram, Krea): frase natural, sujeito nas primeiras 15 palavras. Flux = Subject+Action+Style+Context 30-80w, sem negativo, câmera específica (Hasselblad X2D 80mm f/2.8, Kodak Portra 400) e hex com âncora color. MJ = frase curta <25w + --ar 16:9 --v 6.1 --stylize 250; para fidelidade adicione --style raw. SDXL Base = "A breathtaking photo of [Sujeito+Roupas], who is [Ação], located in [Cenário]. The lighting is [Iluminação]. Shot on [Câmera]" + refiner 20%. Ideogram = 8 partes, "HELLO" entre aspas nas 30 primeiras palavras, <150w/200 tokens. Krea = Foreground/Midground/Background explícito; vague→narrow para explorar, denso para entregar.
-
-• Chinesa + Turbo (Qwen, Ernie, Z-Image Turbo): literal, espacial, factual, zero metáfora. Qwen = Subject+Scene+Motion+Camera Language+Atmosphere+Styling. Ernie = relação espacial explícita + estilo 古风/二次元/油画/未来主义; chinês para cena chinesa. ZiT = 6B S3-DiT 8 NFEs sub-segundo CFG-free; 15-40w para vago, 40-75w densas para fidelidade ≥95% (Enhancer raciocina, mas não omita atributo).
-
-────────────────────────────────────────────────────
-4. NEGATIVO DINÂMICO (profundo, só onde o motor aceita)
-────────────────────────────────────────────────────
-Nunca entregue negativo superficial só com a base fixa. Injete o oposto do positivo (foto → anime, cartoon, 3d render, illustration; anime → photo, realistic) e junte com a base fixa. Só onde aceita: Pony/Illustrious/SDXL sim; Flux/MJ não invente (MJ use --no); Krea via Avoids; ZiT leve.
-
-────────────────────────────────────────────────────
-PADRÃO DE QUALIDADE PROFISSIONAL
-────────────────────────────────────────────────────
-• Cor/material/textura/luz/câmera exatos, nunca genérico: "aged cracked brown leather with thick seams and raised collar" > "brown jacket".
-• Câmera específica: "85mm f/1.4 shallow DOF with bokeh, focus on eyes" > "professional photo".
-• Sujeito e roupa sempre antes de cenário e estética.
-• Densidade sem diluição: cada frase entrega um atributo visível. Se a narrativa tem 800 caracteres, o PROMPT deve ter equivalência semântica ≥95% sem omitir e sem dobrar de tamanho com poesia.
-
-────────────────────────────────────────────────────
-FORMATO DE SAÍDA OBRIGATÓRIO (sempre em INGLÊS para PROMPT/NEGATIVE)
-────────────────────────────────────────────────────
-1. PROMPT (ENGLISH) — na sintaxe nativa do motor destino
-2. NEGATIVE PROMPT (ENGLISH) — só se o motor aceita; se não aceita, omita sem inventar
-3. LEGENDA (PT-BR curta, 1 frase)
-4. HASHTAGS (5-8)
-
-Exemplo de densidade correta (ZiT 68w, Rogue — sujeito primeiro, sem omissão, sem inflar):
-"Low-angle medium shot of Rogue from X-Men, young Caucasian woman with heart-shaped face, fair skin with freckles, intense green eyes with smoky makeup and voluminous lashes, pale pink parted lips, voluminous copper-red hair with thick white front streak and individual strand texture, wearing emerald and vibrant yellow ultra-tight spandex with tension folds under aged cracked brown leather cropped jacket with raised collar, elbow-length green gloves, brown utility belt with red X buckle and thigh strap, asymmetric semi-crouch on rough dark concrete beam... three-point studio lighting key from upper left with specular on spandex plus fill and rim, shot on 85mm f/1.4 shallow DOF bokeh, saturated high contrast high resolution"
-Exemplo reprovado (mesma Rogue, 24w, omitiu 12 atributos do sujeito e toda a luz/câmera): "Low-angle photo of Rogue with copper-red hair and white streak, wearing green and yellow spandex under brown leather jacket, sitting on concrete beam. Industrial background, studio lighting, 85mm lens" — NÃO FAÇA ISSO.
+SAÍDA (sempre em INGLÊS para PROMPT/NEGATIVE): 1. PROMPT (ENGLISH) 2. NEGATIVE PROMPT (ENGLISH, só se motor aceita) 3. LEGENDA PT-BR 4. HASHTAGS 5-8
+Qualidade: sujeito+roupa antes de cenário/estética; cor/material exato > genérico; densidade sem floreio.
 """
 
 def _chamar_motor_visao(arquivo_imagem, estilo_conversao, nivel_sensualidade, modelo_gemini=None):
@@ -680,9 +644,8 @@ def _chamar_motor_visao(arquivo_imagem, estilo_conversao, nivel_sensualidade, mo
 
 def _chamar_motor_texto(system_prompt, user_prompt, modelo_gemini=None, temperature=0.25):
     """
-    SEGUNDO GEMINI (Motor de Texto):
-    Responsabilidade: Engenharia e Síntese de Prompts Textuais.
-    Usa a Chave de Texto e o modelo selecionado (gemini-3.5/3.6/3.7-flash).
+    SEGUNDO GEMINI (Motor de Texto) — com fallback automático 3.5/3.6/3.7 em 503/overloaded.
+    Usa a Chave de Texto isolada. Tenta: modelo selecionado -> outros 2; cada um com e sem temperature.
     """
     # 1. Isolamento da Chave de API de Texto
     config = carregar_config(st.session_state.get("user_email", ""))
@@ -703,24 +666,51 @@ def _chamar_motor_texto(system_prompt, user_prompt, modelo_gemini=None, temperat
     # 3. Proteção Anti-Cache (Injeção de Token Dinâmico)
     sys_final = f"{system_prompt}\n\n[REF-VERIF:{secrets.token_hex(8)}]"
     
-    try:
-        # 4. Instanciação e Chamada (Cliente Isolado) com retry 503/429
-        client = genai.Client(api_key=chave_texto)
-        cfg = _build_gemini_config(sys_final, modelo_segundo_gemini, temperature=temperature)
-        
-        resp = _gerar_com_retry(client, modelo_segundo_gemini, user_prompt, cfg)
-        
-        texto = getattr(resp, "text", "")
-        texto = str(texto or "").strip()
-        
-        # 5. Validação e Retorno (Mantém compatibilidade com Passos 4 e 5)
-        if texto and "[REF-VERIF:" not in texto: 
-            return texto, f"{modelo_segundo_gemini} (Texto)"
-            
-        raise RuntimeError("O modelo retornou uma resposta em branco.")
-        
-    except Exception as e: 
-        raise RuntimeError(f"Falha no Segundo Gemini (Engenharia de Texto): {str(e)}")
+    candidatos = [modelo_segundo_gemini] + [m for m in OPCOES_GEMINI_3 if m != modelo_segundo_gemini]
+    ultimo_erro = None
+    for modelo_try in candidatos:
+        for modo_temp in (temperature, None):
+            try:
+                client = genai.Client(api_key=chave_texto)
+                cfg = _build_gemini_config(sys_final, modelo_try, temperature=modo_temp)
+                resp = _gerar_com_retry(client, modelo_try, user_prompt, cfg)
+                texto = getattr(resp, "text", "")
+                texto = str(texto or "").strip()
+                if texto and "[REF-VERIF:" not in texto:
+                    sufixo = "" if modo_temp is not None else " sem temp"
+                    return texto, f"{modelo_try} (Texto{sufixo})"
+                raise RuntimeError("O modelo retornou uma resposta em branco.")
+            except Exception as e:
+                ultimo_erro = e
+                s = str(e).lower()
+                eh_transitorio = _eh_erro_transitorio_gemini(e)
+                eh_validation = any(k in s for k in ("invalid argument", "validation", "not supported", "unsupported"))
+                # 400/validation com temperature -> tenta sem temperature no mesmo modelo
+                if eh_validation and modo_temp is not None:
+                    continue
+                # 503/429/overloaded -> tenta próximo modo/modelo
+                if eh_transitorio or "503" in s or "overloaded" in s or "unavailable" in s or "429" in s or "resource exhausted" in s:
+                    if modo_temp is not None:
+                        continue  # tenta sem temperature no mesmo modelo
+                    break  # vai para próximo modelo
+                # erro permanente não-503: se ainda tem modo sem temp, tenta
+                if modo_temp is not None:
+                    continue
+                break
+        # se fallback ainda tem modelos e erro foi transitório, continua
+        if ultimo_erro is not None and (_eh_erro_transitorio_gemini(ultimo_erro) or "503" in str(ultimo_erro).lower() or "overloaded" in str(ultimo_erro).lower()):
+            # só para se já tentou todos os candidatos
+            if modelo_try == candidatos[-1]:
+                break
+            continue
+        # erro não-transitório: para
+        if ultimo_erro is not None and not _eh_erro_transitorio_gemini(ultimo_erro) and "503" not in str(ultimo_erro).lower():
+            # mas se ainda há candidatos e foi erro de modelo específico (404/not found), tenta próximo
+            if "404" in str(ultimo_erro).lower() or "not found" in str(ultimo_erro).lower():
+                if modelo_try != candidatos[-1]:
+                    continue
+        break
+    raise RuntimeError(f"Falha no Segundo Gemini (Engenharia de Texto) após fallback {candidatos}: {str(ultimo_erro)}")
 
 # ==============================================================================
 # 5. UI: BARRA LATERAL E HISTÓRICO
@@ -1026,7 +1016,19 @@ def renderizar_cockpit():
                     st.session_state["ck_prov_usado"] = prov
                     st.session_state["ck_dest_usado"] = dest_sel
                     st.rerun()
-                except Exception as e: st.error(_msg_erro_amigavel(e))
+                except Exception as e:
+                    st.error(_msg_erro_amigavel(e))
+                    with st.expander("🔍 Diagnóstico técnico — copie e me envie se persistir"):
+                        st.code(_msg_erro_diagnostico(e), language="text")
+                        try:
+                            _sys_len = len(SYS_MESTRE_CORE)
+                            _user_len = len(bloco + "\n\n" + p)
+                            _cfg_preview = str(_build_gemini_config(SYS_MESTRE_CORE, modelo_base, temperature=0.25))[:800]
+                        except Exception as _diag_e:
+                            _sys_len = _user_len = 0
+                            _cfg_preview = str(_diag_e)[:600]
+                        st.caption(f"Modelo: {modelo_base} · System: {_sys_len} chars · User+Bloco: {_user_len} chars")
+                        st.code(_cfg_preview, language="text")
 
     # OUTPUT FINAL — BOX COM QUEBRA AUTOMÁTICA + DOWNLOAD LOCAL (SEM NUVEM)
     if st.session_state.get("ck_prompt_final"):
