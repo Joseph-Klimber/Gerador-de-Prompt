@@ -1017,7 +1017,10 @@ def renderizar_cockpit():
                     p += "\n\n⚠️ REGRAS FINAIS — DUAS ORDENS DISTINTAS:\n- ORDEM 1 · FIDELIDADE DO SUJEITO >=95%: preserve as características do sujeito (gênero, etnia, cabelo/olhos/pele, roupa cor/material/textura/corte/acessórios).\n- ORDEM 2 · INTEGRIDADE DA COMPOSIÇÃO: não omita detalhes principais ao traduzir para a linguagem do motor (ação/pose, cenário fg/mg/bg, luz, câmera); e NÃO infle/abstraia — texto exagerado dilui e torna o resultado abstrato.\n- 'PROMPT' E 'NEGATIVE' EXCLUSIVAMENTE EM INGLÊS."
 
                     modelo_base = st.session_state.get("modelo_texto_select", MODELO_TEXTO_PADRAO)
-                    res, prov = _chamar_motor_texto(SYS_MESTRE_CORE + bloco, p, modelo_gemini=modelo_base)
+                    # FIX 503 final: bloco (SINTAXE NATIVA) vai no user_prompt, não no system_instruction.
+                    # System com 7k+ chars (SYS_MESTRE_CORE+bloco+exemplo Rogue) estourava payload e vinha como 503 mascarado.
+                    # Pre-prompt funciona porque usa system curto (455 chars) na mesma chave — prova que não é cota/chave.
+                    res, prov = _chamar_motor_texto(SYS_MESTRE_CORE, bloco + "\n\n" + p, modelo_gemini=modelo_base)
                     
                     st.session_state["ck_prompt_final"] = res
                     st.session_state["ck_prov_usado"] = prov
