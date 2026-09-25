@@ -1,2 +1,5 @@
-streamlit
-google-genai
+streamlit>=1.39
+google-genai>=0.3
+Pillow>=10.4
+cryptography>=42
+requests>=2.32

@@ -2,6 +2,12 @@
 PRD/TRD/Fluxo/Briefing/Schema/Plano travados em GERADOR_PROMPT_1.0__AntesDeCodar/*__ENTREVISTA.md
 """
 import pathlib
+import sys
+# garante que `src/` na raiz do repo seja importável no Streamlit Cloud
+ROOT = pathlib.Path(__file__).parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 import streamlit as st
 
 st.set_page_config(
