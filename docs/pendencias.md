@@ -14,3 +14,6 @@
 - F06 Kiwify → usuarios (webhook ou manual)
 - F07 SYS_* do legado 1.0-3
 - F08 BANCO_DE_MOTORES (10 motores) do legado
+
+## Validação V1 — 25/09/2026
+- Fallback 3.5→3.6 verificado: gemini-3.5-flash 503 high demand (temporário Google) → 3.6-flash assumiu em A/B/C/D sem mudar código; padrão continua 3.5
