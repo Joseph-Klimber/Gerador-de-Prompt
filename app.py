@@ -102,7 +102,7 @@ if not st.session_state["autenticado"]:
         st.markdown('<p class="text-ideia">"uma elfa na escadaria"</p>', unsafe_allow_html=True)
         st.markdown('<p class="label-prompt">Prompt engenharia</p>', unsafe_allow_html=True)
         st.markdown('<div class="code-prompt">score_9, score_8_up, source_anime, 1girl, solo, long silver hair, green eyes, ornate armor, standing on stone stairs, volumetric light, highly detailed...</div>', unsafe_allow_html=True)
-        img1 = pathlib.Path(__file__).parent / "assets" / "carro.jpg"
+        img1 = pathlib.Path(__file__).parent / "assets" / "elfa.jpg"
         try:
             if img1.exists():
                 st.image(str(img1), use_container_width=True)
@@ -110,7 +110,7 @@ if not st.session_state["autenticado"]:
                 raise FileNotFoundError
         except Exception:
             st.markdown('<div style="height:140px;border-radius:12px;background:linear-gradient(135deg,#2563eb 0%,#7c3aed 100%);display:flex;align-items:center;justify-content:center;color:white;font-size:1.8rem;">📚</div>', unsafe_allow_html=True)
-            st.caption("carro.jpg no servidor")
+            st.caption("elfa.jpg no servidor")
         st.markdown('</div>', unsafe_allow_html=True)
     with col_b:
         st.markdown('<div class="showcase-box">', unsafe_allow_html=True)
@@ -118,7 +118,7 @@ if not st.session_state["autenticado"]:
         st.markdown('<p class="text-ideia">"carro esportivo futurista"</p>', unsafe_allow_html=True)
         st.markdown('<p class="label-prompt">Prompt engenharia</p>', unsafe_allow_html=True)
         st.markdown('<div class="code-prompt">photorealistic, ultra detailed, sports car, metallic paint, studio lighting, 85mm lens, shallow depth of field, 8k...</div>', unsafe_allow_html=True)
-        img2 = pathlib.Path(__file__).parent / "assets" / "elfa.jpg"
+        img2 = pathlib.Path(__file__).parent / "assets" / "carro.jpg"
         try:
             if img2.exists():
                 st.image(str(img2), use_container_width=True)
@@ -126,7 +126,7 @@ if not st.session_state["autenticado"]:
                 raise FileNotFoundError
         except Exception:
             st.markdown('<div style="height:140px;border-radius:12px;background:linear-gradient(135deg,#059669 0%,#2563eb 100%);display:flex;align-items:center;justify-content:center;color:white;font-size:1.8rem;">📸</div>', unsafe_allow_html=True)
-            st.caption("elfa.jpg no servidor")
+            st.caption("carro.jpg no servidor")
         st.markdown('</div>', unsafe_allow_html=True)
     st.markdown('<div class="plan-container">', unsafe_allow_html=True)
     st.markdown("### Escolha seu plano")
