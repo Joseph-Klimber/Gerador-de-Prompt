@@ -6,6 +6,8 @@ import streamlit as st
 from datetime import datetime
 
 
+APPS_SCRIPT_URL_FALLBACK = "https://script.google.com/macros/s/AKfycbzgEj3YPwqiUbiueyu8wjZ9ZZK0Rcc6G3kucysRSJ2gNmzRzUdMuLqv_q55N1kSO8PQ/exec"
+
 def _get_apps_script_url() -> str:
     url = None
     try:
@@ -16,6 +18,8 @@ def _get_apps_script_url() -> str:
         import os
         url = os.environ.get("APPS_SCRIPT_URL")
     if not url or "PLACEHOLDER" in str(url):
+        url = APPS_SCRIPT_URL_FALLBACK
+    if not url:
         return ""
     return str(url).strip()
 
@@ -62,8 +66,6 @@ def verificar_acesso_sheets(email: str):
         return False, "", "E-mail invalido — verifique o e-mail da compra."
     url = _get_apps_script_url()
     if not url:
-        if email == "teste@123.com":
-            return True, "31/12/2026", None
         return False, "", "Servico de dados nao configurado — contate o suporte."
     try:
         params = {"acao": "verificar_acesso", "email": email}
