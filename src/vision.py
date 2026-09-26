@@ -2,7 +2,7 @@
 Reaproveitado do legado 1.0-3.py — PS_LEITOR_PARAMETRICO copiado via text_engines.
 Resize 1536 LANCZOS, validação 10MB.
 """
-from PIL import Image
+from PIL import Image, ImageOps
 import streamlit as st
 try:
     from google import genai
@@ -36,6 +36,7 @@ def _chamar_motor_visao(arquivo_imagem, estilo_conversao, nivel_sensualidade, mo
         arquivo_imagem.seek(0)
         img_pil = Image.open(arquivo_imagem)
         try:
+            img_pil = ImageOps.exif_transpose(img_pil) or img_pil
             img_pil.load()
             max_lado = 1536
             if max(img_pil.size) > max_lado:
