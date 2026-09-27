@@ -132,9 +132,16 @@ if not st.session_state["autenticado"]:
     st.markdown("### Escolha seu plano")
     st.caption("Pagamento fora do app — compra na Kiwify libera seu e-mail na planilha.")
     c1, c2, c3 = st.columns(3)
+    _KIWIFY_FALLBACK = {
+        "LINK_KIWIFY_15_DIAS": "https://pay.kiwify.com.br/MXVL98k",
+        "LINK_KIWIFY_30_DIAS": "https://pay.kiwify.com.br/dyfEGe5",
+        "LINK_KIWIFY_90_DIAS": "https://pay.kiwify.com.br/xo0m3rF",
+    }
     def _kiwify_link(days_key):
         v = _get_secret(days_key)
-        return v if v and "PLACEHOLDER" not in str(v) else "#"
+        if v and "PLACEHOLDER" not in str(v) and str(v).strip() not in ("", "#"):
+            return v
+        return _KIWIFY_FALLBACK.get(days_key, "#")
     with c1:
         st.markdown("**15 dias**")
         st.link_button("Comprar 15 dias", _kiwify_link("LINK_KIWIFY_15_DIAS"), use_container_width=True)
