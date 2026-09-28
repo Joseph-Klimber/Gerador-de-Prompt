@@ -268,7 +268,11 @@ if btn_ler:
                     st.session_state.pop("ck_img_parametros", None)
                 st.session_state.pop("ck_preprompt", None)
                 st.rerun()
-            except Exception as e: st.error(_msg_erro_amigavel(e))
+            except Exception as e:
+                st.error(_msg_erro_amigavel(e))
+                with st.expander("🔍 Diagnóstico técnico — copie e me envie se persistir", expanded=False):
+                    st.code(_msg_erro_diagnostico(e), language="text")
+                    st.caption(f"Modelo: {st.session_state.get('modelo_visao_select', MODELO_VISAO_PADRAO)} · Arquivo: {img_file.name if img_file else '?'} · Tamanho: {img_file.size/1024:.0f} KB" if img_file else "")
 if st.session_state.get("ck_img_parametros"):
     with st.expander("🔬 Detalhador Pericial Extraído (Editável)", expanded=False):
         c1, c2 = st.columns(2)
