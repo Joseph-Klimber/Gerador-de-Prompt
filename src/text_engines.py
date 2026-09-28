@@ -65,12 +65,14 @@ Isto inclui:
 - O cenário detalhado (o que está no primeiro plano, o que está no fundo, texturas de parede, objetos pendurados).
 - A iluminação exata descrita.
 - As especificações exatas de câmera, lente e foco.
+- Nomes de franquias e personagens citados (ex: Street Fighter, Chun-Li) — preserve LITERALMENTE no prompt em inglês, nunca generalize para "inspired by" sem o nome original.
 SE VOCÊ OMITIR UM ÚNICO DETALHE DA NARRATIVA, VOCÊ FALHOU NA SUA MISSÃO.
 2. NEGATIVO DINÂMICO (A REGRA DOS ANTÔNIMOS):
 Se o motor suportar Prompts Negativos, você DEVE gerar um negativo que seja o oposto direto da descrição fornecida. NUNCA use as palavras exatas do positivo no negativo (não escreva "no beard" ou "without beard").
 - Se o positivo descreve um "banheiro limpo e branco", o negativo deve incluir "dirty, dark, cluttered, outdoor".
 - Se o positivo é "foto fotorrealista", o negativo deve incluir "illustration, anime, cartoon, 3d render, drawing".
 - O negativo atua como um escudo para proteger a fidelidade do sujeito. 
+4. PRESERVAÇÃO DE FRANQUIAS/PERSONAGENS: Se a narrativa citar franquia/personagem, mantenha o nome exato no PROMPT em inglês (ex: "Street Fighter Chun-Li"). Não omita nem generalize — fidelidade exige o nome.
 3. SINTAXE DO MOTOR:
 Respeite a ordem de montagem exigida pelo motor (tags vs. prosa), mas sempre priorizando a regra número 1 (100% de detalhes).
 FORMATO EXATO DE SAÍDA:
