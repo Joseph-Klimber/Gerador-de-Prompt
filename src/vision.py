@@ -48,15 +48,42 @@ def _chamar_motor_visao(arquivo_imagem, estilo_conversao, nivel_sensualidade, mo
                 img_pil = img_pil.convert("RGB")
         except Exception:
             pass
-        client = genai.Client(api_key=chave_visao)
-        cfg = _build_gemini_config(SYS_LEITOR_PARAMETRICO, modelo_primeiro_gemini, temperature=0.2)
-        resp = _gerar_com_retry(client, modelo_primeiro_gemini, [img_pil, user_prompt], cfg)
-        texto = getattr(resp, "text", "") or ""
-        if not texto.strip():
-            raise RuntimeError("A IA bloqueou a imagem por políticas de segurança.")
-        dados = parse_json_ia(texto)
-        if dados:
-            return {"tipo": "json", "dados": dados}
-        return {"tipo": "texto", "texto": texto}
+        candidatos = [modelo_primeiro_gemini] + [m for m in OPCOES_GEMINI_3 if m != modelo_primeiro_gemini]
+        ultimo_erro = None
+        for modelo_try in candidatos:
+            for modo_temp in (0.2, None):
+                try:
+                    client = genai.Client(api_key=chave_visao)
+                    cfg = _build_gemini_config(SYS_LEITOR_PARAMETRICO, modelo_try, temperature=modo_temp)
+                    resp = _gerar_com_retry(client, modelo_try, [img_pil, user_prompt], cfg)
+                    texto = getattr(resp, "text", "") or ""
+                    if not texto.strip():
+                        raise RuntimeError("A IA bloqueou a imagem por políticas de segurança.")
+                    dados = parse_json_ia(texto)
+                    if dados:
+                        return {"tipo": "json", "dados": dados}
+                    return {"tipo": "texto", "texto": texto}
+                except Exception as e:
+                    ultimo_erro = e
+                    s = str(e).lower()
+                    eh_validation = any(k in s for k in ("invalid argument", "validation", "not supported", "unsupported"))
+                    eh_transitorio = "503" in s or "overloaded" in s or "unavailable" in s or "429" in s or "resource exhausted" in s
+                    if eh_validation and modo_temp is not None:
+                        continue
+                    if eh_transitorio:
+                        if modo_temp is not None:
+                            continue
+                        break
+                    if modo_temp is not None:
+                        continue
+                    break
+            if ultimo_erro is not None and any(k in str(ultimo_erro).lower() for k in ("503", "overloaded", "unavailable", "429", "resource exhausted")):
+                if modelo_try == candidatos[-1]:
+                    break
+                continue
+            break
+        raise RuntimeError(f"Falha no Primeiro Gemini (Leitura Óptica) após fallback {candidatos}: {str(ultimo_erro)}")
     except Exception as e:
+        if "apos fallback" in str(e):
+            raise
         raise RuntimeError(f"Falha no Primeiro Gemini (Leitura Óptica): {str(e)}")
