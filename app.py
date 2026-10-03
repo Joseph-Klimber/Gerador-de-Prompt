@@ -32,6 +32,81 @@ from src.text_engines import (
     _chamar_motor_texto, _msg_erro_amigavel, _msg_erro_diagnostico,
     _build_gemini_config, _ps_markup_origin, parse_json_ia,
 )
+
+# Model optimization profiles (added for per-model prompt optimization)
+# Each profile defines: max_tokens, structure, technical hint, required tags, prohibitions
+MODEL_PROFILES = {
+    "flux": {
+        "max_tokens": 800,
+        "structure": "subject-context-lighting-style",
+        "dica_tecnica": "Use weighting: subject:1.2, background:1.0, lighting:1.1",
+        "tags_obrigatorias": ["subject", "environment"],
+        "proibicoes": ["repetitive adjectives"]
+    },
+    "ideogram": {
+        "max_tokens": 500,
+        "structure": "concept-elements-colors-style-composition",
+        "dica_tecnica": "Max 2 main characters, limit colors to 3",
+        "tags_obrigatorias": ["concept"],
+        "proibicoes": ["more than 3 adjectives consecutively"]
+    },
+    "pony": {
+        "max_tokens": 900,
+        "structure": "positive-negative-quality",
+        "dica_tecnica": "Use 'bad hands, bad feet' na negative always",
+        "tags_obrigatorias": ["positive", "negative"],
+        "proibicoes": ["contradictory tags"]
+    },
+    "illustrious": {
+        "max_tokens": 700,
+        "structure": "style-subject-quality-negative",
+        "dica_tecnica": "Always include artist name or art movement first",
+        "tags_obrigatorias": ["style", "subject"],
+        "proibicoes": ["generic tags like 'masterpiece' without context"]
+    },
+    "krea2": {
+        "max_tokens": 600,
+        "structure": "instructions-subject-style-params-output",
+        "dica_tecnica": "Use 'precise' para retratos, 'creative' para arte abstrata",
+        "tags_obrigatorias": ["instructions", "subject"],
+        "proibicoes": ["creativity and precision in both positive and negative"]
+    },
+    "midjourney": {
+        "max_tokens": 500,
+        "structure": "subject-parameters-ar-quality",
+        "dica_tecnica": "Menos é mais - MJ v6 entende linguagem natural melhor",
+        "tags_obrigatorias": ["subject"],
+        "proibicoes": ["long complex words; MJ prefere simples"]
+    },
+    "qwen": {
+        "max_tokens": 1000,
+        "structure": "task-context-style-output-spec",
+        "dica_tecnica": "Modelo understands both Chinese and English prompts natively",
+        "tags_obrigatorias": ["task", "context"],
+        "proibicoes": ["prompts extremamente curtos (<100 tokens)"]
+    },
+    "ernie": {
+        "max_tokens": 800,
+        "structure": "concept-elements-style-restrictions",
+        "dica_tecnica": "Incluir pelo menos 1 termo chinês para assuntos orientais",
+        "tags_obrigatorias": ["concept", "elements"],
+        "proibicoes": ["prompts only in English for Chinese subjects"]
+    },
+    "zit": {
+        "max_tokens": 400,
+        "structure": "subject-minimal-context-speed-params",
+        "dica_tecnica": "Turbo mode: max 3 adjectivos, sem descrições longitudes",
+        "tags_obrigatorias": ["subject"],
+        "proibicoes": ["any unnecessary words - each token counts for speed"]
+    },
+    "comfyui_sdxl": {
+        "max_tokens": 800,
+        "structure": "positive-negative-quality",
+        "dica_tecnica": "Positive < 500 tokens, Negative < 300 tokens for best cache",
+        "tags_obrigatorias": ["positive", "negative"],
+        "proibicoes": ["contradictory tags, very long negative prompts"]
+    }
+}
 from src.vision import _chamar_motor_visao
 
 def _get_secret(name: str):
@@ -378,13 +453,57 @@ if btn_exec:
         with st.spinner(f"Compilando sintaxe ultra-otimizada para {dest_sel}..."):
             try:
                 eng = BANCO_DE_MOTORES[dest_sel]
-                _dica = eng.get('dica_tecnica', '')
-                _dica_txt = f"\n💡 DICA TÉCNICA: {_dica}" if _dica else ""
-                bloco = f"\n\n======================================\n3. SINTAXE NATIVA: {dest_sel}\n======================================\n- POSITIVO: {eng['regra_positivo']}\n- NEGATIVO: {eng.get('regra_negativo', 'N/A')}{_dica_txt}\n\nSAÍDA OBRIGATÓRIA:\n1. PROMPT (ENGLISH)\n2. NEGATIVE PROMPT DINÂMICO (ENGLISH)\n3. LEGENDA\n4. HASHTAGS"
+                
+                # NEW: Lookup model profile for optimization
+                dest_lower = dest_sel.lower()
+                model_profile = MODEL_PROFILES.get(dest_lower, {})
+                max_tokens = model_profile.get("max_tokens", 800)
+                structure = model_profile.get("structure", "general")
+                technical_hint = model_profile.get("dica_tecnica", "")
+                required_tags = model_profile.get("tags_obrigatorias", [])
+                prohibitions = model_profile.get("proibicoes", [])
+                
+                # NEW: Token count validation and warning
+                txt_b = st.session_state.ck_preprompt_editado if st.session_state.get("ck_preprompt") else st.session_state.ck_ideia_input
+                txt_b_len = len(txt_b)  # approximate char count
+                
+                if txt_b_len > max_tokens:
+                    st.warning(f"⚠️ Prompt excede o limite ótimo de {max_tokens} tokens para {dest_sel}.")
+                    st.info(f"O prompt atual tem ~{txt_b_len} tokens. Será truncado para {max_tokens} tokens para melhores resultados.")
+                    # Truncate to max_tokens (simple char-based, not token-aware for simplicity)
+                    txt_b = txt_b[:max_tokens]
+                
+                # NEW: Structural injection based on model profile
+                if structure == "subject-context-lighting-style" and "flux" in dest_lower:
+                    p = f"DESTINO: {dest_sel}\nRATING: {sens_escolhida}\n\n1. NARRATIVA VISUAL (FONTE DA TRADUÇÃO):\n{txt_b}\n\n[FLUX STRUCTURE BEGIN]\nSubject: {txt_b[:200] if len(txt_b) > 200 else txt_b}\nContext: [auto-detect]\nLighting: [auto-detect]\nStyle: [auto-detect]\n[FLUX STRUCTURE END]"
+                elif structure == "concept-elements-colors-style-composition" and "ideogram" in dest_lower:
+                    p = f"DESTINO: {dest_sel}\nRATING: {sens_escolhida}\n\n1. NARRATIVA VISUAL (FONTE DA TRADUÇÃO):\n{txt_b}\n\n[IDEOGRAM STRUCTURE BEGIN]\nConcept: [auto-detect]\nElements: [auto-detect]\nColors: limited to 3 main colors\nStyle: [auto-detect]\nComposition: rule of thirds\n[IDEOGRAM STRUCTURE END]"
+                elif structure == "positive-negative-quality" and ("pony" in dest_lower or "comfyui" in dest_lower or "sdxl" in dest_lower):
+                    p = f"\n\n======================================\n3. SINTAXE NATIVA: {dest_sel}\n======================================\n- POSITIVO: {eng['regra_positivo']}\n- NEGATIVO: {eng.get('regra_negativo', 'N/A')}\n\nSAÍDA OBRIGATÓRIA:\n1. PROMPT (ENGLISH)\n2. NEGATIVE PROMPT DINÂMICO (ENGLISH)\n3. LEGENDA\n4. HASHTAGS\n\n1. NARRATIVA VISUAL (FONTE DA TRADUÇÃO):\n{txt_b}\n\n2. SUGESTÕES CIRÚRGICAS INCORPORADAS: Nenhuma sugestão."
+                elif structure == "style-subject-quality-negative" and "illustrious" in dest_lower:
+                    p = f"DESTINO: {dest_sel}\nRATING: {sens_escolhida}\n\n1. NARRATIVA VISUAL (FONTE DA TRADUÇÃO):\n{txt_b}\n\n[ILLUSTRIOUS STRUCTURE BEGIN]\nStyle: [artist name or art movement - auto-detect]\nSubject: [character/scene - auto-detect]\nQuality: masterpiece, best quality\nNegative: [auto-detect]\n[ILLUSTRIOUS STRUCTURE END]"
+                elif structure == "instructions-subject-style-params-output" and "krea2" in dest_lower:
+                    p = f"DESTINO: {dest_sel}\nRATING: {sens_escolhida}\n\n1. NARRATIVA VISUAL (FONTE DA TRADUÇÃO):\n{txt_b}\n\n[KREA2 STRUCTURE BEGIN]\nInstructions: [enhance/upscale/creative/precise - auto-detect]\nSubject: [auto-detect]\nStyle parameters: [creativity vs precision balance - auto-detect]\nOutput format: [aspect ratio, style preferences - auto-detect]\n[KREA2 STRUCTURE END]"
+                elif structure == "subject-parameters-ar-quality" and "midjourney" in dest_lower:
+                    p = f"DESTINO: {dest_sel}\nRATING: {sens_escolhida}\n\n1. NARRATIVA VISUAL (FONTE DA TRADUÇÃO):\n{txt_b}\n\n[MJ STRUCTURE BEGIN]\nSubject: [auto-detect]\nParameters: --v 6.1 --style raw\nAspect ratio and quality: --ar 16:9 --quality 2\n[MJ STRUCTURE END]"
+                elif structure == "task-context-style-output-spec" and "qwen" in dest_lower:
+                    p = f"DESTINO: {dest_sel}\nRATING: {sens_escolhida}\n\n1. NARRATIVA VISUAL (FONTE DA TRADUÇÃO):\n{txt_b}\n\n[QWEN STRUCTURE BEGIN]\nTask: [auto-detect]\nContext/background: [detailed scene description]\nStyle: [art style, camera, lighting - auto-detect]\nOutput specification: [format, duration for video - auto-detect]\n[QWEN STRUCTURE END]"
+                elif structure == "concept-elements-style-restrictions" and "ernie" in dest_lower:
+                    p = f"DESTINO: {dest_sel}\nRATING: {sens_escolhida}\n\n1. NARRATIVA VISUAL (FONTE DA TRADUÇÃO):\n{txt_b}\n\n[ERNIE STRUCTURE BEGIN]\nConcept: [auto-detect, prefer Chinese terms for Eastern subjects]\nElements: [characters, objects, action - auto-detect]\nStyle and atmosphere: [art style, colors, lighting - auto-detect]\nRestrictions: [what to exclude - auto-detect]\n[ERNIE STRUCTURE END]"
+                elif structure == "subject-minimal-context-speed-params" and "zit" in dest_lower:
+                    p = f"DESTINO: {dest_sel}\nRATING: {sens_escolhida}\n\n1. NARRATIVA VISUAL (FONTE DA TRADUÇÃO):\n{txt_b}\n\n[ZIT STRUCTURE BEGIN]\nSubject: [essential only - auto-detect]\nContext: [minimum needed - auto-detect]\nSpeed parameters: [speed, steps, guidance scale - optimized for speed]\n[ZIT STRUCTURE END]"
+                elif structure == "positive-negative-quality" and dest_lower not in ["flux", "ideogram", "illustrious", "krea2", "midjourney", "qwen", "ernie", "zit", "comfyui_sdxl"]:
+                    # Generic pony/sdxl structure
+                    p = f"\n\n======================================\n3. SINTAXE NATIVA: {dest_sel}\n======================================\n- POSITIVO: {eng['regra_positivo']}\n- NEGATIVO: {eng.get('regra_negativo', 'N/A')}\n\nSAÍDA OBRIGATÓRIA:\n1. PROMPT (ENGLISH)\n2. NEGATIVE PROMPT DINÂMICO (ENGLISH)\n3. LEGENDA\n4. HASHTAGS\n\n1. NARRATIVA VISUAL (FONTE DA TRADUÇÃO):\n{txt_b}\n\n2. SUGESTÕES CIRÚRGICAS INCORPORADAS: Nenhuma sugestão."
+                else:
+                    # Default structure - original code path
+                    p = f"\n\n======================================\n3. SINTAXE NATIVA: {dest_sel}\n======================================\n- POSITIVO: {eng['regra_positivo']}\n- NEGATIVO: {eng.get('regra_negativo', 'N/A')}{_dica_txt}\n\nSAÍDA OBRIGATÓRIA:\n1. PROMPT (ENGLISH)\n2. NEGATIVE PROMPT DINÂMICO (ENGLISH)\n3. LEGENDA\n4. HASHTAGS"
+                
                 txt_b = st.session_state.ck_preprompt_editado if st.session_state.get("ck_preprompt") else st.session_state.ck_ideia_input
                 sug_aceitas = st.session_state.get("ck_sugestoes_marcadas", [])
                 sug_str = "\n".join(f"- {s}" for s in sug_aceitas) if sug_aceitas else "Nenhuma sugestão."
                 p = f"DESTINO: {dest_sel}\nRATING: {sens_escolhida}\n\n1. NARRATIVA VISUAL (FONTE DA TRADUÇÃO):\n{txt_b}\n\n2. SUGESTÕES CIRÚRGICAS INCORPORADAS:\n{sug_str}"
+                
                 _estilo_final = st.session_state.get("ck_estilo_conversao", "Manter Estilo Original")
                 if "Fotorrealismo" in _estilo_final:
                     p += "\n[STYLE OVERRIDE — CONVERT TO PHOTOREALISM]: Rewrite entire scene as photorealistic photo, real skin, photographic texture, photorealistic. PROHIBIT anime/cartoon/illustration/drawing/cel shading terms."
@@ -392,6 +511,7 @@ if btn_exec:
                     p += "\n[STYLE OVERRIDE — CONVERT TO ANIME 2D]: Rewrite entire scene as 2D anime illustration, clean anime linework, cel shading, anime style. Replace photo/smartphone/26mm/photorealistic with anime illustration terms. PROHIBIT photo/smartphone lens/photorealistic terms."
                 if "Literal" in foco_contexto: p += "\n[MODO LITERAL ATIVADO]: Remova floreios poéticos/metafóricos, MAS MANTENHA todas as características do sujeito e os detalhes principais da composição. LITERAL NÃO É RESUMO E NÃO É OMISSÃO."
                 p += "\n\n⚠️ REGRAS FINAIS — DUAS ORDENS DISTINTAS:\n- ORDEM 1 · FIDELIDADE DO SUJEITO >=95%: preserve as características do sujeito (gênero, etnia, cabelo/olhos/pele, roupa cor/material/textura/corte/acessórios).\n- ORDEM 2 · INTEGRIDADE DA COMPOSIÇÃO: não omita detalhes principais ao traduzir para a linguagem do motor (ação/pose, cenário fg/mg/bg, luz, câmera); e NÃO infle/abstraia — texto exagerado dilui e torna o resultado abstrato.\n- PRECEDÊNCIA: FIDELIDADE 95% > LIMITE DE PALAVRAS > CONCISÃO. Se a regra do motor conflitar com a fidelidade, IGNORE o limite e mantenha 100% dos detalhes.\n- 'PROMPT' E 'NEGATIVE' EXCLUSIVAMENTE EM INGLÊS."
+                
                 modelo_base = st.session_state.get("modelo_texto_select", MODELO_TEXTO_PADRAO)
                 res, prov = _chamar_motor_texto(SYS_MESTRE_CORE, bloco + "\n\n" + p, modelo_gemini=modelo_base)
                 st.session_state["ck_prompt_final"] = res
