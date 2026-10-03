@@ -454,6 +454,10 @@ if btn_exec:
             try:
                 eng = BANCO_DE_MOTORES[dest_sel]
                 
+                # NOVA CORREÇÃO: Definir _dica_txt para evitar NameError
+                _dica = eng.get('dica_tecnica', '')
+                _dica_txt = f"\n💡 DICA TÉCNICA: {_dica}" if _dica else ""
+                
                 # NEW: Lookup model profile for optimization
                 dest_lower = dest_sel.lower()
                 model_profile = MODEL_PROFILES.get(dest_lower, {})
@@ -473,8 +477,12 @@ if btn_exec:
                     # Truncate to max_tokens (simple char-based, not token-aware for simplicity)
                     txt_b = txt_b[:max_tokens]
                 
-                # NEW: Structural injection based on model profile
-                if structure == "subject-context-lighting-style" and "flux" in dest_lower:
+                # NOVA CORREÇÃO: Aplicar truncamento novamente após reassignment (linha 502)
+                # Para garantir que o limite seja respeitado mesmo após reassignment
+                if len(txt_b) > max_tokens:
+                    txt_b = txt_b[:max_tokens]
+                
+                # Structural injection based on model profile
                     p = f"DESTINO: {dest_sel}\nRATING: {sens_escolhida}\n\n1. NARRATIVA VISUAL (FONTE DA TRADUÇÃO):\n{txt_b}\n\n[FLUX STRUCTURE BEGIN]\nSubject: {txt_b[:200] if len(txt_b) > 200 else txt_b}\nContext: [auto-detect]\nLighting: [auto-detect]\nStyle: [auto-detect]\n[FLUX STRUCTURE END]"
                 elif structure == "concept-elements-colors-style-composition" and "ideogram" in dest_lower:
                     p = f"DESTINO: {dest_sel}\nRATING: {sens_escolhida}\n\n1. NARRATIVA VISUAL (FONTE DA TRADUÇÃO):\n{txt_b}\n\n[IDEOGRAM STRUCTURE BEGIN]\nConcept: [auto-detect]\nElements: [auto-detect]\nColors: limited to 3 main colors\nStyle: [auto-detect]\nComposition: rule of thirds\n[IDEOGRAM STRUCTURE END]"
