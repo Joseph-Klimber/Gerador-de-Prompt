@@ -1,6 +1,12 @@
 """vision.py — Etapa 3 stub / Etapa 4 full (extração óptica)
 Reaproveitado do legado 1.0-3.py — PS_LEITOR_PARAMETRICO copiado via text_engines.
 Resize 1536 LANCZOS, validação 10MB.
+
+FIDELIDADE > COMPACTAÇÃO. A visão é a ÚNICA etapa que enxerga a imagem: o que
+ela omite se perde para sempre, porque nenhuma etapa posterior consegue
+reconstruir o que não foi descrito. Por isso o orçamento aqui é GENEROSO e
+DERIVADO do destino escolhido no Passo 0, e o adensamento com hierarquia
+(sujeito > ação > cenário > luz > câmera) fica no consumidor (app.py).
 """
 from PIL import Image, ImageOps
 import streamlit as st
@@ -11,7 +17,28 @@ except ImportError:
 
 from src.text_engines import SYS_LEITOR_PARAMETRICO, MODELO_VISAO_PADRAO, OPCOES_GEMINI_3, _build_gemini_config, _gerar_com_retry, parse_json_ia
 
-def _chamar_motor_visao(arquivo_imagem, estilo_conversao, nivel_sensualidade, modelo_gemini=None):
+# Multiplicador de fidelidade: a visão escreve ~2.2 palavras por token do teto do
+# destino, com piso e teto absolutos. Generoso de propósito — sobrar é
+# recuperável (o consumidor adensa com hierarquia), faltar é fatal.
+VISAO_FATOR_FIDELIDADE = 2.2
+VISAO_MIN_PALAVRAS = 700
+VISAO_MAX_PALAVRAS = 2000
+
+
+def _teto_visao_palavras(max_tokens_destino):
+    """ Orçamento da visão derivado do teto do destino. É referência SOFT: a
+    instrução pede fidelidade; nenhum corte rígido é aplicado aqui."""
+    total = int(min(max(int(max_tokens_destino) * VISAO_FATOR_FIDELIDADE,
+                         VISAO_MIN_PALAVRAS), VISAO_MAX_PALAVRAS))
+    # Mesma hierarquia do consumidor: sujeito > ação > cenário > luz > câmera
+    pesos = {"sujeito": 34, "acao": 26, "cenario": 16,
+             "iluminacao": 12, "estilo_camera": 12}
+    soma = sum(pesos.values())
+    return {k: max(int(total * p / soma), 120) for k, p in pesos.items()}
+
+
+def _chamar_motor_visao(arquivo_imagem, estilo_conversao, nivel_sensualidade,
+                       modelo_gemini=None, max_tokens_destino=800):
     MAX_IMAGE_SIZE_MB = 10
     if arquivo_imagem.size > MAX_IMAGE_SIZE_MB * 1024 * 1024:
         raise RuntimeError(f"🖼️ Imagem limite: {MAX_IMAGE_SIZE_MB} MB.")
@@ -32,6 +59,27 @@ def _chamar_motor_visao(arquivo_imagem, estilo_conversao, nivel_sensualidade, mo
         user_prompt += "\n[MODIFICADOR 1: ESTILO]: Traduza para o MUNDO REAL fotorrealista."
     elif "Anime" in estilo_conversao:
         user_prompt += "\n[MODIFICADOR 1: ESTILO]: Traduza para ILUSTRAÇÃO 2D ANIME."
+
+    # Orçamento DERIVADO do destino escolhido no Passo 0. Referência SOFT de
+    # densidade — os números são injetados na instrução, nunca aplicados como
+    # corte. A extração é a única etapa que enxerga a imagem: resumir aqui
+    # destrói o detalhe em definitivo, enquanto sobrar detalhe é recuperado
+    # adiante pela hierarquia do consumidor.
+    tetos = _teto_visao_palavras(max_tokens_destino)
+    user_prompt += (
+        "\n\n[ORÇAMENTO DE EXTRAÇÃO — REFERÊNCIA SOFT (palavras por campo)]:"
+        f"\n- sujeito: ~{tetos['sujeito']}"
+        f"\n- ação: ~{tetos['acao']}"
+        f"\n- cenário: ~{tetos['cenario']}"
+        f"\n- iluminação: ~{tetos['iluminacao']}"
+        f"\n- estilo e câmera: ~{tetos['estilo_camera']}"
+        "\nEstes números são REFERÊNCIA de densidade, não um limite de asfixia."
+        "\nPRIORIDADE DE FIDELIDADE: preserve integralmente identidade do sujeito, "
+        "direção e dureza da luz, e dados ópticos (mm, f/, DoF, bokeh, enquadramento). "
+        "Ceda apenas detalhe atmosférico decorativo, repetição redundante e preenchimento "
+        "genérico. É PREJUDICADO omitir detalhe visível: o que não for descrito aqui não "
+        "poderá ser recuperado em nenhuma etapa posterior."
+    )
     try:
         arquivo_imagem.seek(0)
         img_pil = Image.open(arquivo_imagem)
