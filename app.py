@@ -329,15 +329,16 @@ def _campos_rotulados(txt):
 
 def _norm_rotulo(r):
     r = (r or "").lower()
+    r2 = r.replace("ç","c").replace("ã","a").replace("á","a").replace("â","a").replace("ê","e")
     if r.startswith("sujeit"):
         return "sujeito"
-    if r.startswith("a") and "c" in r:
+    if r2.startswith("a") and ("c" in r2 or "cao" in r2 or "aca" in r2 or r2.startswith("acao") or "c" in r2.replace("ç","c")):
         return "acao"
-    if r.startswith("pose"):
+    if r2.startswith("pose"):
         return "acao"
-    if r.startswith("cen"):
+    if r2.startswith("cen"):
         return "cenario"
-    if r.startswith("ilum") or r.startswith("luz"):
+    if r2.startswith("ilum") or r2.startswith("luz"):
         return "iluminacao"
     return "estilo_camera"
 
