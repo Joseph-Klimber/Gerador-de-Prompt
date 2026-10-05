@@ -238,7 +238,13 @@ def _cortar_por_frase(txt, max_tokens):
     return saida + (" …" if len(escolhidos) < len(partes) else ""), len(escolhidos) < len(partes)
 
 
-def _orcamento_fonte(txt, max_tokens, teto_fonte_pct=0.65):
+# A narrativa fonte entra como INSUMO, entao fica em 65% do teto do destino.
+# Constante unica: antes o 0.65 aparecia no default da funcao E na mensagem do
+# Passo 5 — mudar um sem o outro fazia a mensagem mentir para o usuario.
+_TETO_FONTE_PCT = 0.65
+
+
+def _orcamento_fonte(txt, max_tokens, teto_fonte_pct=_TETO_FONTE_PCT):
     """Aplica orçamento à narrativa fonte. Devolve (texto, tokens, avisou).
 
     O teto do destino é da SAÍDA final. A fonte entra como insumo, então fica
@@ -291,7 +297,7 @@ _PISO_CAMPO = 0.18
 # em ASCII). Medido: 'Ação:' ficava sem rótulo e o campo saia da saida inteira.
 _RE_SPLIT_ROTULO = re.compile(
     r"(?<![0-9A-Za-zÀ-ÿ_])(sujeito|sujeita|acao|a[cç][aã]o|pose|cenario|cen[aá]rio|"
-    r"iluminacao|ilumina[cç][aã]o|estilo_camera|estilo e c[aâ]mera|camera|c[aâ]mera)"
+    r"iluminacao|ilumina[cç][aã]o|estilo_camera|estilo e c[aâ]mera|camera|c[aâ]mera|estilo)"
     r"\s*[:\-]\s*",
     re.IGNORECASE,
 )
@@ -371,12 +377,18 @@ def _cortar_por_campo(campos, teto_fonte):
     # campos menores ficavam com ZERO — foi o que aconteceu com iluminacao no
     # teste com foto real. Todo campo tem piso antes de o sujeito ganhar extra.
     escolhidos = {}
+    _marcado = {}          # campo -> True quando o bloco foi truncado
     gasto = 0
     for k, v in sorted(presentes, key=lambda x: _PESO_CAMPO.get(x[0], 8)):
         if gasto >= teto_conteudo:
             break
-        bloco, _ = _cortar_por_frase(v, max(piso, cotas[k]))
+        # a flag `cortou` e o sinal confiavel de truncamento. O regex das
+        # linhas abaixo so acerta quando o pedaco termina em "ponto + …";
+        # _cortar_por_frase tambem devolve " …" SEM ponto (linha 238), e nesse
+        # caso as reticencias sumiam e o campo truncado virava frase completa.
+        bloco, cortou_campo = _cortar_por_frase(v, max(piso, cotas[k]))
         escolhidos[k] = bloco
+        _marcado[k] = cortou_campo
         gasto += _estimar_tokens(bloco)
 
     # ── 2) Redistribui o que sobrou: cada campo ganha uma fatia igual ──
@@ -396,7 +408,8 @@ def _cortar_por_campo(campos, teto_fonte):
             teto_deste = min(atual + parcela, teto_conteudo - (gasto - atual))
             if teto_deste <= atual:
                 continue
-            bloco, _ = _cortar_por_frase(v, teto_deste)
+            bloco, _cortou_d = _cortar_por_frase(v, teto_deste)
+            _marcado[k] = _marcado.get(k) or _cortou_d
             gasto += _estimar_tokens(bloco) - atual
             escolhidos[k] = bloco
 
@@ -419,7 +432,7 @@ def _cortar_por_campo(campos, teto_fonte):
         # Ponto e reticencias sao o mesmo sinal de corte — mantemos UM so, e o
         # separador entre campos e' so espaco (com '. ' viraria '…. ').
         v = v.rstrip()
-        cortado = bool(re.search(r"(\s*\.){1,3}\s*…\s*$", v))
+        cortado = _marcado.get(k) or bool(re.search(r"(\s*\.){1,3}\s*…\s*$", v))
         v = re.sub(r"(\s*\.){1,3}\s*…\s*$", "", v) or v
         v = v.rstrip(" .,;:…")
         # fecha com o sinal que faz sentido: reticencias se cortou, ponto se nao
@@ -434,14 +447,21 @@ def _cortar_por_campo(campos, teto_fonte):
         for k, _ in sorted(presentes, key=lambda x: _PESO_CAMPO.get(x[0], 8)):
             if _estimar_tokens(saida) <= teto_fonte:
                 break
-            curto, cortou = _cortar_por_frase(dict(presentes)[k],
-                                              max(piso, _estimar_tokens(dict(escolhidos)[k]) - 12))
-            if cortou and curto != escolhidos[k]:
+            # .get() e obrigatorio: o break do laco de escolha pode ter deixado
+            # uma chave de `presentes` fora de `escolhidos`, e sem isso o
+            #Passo 5 quebra com KeyError (reproduzido com teto_fonte=34).
+            _origem = dict(presentes).get(k, "")
+            _atual = escolhidos.get(k, "")
+            curto, cortou = _cortar_por_frase(_origem,
+                                              max(piso, _estimar_tokens(_atual) - 12))
+            # _atual pode ser "" quando o break deixou a chave fora de
+            # escolhidos — ler escolhidos[k] diretamente quebrava o Passo 5.
+            if cortou and curto != _atual:
                 escolhidos[k] = curto
                 partes = []
                 for kk, vv in sorted(escolhidos.items(),
                                       key=lambda x: ordem.get(x[0], 99)):
-                    c2 = bool(re.search(r"(\s*\.){1,3}\s*…\s*$", vv))
+                    c2 = _marcado.get(kk) or bool(re.search(r"(\s*\.){1,3}\s*…\s*$", vv))
                     vv = re.sub(r"(\s*\.){1,3}\s*…\s*$", "", vv) or vv
                     partes.append(f"{kk}: {vv.rstrip(' .,;:…')}" + (" …" if c2 else "."))
                 saida = " ".join(partes)
@@ -819,11 +839,20 @@ if st.session_state.get("ck_preprompt"):
     st.markdown("<div class='ps-legend'><span><span class='ps-user-word'>Ideia Original</span></span> • <span><span class='ps-ai-word'>Ajuste da IA</span></span></div>", unsafe_allow_html=True)
     st.markdown(f"<div class='ps-preprompt'>{_ps_markup_origin(st.session_state['ck_preprompt'], st.session_state.get('ck_ideia_hist_fix', ''))}</div>", unsafe_allow_html=True)
     st.text_area("Ajuste fino do Rascunho (Esta caixa substituirá a Ideia para o Motor Final):", key="ck_preprompt_editado", height=130)
+# "Definida" (feminino) e o que o SYS_COMPOSITOMETRO emite para
+# iluminacao_status e camera_status. Sem ela no teste, luz e camera
+# confirmadas pelo modelo apareciam como pendentes (badge azul ⚙️),
+# iguais a "Ausente".
+def _bdg(s):
+    if s in ("Definido", "Definida", "Presente"):
+        return ("comp-green", "✓")
+    if s in ("Vago", "Estática"):
+        return ("comp-amber", "!")
+    return ("comp-blue", "⚙️")
 diag = st.session_state.get("ck_diagnostico")
 if diag:
     with st.container(border=True):
         c1, c2, c3, c4, c5 = st.columns(5)
-        def _bdg(s): return ("comp-green","✓") if s in ["Definido","Presente"] else ("comp-amber","!") if s in ["Vago","Estática"] else ("comp-blue","⚙️")
         for col, key, label in zip([c1,c2,c3,c4,c5], ["sujeito_status","acao_status","cenario_status","iluminacao_status","camera_status"], ["Sujeito","Ação","Cenário","Luz","Câmera"]):
             cl, ic = _bdg(diag.get(key, ""))
             col.markdown(f"<div class='comp-badge {cl}'>{ic} {label}: {diag.get(key, 'Pendente')}</div>", unsafe_allow_html=True)
@@ -857,7 +886,9 @@ if btn_exec:
                 eng = BANCO_DE_MOTORES[dest_sel]
                 max_tokens = _teto_destino(dest_sel)
                 structure = _perfil_destino.get("structure", "general")
-                _dica = eng.get("dica_tecnica", "")
+                # dica_tecnica vive no MODEL_PROFILES (via _perfil_do_destino),
+                # nao no BANCO_DE_MOTORES — ler de eng devolvia "" sempre.
+                _dica = _perfil_destino.get("dica_tecnica", "")
                 _dica_txt = f"\n💡 DICA TÉCNICA: {_dica}" if _dica else ""
                 bloco = f"\n\n======================================\n3. SINTAXE NATIVA: {dest_sel}\n======================================\n- POSITIVO: {eng['regra_positivo']}\n- NEGATIVO: {eng.get('regra_negativo', 'N/A')}{_dica_txt}\n\nSAÍDA OBRIGATÓRIA:\n1. PROMPT (ENGLISH)\n2. NEGATIVE PROMPT DINÂMICO (ENGLISH)\n3. LEGENDA\n4. HASHTAGS"
 
@@ -866,7 +897,16 @@ if btn_exec:
                 # em PT (≈3 car./token) isso cortava ~67% antes da hora, sempre
                 # no meio da frase. Agora mede tokens e corta por fronteira de
                 # frase, escolhendo o que sobra por densidade de informação.
-                txt_b = st.session_state.ck_preprompt_editado if st.session_state.get("ck_preprompt") else st.session_state.ck_ideia_input
+                # O `if` decidia pelo rascunho (ck_preprompt) mas lia o ajuste
+                # fino (ck_preprompt_editado), que o usuario pode apagar. O
+                # resultado era txt_b == "" e o Passo 5 saia com a NARRATIVA
+                # VISUAL em branco — sem erro, sem aviso.
+                _ajuste = (st.session_state.get("ck_preprompt_editado") or "").strip()
+                _base = (st.session_state.get("ck_preprompt") or "").strip()
+                txt_b = _ajuste or _base or (st.session_state.get("ck_ideia_input") or "")
+                if not txt_b.strip():
+                    st.error("A narrativa ficou vazia. Escreva no Passo 1 ou gere um rascunho no Passo 4 antes de compilar.")
+                    st.stop()
                 sug_aceitas = st.session_state.get("ck_sugestoes_marcadas", [])
                 sug_str = "\n".join(f"- {s}" for s in sug_aceitas) if sug_aceitas else "Nenhuma sugestão."
                 est_antes = _estimar_tokens(txt_b)
@@ -874,7 +914,7 @@ if btn_exec:
                 if cortou:
                     st.info(f"📥 Narrativa adensada para o formato do destino: "
                             f"{est_antes} → {est_fonte} tokens (teto-fonte "
-                            f"{int(max_tokens*0.65)}). Sujeito, luz e óptica preservados.")
+                            f"{int(max_tokens*_TETO_FONTE_PCT)}). Sujeito, luz e óptica preservados.")
 
                 # ── P-Base ──
                 p = f"DESTINO: {dest_sel}\nRATING: {sens_escolhida}\nFORMATO: {structure}\n\n1. NARRATIVA VISUAL (FONTE DA TRADUÇÃO):\n{txt_b}\n\n2. SUGESTÕES CIRÚRGICAS INCORPORADAS:\n{sug_str}"
@@ -892,12 +932,15 @@ if btn_exec:
                     p += "\n\n[IDEOGRAM STRUCTURE: concept | elements | colors (max 3) | composition]"
                 elif "midjourney" in _dest_lower:
                     p += "\n\n[MJ STRUCTURE: subject + --v 6.1 --style raw --ar 16:9]"
+                elif "illustrious" in _dest_lower:
+                    # ANTES do bloco comfyui: 'ComfyUI / Illustrious' contem
+                    # 'comfyui' e casava com SDXL/PONY, tornando este ramo
+                    # codigo morto e perdendo a regra 'style (artist/movement first)'.
+                    p += "\n\n[ILLUSTRIOUS STRUCTURE: style (artist/movement first) | subject | quality | negative]"
                 elif any(m in _dest_lower for m in ["pony", "sdxl", "comfyui"]):
                     p += "\n\n[SDXL/PONY STRUCTURE: positive-tags, negative-tags]"
                 elif "krea" in _dest_lower:
                     p += "\n\n[KREA STRUCTURE: instructions | subject | style-params]"
-                elif "illustrious" in _dest_lower:
-                    p += "\n\n[ILLUSTRIOUS STRUCTURE: style (artist/movement first) | subject | quality | negative]"
 
                 # Estilo e regras — BLOCO ÚNICO
                 _estilo_final = st.session_state.get("ck_estilo_conversao", "Manter Estilo Original")
