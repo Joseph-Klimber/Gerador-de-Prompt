@@ -1,6 +1,6 @@
 """vision.py — Etapa 3 stub / Etapa 4 full (extração óptica)
 Reaproveitado do legado 1.0-3.py — PS_LEITOR_PARAMETRICO copiado via text_engines.
-Resize 1536 LANCZOS, validação 10MB.
+Proporção canônica no topo da faixa de tiles (LANCZOS), validação 10MB.
 
 FIDELIDADE > COMPACTAÇÃO. A visão é a ÚNICA etapa que enxerga a imagem: o que
 ela omite se perde para sempre, porque nenhuma etapa posterior consegue
@@ -23,6 +23,135 @@ from src.text_engines import SYS_LEITOR_PARAMETRICO, MODELO_VISAO_PADRAO, OPCOES
 VISAO_FATOR_FIDELIDADE = 2.2
 VISAO_MIN_PALAVRAS = 700
 VISAO_MAX_PALAVRAS = 2000
+
+# ──────────────────────────────────────────────────────────────────────────
+# PROPORÇÕES CANÔNICAS DE MERCADO — de aqui derivam todas as outras.
+# Cada razão-fixa tem um tamanho canônico EXATO: pares inteiros da própria
+# razão posicionados no TOPO da faixa de tiles do Gemini (faixa = 768 px;
+# 1 tile de 768×768 = 256 tokens; resto fracionário paga o tile inteiro).
+# Assim o custo da imagem vira conta fechada e previsível:
+#   10 formatos = 4 tiles = 1024 tokens no máximo · 21:9 = 2 tiles = 512.
+# Imagem com proporção "quebrada" (desvio ≤ 3%) assume a canônica mais
+# próxima por recorte central — recorte nunca distorce. Mais fora que isso,
+# a própria razão fica intata e só se reduz o necessário para caber.
+# Nada aqui amplia: o alvo só é aplicado quando a imagem é maior que ele.
+# ──────────────────────────────────────────────────────────────────────────
+PROPORCOES_CANONICAS = (
+    ("1:1",    1,  1, 1536, 1536),
+    ("4:5",    4,  5, 1228, 1535),
+    ("3:4",    3,  4, 1152, 1536),
+    ("2:3",    2,  3, 1024, 1536),
+    ("9:16",   9, 16,  864, 1536),
+    ("4:3",    4,  3, 1536, 1152),
+    ("3:2",    3,  2, 1536, 1024),
+    ("16:9",  16,  9, 1536,  864),
+    ("16:10", 16, 10, 1536,  960),
+    ("5:4",    5,  4, 1280, 1024),
+    ("21:9",   7,  3, 1533,  657),
+)
+TOLERANCIA_RECORTE = 0.03   # desvio até o qual se assume a canonica mais proxima
+TOLERANCIA_FAIXA = 0.02    # quanto acima de um limite de faixa ainda se desce
+LADO_FAIXA = 768            # faixa de tile do Gemini
+TETO_TILES = 4              # orcamento em forca: 4 tiles = 1024 tokens
+TETO_LADO = 1536            # 2 faixas — teto do lado maior em qualquer caso
+_LANCZOS = Image.Resampling.LANCZOS
+
+
+def _n_tiles(w, h):
+    """Tiles do Gemini para uma imagem de w×h (ceil por eixo, 768 px cada)."""
+    return (-(-w // LADO_FAIXA)) * (-(-h // LADO_FAIXA))
+
+
+def _canonica_mais_proxima(w, h):
+    """(nome, desvio_relativo, largura_alvo, altura_alvo, razao_canonica)."""
+    r = w / h
+    melhor = ("", float("inf"), 1, 1, 1.0)
+    for nome, a, b, tw, th in PROPORCOES_CANONICAS:
+        rc = a / b
+        dev = abs(r - rc) / rc
+        if dev < melhor[1]:
+            melhor = (nome, dev, tw, th, rc)
+    return melhor
+
+
+def _escala_de_borda(w, h):
+    """Escala proporcional que desce todas as dimensoes que estao ate
+    TOLERANCIA_FAIXA acima de um limite de faixa (768·n) ate o proprio
+    limite. 769 px custa o mesmo que 1536 px (4 tiles): o resto fracionario
+    e de graça de se tirar. None quando nao ha degrau a saltar."""
+    melhor, achou = 1.0, False
+    for d in (w, h):
+        n = d // LADO_FAIXA
+        limite = n * LADO_FAIXA
+        if 0 < limite < d <= limite * (1 + TOLERANCIA_FAIXA):
+            melhor = min(melhor, limite / d)
+            achou = True
+    return melhor if achou else None
+
+
+def normalizar_imagem(img):
+    """Aplica a proporção canônica mais próxima da imagem e a reduz ao
+    tamanho canônico do topo de faixa. Só reduz (nunca amplia); recorta no
+    máximo TOLERANCIA_RECORTE de um dos lados (recorte nunca distorce);
+    proporção fora do padrão de mercado mantém a própria razão. Devolve
+    (imagem, info) com tiles, tokens e o que foi feito."""
+    w0, h0 = img.size
+    w, h = w0, h0
+    if w <= 0 or h <= 0:
+        return img, {}
+    nome, dev, tw, th, rc = _canonica_mais_proxima(w, h)
+    recorte_pct = 0.0
+    if dev <= TOLERANCIA_RECORTE:
+        # 1) razão canônica por recorte central — erra no maximo o desvio medido
+        r = w / h
+        if r > rc:
+            nw = max(1, min(w, int(round(h * rc))))
+            if nw < w:
+                x0 = (w - nw) // 2
+                img = img.crop((x0, 0, x0 + nw, h))
+                recorte_pct = (w - nw) * 100.0 / w
+        elif r < rc:
+            nh = max(1, min(h, int(round(w / rc))))
+            if nh < h:
+                y0 = (h - nh) // 2
+                img = img.crop((0, y0, w, y0 + nh))
+                recorte_pct = (h - nh) * 100.0 / h
+        w, h = img.size
+        # 2) tamanho canônico (topo da faixa 2×2) — aplicado só quando reduz
+        s = min(tw / w, th / h)
+        if s < 1.0:
+            img = img.resize((max(1, int(w * s)), max(1, int(h * s))), _LANCZOS)
+            w, h = img.size
+            # ±1 px do arredondamento: normaliza para o par canônico exato
+            if abs(w - tw) <= 1 and abs(h - th) <= 1 and (w, h) != (tw, th):
+                img = img.resize((tw, th), _LANCZOS)
+                w, h = img.size
+        metodo = "canonica"
+    else:
+        # 3) fora do padrão: a propria razao fica intata; reduz so o suficiente
+        if max(w, h) > TETO_LADO:
+            s = TETO_LADO / max(w, h)
+            img = img.resize((max(1, int(w * s)), max(1, int(h * s))), _LANCZOS)
+            w, h = img.size
+        metodo = "razao_preservada"
+    # 4) degrau de faixa: desce o resto fracionario (custo de fração de %)
+    s_borda = _escala_de_borda(w, h)
+    if s_borda is not None and s_borda >= 1 - TOLERANCIA_FAIXA:
+        img = img.resize((max(1, int(w * s_borda)), max(1, int(h * s_borda))), _LANCZOS)
+        w, h = img.size
+    tiles = _n_tiles(w, h)
+    info = {
+        "antes": f"{w0}×{h0}",
+        "depois": f"{w}×{h}",
+        "proporcao": nome,
+        "razao_original": round(w0 / h0, 3),
+        "desvio": round(dev * 100, 2),
+        "recorte_pct": round(recorte_pct, 2),
+        "metodo": metodo,
+        "tiles": tiles,
+        "tokens_aprox": tiles * 256,
+    }
+    return img, info
 
 
 def _teto_visao_palavras(max_tokens_destino):
@@ -80,18 +209,17 @@ def _chamar_motor_visao(arquivo_imagem, estilo_conversao, nivel_sensualidade,
         "genérico. É PREJUDICADO omitir detalhe visível: o que não for descrito aqui não "
         "poderá ser recuperado em nenhuma etapa posterior."
     )
+    norm = {}
     try:
         arquivo_imagem.seek(0)
         img_pil = Image.open(arquivo_imagem)
         try:
             img_pil = ImageOps.exif_transpose(img_pil) or img_pil
             img_pil.load()
-            max_lado = 1536
-            if max(img_pil.size) > max_lado:
-                ratio = max_lado / max(img_pil.size)
-                novo = (int(img_pil.size[0] * ratio), int(img_pil.size[1] * ratio))
-                resample_filter = getattr(Image, 'Resampling', Image).LANCZOS
-                img_pil = img_pil.resize(novo, resample_filter)
+            # Proporção canônica + topo de faixa de tiles: o custo da imagem
+            # fica previsível (≤4 tiles ≈ 1024 tokens) e a razão do mercado
+            # mais próxima vira a razão enviada — sem ampliar, sem distorcer.
+            img_pil, norm = normalizar_imagem(img_pil)
             if img_pil.mode not in ("RGB", "RGBA"):
                 img_pil = img_pil.convert("RGB")
         except Exception:
@@ -109,8 +237,8 @@ def _chamar_motor_visao(arquivo_imagem, estilo_conversao, nivel_sensualidade,
                         raise RuntimeError("A IA bloqueou a imagem por políticas de segurança.")
                     dados = parse_json_ia(texto)
                     if dados:
-                        return {"tipo": "json", "dados": dados}
-                    return {"tipo": "texto", "texto": texto}
+                        return {"tipo": "json", "dados": dados, "norm": norm}
+                    return {"tipo": "texto", "texto": texto, "norm": norm}
                 except Exception as e:
                     ultimo_erro = e
                     s = str(e).lower()

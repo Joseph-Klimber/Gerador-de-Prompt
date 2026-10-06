@@ -675,20 +675,20 @@ else:
             "geração do prompt. Sem ele não há formato nem orçamento definidos.")
 _destino_escolhido = bool(_perfil_destino)
 
-# TROCAR DE DESTINO INVALIDA O TRABALHO JÁ FEITO: a extração foi calibrada para
-# o teto/formato do destino anterior, e mantê-la obriga a síntese final a
-# reprocessar do zero — o desperdício que esta mudança de sequência elimina.
+# TROCAR DE DESTINO descarta APENAS o que foi compilado para o formato do
+# destino anterior (rascunho e síntese carregam DESTINO/FORMATO dentro).
+# A extração da imagem é fidelidade-first e não pertence a destino nenhum:
+# o corte por teto acontece localmente no Passo 5, sobre o texto extraído.
+# Reenviar a mesma imagem pagaria 1 requisição da cota diária do free tier
+# (20 por dia, por modelo — aferido no erro 429 real) para o mesmo texto.
 _destino_anterior = st.session_state.get("ck_destino_aplicado")
 if _destino_escolhido and _destino_anterior and _destino_anterior != dest_sel:
-    for _k in ["ck_img_parametros", "ck_preprompt", "ck_preprompt_editado",
-               "ck_diagnostico", "ck_prompt_final", "ck_sugestoes_marcadas",
-               "img_suj", "img_cen", "img_act", "img_ilu", "img_est"]:
+    for _k in ["ck_preprompt", "ck_preprompt_editado", "ck_prompt_final",
+               "ck_ideia_hist_fix", "_pending_ck_preprompt_editado"]:
         st.session_state.pop(_k, None)
-    for _k in ["_pending_img_suj", "_pending_img_cen", "_pending_img_act",
-               "_pending_img_ilu", "_pending_img_est", "_pending_ck_preprompt_editado"]:
-        st.session_state.pop(_k, None)
-    st.info(f"🔄 Destino alterado para **{dest_sel}**. Extração e rascunho anteriores foram "
-            "descartados — refaça a extração ciente do novo formato.")
+    st.info(f"🔄 Destino alterado para **{dest_sel}**. Rascunho e prompt final "
+            "anteriores foram descartados (cada destino tem o seu formato). "
+            "A extração da imagem foi mantida — serve para qualquer destino.")
 if _destino_escolhido:
     st.session_state["ck_destino_aplicado"] = dest_sel
 
@@ -700,7 +700,7 @@ st.markdown("### 1️⃣ Passo 1: A Sua Ideia (A Narrativa Visual)")
 st.caption("O ponto de partida. Descreva o que imagina ou veja a caixa preencher-se usando o Passo 2.")
 st.text_area("Insira a sua Ideia:", key="ck_ideia_input", height=140, label_visibility="collapsed")
 if st.button("🗑️ Limpar Ideia", use_container_width=False):
-    for k in ["ck_img_parametros", "ck_preprompt", "ck_preprompt_editado", "ck_diagnostico", "ck_prompt_final", "ck_sugestoes_marcadas",
+    for k in ["ck_img_parametros", "ck_preprompt", "ck_preprompt_editado", "ck_diagnostico", "ck_prompt_final", "ck_sugestoes_marcadas", "ck_norm_info",
               "ck_ideia_input", "img_suj", "img_cen", "img_act", "img_ilu", "img_est",
               "_pending_ck_ideia_input", "_pending_ck_preprompt_editado", "_pending_img_suj", "_pending_img_cen", "_pending_img_act", "_pending_img_ilu", "_pending_img_est"]:
         st.session_state.pop(k, None)
@@ -729,6 +729,22 @@ with col_img2:
 if not _destino_escolhido:
     st.caption("🔒 Selecione o motor de destino no Passo 0 para liberar a extração — o "
                "orçamento da visão é derivado do teto desse motor.")
+# O que a normalização de proporção fez com a imagem enviada — visível para o
+# usuário, para que ele saiba a razão aplicada e o custo real em tiles.
+if st.session_state.get("ck_norm_info"):
+    _ni = st.session_state["ck_norm_info"]
+    if _ni.get("metodo") == "canonica":
+        _rec = (f" · recorte {_ni.get('recorte_pct', 0):.1f}%"
+                if _ni.get("recorte_pct", 0) >= 0.1 else "")
+        _rotulo = (f"📐 Proporção **{_ni.get('proporcao', '?')}** aplicada"
+                   f" (desvio {_ni.get('desvio', 0)}%{_rec})")
+    else:
+        _rotulo = (f"📐 Proporção original **{_ni.get('razao_original', '?')}:1** preservada"
+                   f" — fora do padrão de mercado (mais próxima: "
+                   f"{_ni.get('proporcao', '?')}, desvio {_ni.get('desvio', 0)}%)")
+    st.caption(
+        f"{_rotulo} · {_ni.get('antes', '?')} → **{_ni.get('depois', '?')} px**"
+        f" · {_ni.get('tiles', '?')} tiles ≈ {_ni.get('tokens_aprox', 0)} tokens de imagem")
 if btn_ler:
     if not img_file: st.warning("Selecione uma imagem primeiro.")
     else:
@@ -739,6 +755,7 @@ if btn_ler:
                 sens_escolhida = st.session_state.get("ck_sens_slider", OPCOES_SENSUALIDADE[1])
                 res = _chamar_motor_visao(img_file, estilo_conversao, sens_escolhida,
                                           modelo_base, _teto_destino(dest_sel))
+                st.session_state["ck_norm_info"] = res.get("norm") or {}
                 if res["tipo"] == "json":
                     st.session_state["ck_img_parametros"] = res["dados"]
                     st.session_state["_pending_img_suj"] = res["dados"].get("sujeito", "")
