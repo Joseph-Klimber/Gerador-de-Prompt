@@ -24,6 +24,17 @@ VISAO_FATOR_FIDELIDADE = 2.2
 VISAO_MIN_PALAVRAS = 700
 VISAO_MAX_PALAVRAS = 2000
 
+# ── LIMIAR DE FIDELIDADE DA EXTRAÇÃO ────────────────────────────────────────
+# O teto do destino é o orçamento FINAL (prompt + negative + legenda +
+# hashtags). Com um teto menor que ~600 tokens, o consumidor não tem folga
+# para adensar a extração por campo — a visão teria de resumir na origem,
+# perdendo sujeito/luz/óptica em definitivo. Abaixo disso o app BLOQUEIA a
+# extração (destinos como Z-Image Turbo 400 e Midjourney/Ideogram 500): modo
+# de visão só fica disponível para os destinos com teto suficiente para uma
+# boa coerência. Ajuste fino: 600 é a fronteira entre os 400/500 (bloqueados)
+# e os 600/700/800/900/1000 (liberados).
+VISAO_TETO_MINIMO_DESTINO = 600
+
 # ──────────────────────────────────────────────────────────────────────────
 # PROPORÇÕES CANÔNICAS DE MERCADO — de aqui derivam todas as outras.
 # Cada razão-fixa tem um tamanho canônico EXATO: pares inteiros da própria
@@ -156,7 +167,16 @@ def normalizar_imagem(img):
 
 def _teto_visao_palavras(max_tokens_destino):
     """ Orçamento da visão derivado do teto do destino. É referência SOFT: a
-    instrução pede fidelidade; nenhum corte rígido é aplicado aqui."""
+    instrução pede fidelidade; nenhum corte rígido é aplicado aqui.
+
+    LIMIAR DE FIDELIDADE: a extração precisa produzir texto suficiente para o
+    consumidor adensar por campo — e o total do teto do destino é o que o
+    consumidor tem para gastar. Se o teto do destino é MUITO baixo, a visão
+    teria de resumir demais na origem (perdendo sujeito/luz/óptica em
+    definitivo) — por isso o app bloqueia a extração para destinos abaixo do
+    limiar. (Ver VISAO_TETO_MINIMO_DESTINO.) Este teto de palavras é usado só
+    quando a extração está liberada.
+    """
     total = int(min(max(int(max_tokens_destino) * VISAO_FATOR_FIDELIDADE,
                          VISAO_MIN_PALAVRAS), VISAO_MAX_PALAVRAS))
     # Mesma hierarquia do consumidor: sujeito > ação > cenário > luz > câmera
@@ -164,6 +184,19 @@ def _teto_visao_palavras(max_tokens_destino):
              "iluminacao": 12, "estilo_camera": 12}
     soma = sum(pesos.values())
     return {k: max(int(total * p / soma), 120) for k, p in pesos.items()}
+
+
+def destino_suporta_visao(max_tokens_destino: int) -> bool:
+    """Se o destino tem teto de tokens suficiente para uma extração fiel.
+
+    O teto do destino é o orçamento FINAL (prompt + negative + legenda +
+    hashtags). Abaixo do limiar, a visão teria de resumir na origem e o
+    consumidor não teria texto para adensar — o sujeito/luz/óptica se perdem
+    em definitivo. Bloquear a extração é a única forma de não degradar.
+    """
+    if not max_tokens_destino:
+        return False
+    return max_tokens_destino >= VISAO_TETO_MINIMO_DESTINO
 
 
 def _chamar_motor_visao(arquivo_imagem, estilo_conversao, nivel_sensualidade,

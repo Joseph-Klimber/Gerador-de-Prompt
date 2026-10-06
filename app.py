@@ -108,7 +108,7 @@ MODEL_PROFILES = {
         "proibicoes": ["contradictory tags, very long negative prompts"]
     }
 }
-from src.vision import _chamar_motor_visao
+from src.vision import _chamar_motor_visao, destino_suporta_visao
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PERFIL DO DESTINO — resolução por ALIAS (o bug mais caro deste arquivo)
@@ -674,6 +674,8 @@ else:
     st.info("🛑 Escolha o motor de destino para liberar a extração de imagem, o rascunho e a "
             "geração do prompt. Sem ele não há formato nem orçamento definidos.")
 _destino_escolhido = bool(_perfil_destino)
+# Modo de visão só para destinos com teto suficiente (coerência fiel).
+_visao_liberada = _destino_escolhido and destino_suporta_visao(_perfil_destino.get("max_tokens", 0))
 
 # TROCAR DE DESTINO descarta APENAS o que foi compilado para o formato do
 # destino anterior (rascunho e síntese carregam DESTINO/FORMATO dentro).
@@ -725,10 +727,15 @@ with col_img1:
 with col_img2:
     st.write(" ")
     btn_ler = st.button("👁️ Extrair Imagem (Motor de Visão)", use_container_width=True,
-                        disabled=not _destino_escolhido)
-if not _destino_escolhido:
-    st.caption("🔒 Selecione o motor de destino no Passo 0 para liberar a extração — o "
-               "orçamento da visão é derivado do teto desse motor.")
+                            disabled=(not _destino_escolhido) or not _visao_liberada)
+    if not _visao_liberada:
+        st.caption("🔒 Modo de visão indisponível para este destino: o teto de tokens "
+                       "é baixo demais para uma extração fiel. Use um destino com teto "
+                       "≥ 600 tokens (Krea, Flux, ComfyUI, Qwen) ou escreva a ideia "
+                       "manualmente no Passo 1.")
+    elif not _destino_escolhido:
+        st.caption("🔒 Selecione o motor de destino no Passo 0 para liberar a extração — o "
+                       "orçamento da visão é derivado do teto desse motor.")
 # O que a normalização de proporção fez com a imagem enviada — visível para o
 # usuário, para que ele saiba a razão aplicada e o custo real em tiles.
 if st.session_state.get("ck_norm_info"):
