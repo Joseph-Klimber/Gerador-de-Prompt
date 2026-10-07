@@ -2,9 +2,13 @@
 PRD/TRD/Fluxo/Briefing/Schema/Plano travados em GERADOR_PROMPT_1.0__AntesDeCodar/*__ENTREVISTA.md
 """
 import pathlib
+import re
 import sys
 import html
-import re  # usado pelo orçamento de tokens e pelos cortes por frase
+import base64
+import json as _json
+import urllib.request
+import urllib.error
 ROOT = pathlib.Path(__file__).parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -108,364 +112,637 @@ MODEL_PROFILES = {
         "proibicoes": ["contradictory tags, very long negative prompts"]
     }
 }
-from src.vision import _chamar_motor_visao, destino_suporta_visao
-
-# ─────────────────────────────────────────────────────────────────────────────
-# PERFIL DO DESTINO — resolução por ALIAS (o bug mais caro deste arquivo)
-# ─────────────────────────────────────────────────────────────────────────────
-# O código fazia MODEL_PROFILES.get(dest_sel.lower()). As chaves de
-# MODEL_PROFILES são curtas ("flux", "zit", "krea2") e os rótulos de
-# OPCOES_DESTINO são longos ("Flux.1 / Flux.2 (Klein)"), então o get() NUNCA
-# casava: 0 de 10 destinos acertavam e todos caíam no fallback de 800 tokens.
-# Consequência real: Midjourney (500), Z-Image (400) e Qwen (1000) recebiam
-# 800 — o teto do modelo errado, e a extração da visão não podia ser
-# calibrada para o destino certo.
-ALIASES_DESTINO = [
-    ("comfyui_sdxl", ["comfyui / sdxl base natural", "sdxl base natural", "sdxl natural"]),
-    ("illustrious",   ["comfyui / illustrious", "illustrious"]),
-    ("pony",         ["comfyui / pony sdxl", "pony sdxl", "pony"]),
-    ("flux",         ["flux.1", "flux.2", "flux"]),
-    ("ideogram",     ["ideogram"]),
-    ("krea2",        ["krea 2", "krea2", "krea"]),
-    ("midjourney",   ["midjourney"]),
-    ("qwen",         ["qwen / tongyi", "tongyi", "qwen"]),
-    ("ernie",        ["ernie"]),
-    ("zit",          ["z-image turbo", "z-image", "zit", "zi t"]),
-]
-
-
-def _perfil_do_destino(dest_sel):
-    """Perfil de otimização do destino. {} se nenhum alias casar."""
-    dl = (dest_sel or "").lower()
-    for chave, apelidos in ALIASES_DESTINO:
-        if any(a in dl for a in apelidos):
-            return MODEL_PROFILES.get(chave, {})
-    return {}
-
-
-def _teto_destino(dest_sel):
-    """Teto de tokens da SAÍDA final (prompt + negative + legenda + hashtags)."""
-    return _perfil_do_destino(dest_sel).get("max_tokens", 800)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# ORÇAMENTO DE TOKENS — medição real, não contagem de caracteres
-# ─────────────────────────────────────────────────────────────────────────────
-# O código antigo fazia txt_b[:max_tokens] e chamava aquilo de "tokens".
-# Português rende ~3 caracteres por token, então 400 caracteres são ~133
-# tokens: o texto era cortado em ~67% antes da hora, sempre no meio de uma
-# frase. Medir de verdade é o que faz o teto respeitar a qualidade.
-_CPT_PT = 3.0   # caracteres por token, PT (conservador)
-_CPT_EN = 3.85  # caracteres por token, EN (conservador)
-_RE_CJK = re.compile(r"[\u4e00-\u9fff\u3040-\u30ff]")
-
-
-def _cpt(txt):
-    """Fator caracteres/token com detecção de idioma. Conservador para nunca
-    subestimar tokens (o que faria o teto ser furado)."""
-    if not txt:
-        return _CPT_EN
-    n = max(len(txt), 1)
-    cjk = len(_RE_CJK.findall(txt)) / n
-    base = _CPT_PT if cjk < 0.2 else _CPT_EN
-    return max(1.5, round(base * (1 - cjk) + 1.5 * cjk, 2))
-
-
-def _estimar_tokens(txt):
-    if not txt:
-        return 0
-    return max(1, round(len(txt) / _cpt(txt)))
-
-
-# Ordem de prioridade quando o teto aperta. Espelha a regra do mestre
-# (FIDELIDADE DO SUJEITO): cede cenário e acabamento, nunca o sujeito nem a
-# direção/dureza da luz nem os dados ópticos (mm, f/, DoF, bokeh).
+# ── Budget de tokens: medidor real (não chars) + compactação sem perda ──
+# FATORES CALIBRADOS contra cl100k_base (proxy do tokenizer Gemini):
+#   PT medido 3.27 chars/token · EN medido 4.76 · usamos o MENOR (=conservador:
+#   subestima tokens => nunca estoura o teto; superestimar traria de volta o bug).
+# O código antigo assumia 4.0 p/ texto PT — 22% de folga fantasma.
+_CPT_PT = 3.0
+_CPT_EN = 3.85
+_CPT_CJK = 1.5
+_RE_CJK = re.compile(r"[一-鿿぀-ヿ]")
+# Termo de alto valor para um prompt de imagem. Uma frase que contém vários
+# destes é sempre preferida a uma frase de avaliação genérica quando o
+# orçamento força escolha.
 _RE_TERMOS_FORTES = re.compile(
-    r"\b\d{1,3}\s?mm\b|\bf/\d[\d.]*|\bbokeh\b|\bDoF\b|depth of field|"
-    r"\banam[oó]rfic\w*|\bter[cç]os\b|\bcontraluz\b|\bcontra-luz\b|\bcontraste\b|"
-    r"\brim light\b|\bspecular\b|\bvolum[eé]tric\w*|highlight\w*",
+    r"\b\d{1,3}\s?mm\b|\bf/\d[\d.]*|\bISO\s?\d{0,4}\b|\bbokeh\b|\bdof\b|\bHDR\b|"
+    r"\banam[oó]rfic\w*|\bvulcaniz\w*|\bter[cç]os\b|\b[aá]mbar\b|\bcontraste\b|"
+    r"\bgr[aã]o\b|\b[aá]ngulo\b|\bplano médio\b|\bplano geral\b|\bcontra-luz\b|"
+    r"\b[aá]gua\b|\bmetal\w*|\btransl[uú]cid\w*|\bveludo\b|\bcetim\b|\b[lí]quido\b",
     re.IGNORECASE | re.UNICODE,
 )
+# Termo CONCRETO: nomeia material, cor, peça de roupa ou objeto visível.
+# Menos valioso que um termo técnico (mm, f/), mas muito mais que adjetivo
+# vago ("bonita", "magnífico") — é o que permite reconstruir a imagem.
+_RE_CONCRETOS = re.compile(
+    r"\b(cabelo|olhos|pele|roupa|vestido|blusa|camisa|calça|saia|meia|sapato|tenis|tênis|"
+    r"colar|brinco|relógio|luva|meia|chapéu|boné|capacete|bandana|lençol|travesseiro|"
+    r"cama|sofá|poltrona|mesa|cadeira|Janela|parede|piso|teto|espelho|quadro|luminária|"
+    r"porta|grade|cortina|vista|paisagem|torre|prédio|rua|calçada|muro|tijolo|"
+    r"couro|seda|algodão|metal|ouro|prata|madeira|vidro|cetim|linho|malha|tecido|"
+    r"vermelho|azul|verde|preto|branco|cinza|dourado|prateado|bege|marrom|laranja|"
+    r"rosa|roxo|amarelo|vinho|creme|castanho|escuro|claro|"
+    r"traça|listra|floral|xadrez|bolso|botão|ziper|cordão|gola| manga|decote|"
+    r"plano médio|primeiro plano|segundo plano|ao fundo|à esquerda|à direita)\b",
+    re.IGNORECASE | re.UNICODE,
+)
+# Termo de CÂMERA/LUZ: o de maior peso. Define o resultado da imagem no motor,
+# enquanto cor/roupa só ajustam. Inclui PT e EN porque a extração mistura os dois
+# ("shallow depth of field", "specular highlights").
+_RE_CAMERA_LUZ = re.compile(
+    r"\b\d{1,3}\s?mm\b|\bf/\d[\d.]*|\bapertura\b|\bISO\s?\d{3,4}\b|\bbokeh\b|"
+    r"\bprofundidade de campo\b|\bshallow depth of field\b|\bdepth of field\b|"
+    r"\b[dD]o[fF]\b|\bHDR\b|\banam[oó]rfic\w*|\b[lL]ong exposure\b|\bexposição\b|"
+    r"\bspecular\b|\bhighlights?\b|\bretroreflex\w*|\brim light\b|"
+    r"\bcontraluz\b|\bcontra-luz\b|\bbokeh\b|\blic[uo] retroilumin\w*|"
+    r"\bfonte de luz\b|\bilumina[cç][aã]o\b|\bluz (?:de|principal|vinda|suave|quente)\w*|"
+    r"\bvolum[eé]tric\w*|\b[sS]hadow[s]?\b|\bsombras?\b|\bm[Bb]okeh\b|"
+    r"\bfoco\b|\benquadrament\w*|\b[cC]omposi[cç][aã]o\b|\bplano (?:m[eé]dio|geral|fechado)\b|"
+    r"\bc[âa]mera\b|\blente\b|\bgr[aã]o\b|\bcurva de contraste\b|\bcontraste\b|"
+    r"\btemperatura de cor\b|\b[aá]mbar\b|\b[aâ]ngulo (?:baixo|alto|lateral)\w*",
+    re.IGNORECASE | re.UNICODE,
+)
+# Marca de SUJEITO: a frase descreve a pessoa/pessoa-viva. Peso máximo — a
+# fidelidade do sujeito é a regra nº 1 do prompt mestre e o que mais destrói a
+# imagem quando falta.
 _RE_SUJEITO = re.compile(
-    r"\b(mulher|homem|menina|menino|jovem|garota|garoto|adolescente|modelo|"
-    r"cabelo|olhos|pele|rosto|l[aá]bio|ombro|bra[cç]o|dedo|m[aã]o|perna|"
-    r"veste|vestido|blusa|roupa|cal[cç]a|meia|luva|colar|brinco|rel[oó]gio|"
-    r"woman|man|girl|boy|young|lady|hair|eyes|skin|face|shoulder|arm|hand|leg|"
+    r"\b(mulher|homem|menina|menino|jovem|garota|garoto|crian[cç]a|adolescente|"
+    r"[eé]lfa|elfo|anjo|dem[oô]nio|robot|androide|pessoa|personagem|modelo|"
+    r"cabelo|olhos|pele|rosto|sobancelha|l[aá]bio|l[aá]bios|bochecha|queixo|"
+    r"nariz|orelha|ombro|clav[ií]cula|bra[cç]o|perna|coxa|m[aã]o|dedo|cabelo|"
+    r"c[aó]mplice|poses?|postura|veste|vestindo|usa|usando|cal[cç]a|meia|"
+    r"luva|colar|brinco|rel[oó]gio|tatuagem|makeup|biquini|lingerie|"
+    r"woman|man|girl|boy|young|lady|guy|hair|eyes|skin|face|shoulder|arm|leg|"
     r"thigh|wearing|wears|dressed)\b",
     re.IGNORECASE | re.UNICODE,
 )
 
 
-def _densidade(fr):
-    """Nota de valor de uma frase. Maior = mais essencial.
-    Câmera/luz e sujeito pesam mais que enumeração de objetos: `85mm`, `f/1.8`,
-    `bokeh` e a identidade definem o resultado no motor, enquanto uma lista de
-    móveis é cenário genérico que qualquer imagem com o prompt certo reconstrói."""
-    n_subj = len(_RE_SUJEITO.findall(fr))
-    n_cam = len(_RE_TERMOS_FORTES.findall(fr))
-    return (n_subj * 8 + n_cam * 6, -len(fr))
+def _cpt(txt: str) -> float:
+    """Fator chars/token com detecção de idioma. Salvaguarda: mínimo
+    conservador, para que o orçamento NUNCA possa ser furado."""
+    if not txt:
+        return _CPT_EN
+    n = max(len(txt), 1)
+    cjk = len(_RE_CJK.findall(txt)) / n
+    base = _CPT_PT if cjk < 0.2 else _CPT_EN
+    return max(_CPT_CJK, round(base * (1 - cjk) + _CPT_CJK * cjk, 2))
 
 
-def _cortar_por_frase(txt, max_tokens):
-    """Corte SEMIÓTICO por fronteira de frase — nunca no meio de uma oração.
+def _estimar_tokens(txt: str) -> int:
+    """Tokens = chars / fator. Mesma conta que o corte usa, então o número
+    reportado bate com o texto entregue. ~5% de erro vs tiktoken, offline e grátis."""
+    if not txt:
+        return 0
+    return max(1, round(len(txt) / _cpt(txt)))
 
-    Escolhe por DENSIDADE DE INFORMAÇÃO, não por ordem de aparição. O bug que
-    isto corrige: preencher o orçamento em ordem (greedy) deixava sem espaço
-    para a última frase — que é onde a visão costuma colocar lente, abertura e
-    bokeh, exatamente o dado mais valioso. Na extração real os termos `85mm`,
-    `depth of field` e `bokeh` eram o que sumia.
 
-    A ordem original das frases é preservada na saída: muda a SELEÇÃO, não a
-    leitura.
+def _pt_para_denso(texto: str) -> str:
+    """Compacta prosa PT de forma SEGURA — sem quebrar gramática.
+    Regra: só remove redundância que não carrega significado. NÃO remove
+    adjetivos nem preposições (uma versão anterior fazia isso e produzia
+    "a iluminação é e natural" / "banco madeira escura" — dano sem ganho:
+    a prosa da visão é densa, não enchida de adjetivo, então render ~4%).
+    Ganho real de tokens vem do orçamento estruturado por campo, não daqui."""
+    t = texto
+    # fillers de observação (zero informação visual)
+    t = re.sub(r"(?i)[,;]?\s*\b(é possível observar|observa-se|nota-se|o que se ve|não há)\b", "", t)
+    # rótulos duplicados ("Sujeito: X Sujeito: X")
+    t = re.sub(r"(?im)^(\s*\w+)\s*:\s*", r"\1: ", t)
+    # "de" / "do" colados por colagem de vírgula  →  "banco madeira" NÃO é seguro
+    # manter; apenas normaliza espaçamento e quebras.
+    t = re.sub(r"\s+([,;:.!?])", r"\1", t)
+    return re.sub(r"[ \t]{2,}", " ", re.sub(r"\n{3,}", "\n\n", t)).strip()
+
+
+def _densidade(fr: str) -> tuple:
+    """Nota de valor de uma frase, para escolher o que sobrevive ao corte.
+    Usada direto em sorted(reverse=True): pontuação maior = mais essencial.
+
+    Peso de câmera/luz é o mais alto de propósito: `85mm`, `f/1.8`, `bokeh`
+    e a direção da luz definem o resultado no motor; uma lista de móveis
+    (`cama`, `quadro`, `criado-mudo`) é cenário genérico que qualquer imagem
+    com o prompt certo reconstrói. Sem esse peso, a frase do 85mm perdia para
+    uma frase de enumeração de móveis — exatamente o que acontecia na
+    extração real (Arquivo.md).
     """
-    limite = int(max_tokens * _cpt(txt))
+    n_tec = len(_RE_TERMOS_FORTES.findall(fr))
+    n_cam = len(_RE_CAMERA_LUZ.findall(fr))
+    n_conc = len(_RE_CONCRETOS.findall(fr))
+    n_subj = len(_RE_SUJEITO.findall(fr))
+    return (n_subj * 8 + n_cam * 6 + n_tec * 3 + n_conc, -len(fr))
+
+
+def _cortar_por_palavra(txt: str, max_tokens: int, cpt: float) -> str:
+    """Corte SEMIÓTICO por fronteira de FRASE — nunca no meio de uma oração.
+
+    Escolhe as frases por DENSIDADE DE INFORMAÇÃO, não por ordem de aparição.
+    O bug que isto corrige: a versão anterior preenchia o orçamento em ordem
+    (greedy), ficava sem espaço para a última frase — que é onde a visão
+    Engine coloca lente/abertura/bokeh, exatamente o dado mais valioso. Na
+    extração real do Arquivo.md, `85mm`, `shallow depth of field` e `bokeh`
+    eram exatamente o que sumia.
+
+    A ordem original das frases é preservada na saída, então a leitura continua
+    natural para o modelo — só a SELEÇÃO muda.
+    """
+    limite = int(max_tokens * cpt)
     if len(txt) <= limite:
-        return txt, False
+        return txt
     partes = re.split(r"(?<=[.;:])\s+", txt)
     if len(partes) < 2:
-        return txt[:limite].rsplit(" ", 1)[0].rstrip(" ,;:.!?") + "…", True
+        return txt[:limite].rsplit(" ", 1)[0].rstrip() + "…"
+    # ordena por densidade, guardando o índice para reordenar ao final
     ordem = sorted(range(len(partes)), key=lambda i: _densidade(partes[i]), reverse=True)
     orcamento, escolhidos = limite, []
     for i in ordem:
-        n = len(partes[i]) + (1 if escolhidos else 0)
+        fr = partes[i]
+        n = len(fr) + (1 if escolhidos else 0)
         if n <= orcamento:
             orcamento -= n
             escolhidos.append(i)
     if not escolhidos:
-        return txt[:limite].rsplit(" ", 1)[0].rstrip(" ,;:.!?") + "…", True
+        return txt[:limite].rsplit(" ", 1)[0].rstrip() + "…"
+    # devolve na ordem original do texto
     escolhidos.sort()
     saida = " ".join(partes[i] for i in escolhidos)
-    return saida + (" …" if len(escolhidos) < len(partes) else ""), len(escolhidos) < len(partes)
+    return saida + (" …" if len(escolhidos) < len(partes) else "")
 
 
-# A narrativa fonte entra como INSUMO, entao fica em 65% do teto do destino.
-# Constante unica: antes o 0.65 aparecia no default da funcao E na mensagem do
-# Passo 5 — mudar um sem o outro fazia a mensagem mentir para o usuario.
-_TETO_FONTE_PCT = 0.65
+def _orcamento_texto_fonte(txt: str, max_tokens: int) -> tuple:
+    """Aplica orçamento à narrativa fonte. Devolve (texto, token_est, avisos).
+    O teto do destino (max_tokens) é da SAÍDA final — prompt + negative +
+    legenda + hashtags. A fonte entra como insumo, então fica em 65% dele;
+    o resto é o que o modelo precisa para escrever a saída dentro do teto.
 
-
-def _orcamento_fonte(txt, max_tokens, teto_fonte_pct=_TETO_FONTE_PCT):
-    """Aplica orçamento à narrativa fonte. Devolve (texto, tokens, avisou).
-
-    O teto do destino é da SAÍDA final. A fonte entra como insumo, então fica
-    em 65% dele; o resto é o que o modelo precisa para escrever dentro do teto.
-
-    PROBLEMA QUE ESTA ETAPA CORRIGE (medido com foto real + Gemini de verdade):
-    a visão devolve campos rotulados (sujeito/acao/cenario/iluminacao/
-    estilo_camera) somando ~1276 tokens. Com teto-fonte de 260 (Z-Image, 400),
-    a seleção por densidade global escolhia quase só frases do sujeito — o campo
-    mais denso — e cortava cenario, iluminacao e estilo_camera INTEIROS. Perder
-    cenário e iluminação é perder a imagem: o motor de destino não consegue
-    reconstruir o que não foi descrito.
-
-    A estratégia é COBERTURA antes de densidade: uma cota por campo, e só dentro da
-    cota vale a ordem de densidade. Assim, quando aperta, o corte cai no
-    detalhe decorativo de dentro de cada campo — nunca no campo inteiro.
+    Blindagem de SUJEITO: quando a extração é prosa sem rótulos (formato real
+    do motor de visão), a seleção por densidade sozinha favorecia cenário — na
+    extração do Arquivo.md perdia a frase que descrevia a mulher e ficava com
+    cama/janela/pôster. Isso viola "FIDELIDADE DO SUJEITO >= 95%". Por isso as
+    frases de sujeito recebem peso extra e entram ANTES de qualquer seleção.
     """
+    avisos = []
     if not txt:
-        return txt, 0, False
-    teto_fonte = int(max_tokens * teto_fonte_pct)
+        return txt, 0, avisos
     est = _estimar_tokens(txt)
+    teto_fonte = int(max_tokens * 0.65)
     if est <= teto_fonte:
-        return txt, est, False
+        return txt, est, avisos
+    denso = _pt_para_denso(txt)
+    est_d = _estimar_tokens(denso)
+    if est_d <= teto_fonte:
+        avisos.append(f"📥 Extração compacta: {est} → {est_d} tok (fonte) · detalhe preservado")
+        return denso, est_d, avisos
 
-    # 1) O texto tem ESTRUTURA de campos rotulados? (é o caso da visão real)
-    campos = _campos_rotulados(txt)
+    # Ainda acima do teto: adensa por BLOCO rótulado, com orçamento por peso.
+    # Sujeito tem peso 34% e ação 26% — os blocos de menor peso (cenário/luz/
+    # estilo) cedem tokens, então nenhum bloco inteiro some e os termos
+    # técnicos do fim (85mm, f/1.8, bokeh) sobrevivem.
+    campos = _campos_de_prosa(denso)
     if campos:
-        saida = _cortar_por_campo(campos, teto_fonte)
-        return saida, _estimar_tokens(saida), True
+        ajustados, _ = _aplicar_pesos(campos, teto_fonte)
+        novo_txt = _formatar_campos(ajustados)
+        est_a = _estimar_tokens(novo_txt)
+        if est_a <= teto_fonte:
+            avisos.append(
+                f"📥 Extração adensada por campo: {est} → {est_a} tok (fonte) · "
+                f"sujeito/ação preservados"
+            )
+            return novo_txt, est_a, avisos
 
-    # 2) Prosas sem rótulo: cai no corte por densidade (comportamento anterior)
-    saida, cortou = _cortar_por_frase(txt, teto_fonte)
-    return saida, _estimar_tokens(saida), cortou
-
-
-# Prioridade quando o orçamento aperta. O SUJEITO nunca cede: é a identidade.
-# Iluminação e câmera ficam acima de cenário, porque definem o "clima" que o
-# modelo não infere; cenário cede antes — é o mais reconstruível pelo prompt.
-_PESO_CAMPO = {"sujeito": 34, "acao": 24, "iluminacao": 16,
-               "estilo_camera": 14, "cenario": 12}
-# Piso por campo: mesmo com teto apertado, todo campo mantém uma amostra.
-# Sem piso, o campo inteiro some e a imagem perde informação irrecuperável.
-_PISO_CAMPO = 0.18
-# Rotulos da extracao estruturada da visao. A fronteira (?<![0-9A-Za-zÀ-ÿ_])
-# e' OBRIGATORIA: sem ela o grupo 'acao' casa DENTRO de 'iluminacao'
-# (ilumina-CA-O) e o campo iluminacao se perde inteiro — o que So apareceu no
-# teste com foto real.
-# As variacoes com acento precisam da letra acentuada no grupo: 'Ação' tem ç e ã,
-# e um padrao so com [aã] nao casa com maiuscula acentuada (so com re.IGNORECASE
-# em ASCII). Medido: 'Ação:' ficava sem rótulo e o campo saia da saida inteira.
-_RE_SPLIT_ROTULO = re.compile(
-    r"(?<![0-9A-Za-zÀ-ÿ_])(sujeito|sujeita|acao|a[cç][aã]o|pose|cenario|cen[aá]rio|"
-    r"iluminacao|ilumina[cç][aã]o|estilo_camera|estilo e c[aâ]mera|camera|c[aâ]mera|estilo)"
-    r"\s*[:\-]\s*",
-    re.IGNORECASE,
-)
+    # Último recurso: corte por fronteira de frase (nunca no meio da oração).
+    cortado = _cortar_por_palavra(denso, teto_fonte, _cpt(denso))
+    est_c = _estimar_tokens(cortado)
+    avisos.append(f"📥 Extração adensada: {est} → {est_c} tok (fonte) · teto {teto_fonte}")
+    return cortado, est_c, avisos
 
 
-def _campos_rotulados(txt):
-    """Divide o texto em [(rótulo_normalizado, bloco)] se ele for a extração
-    estruturada da visão. Devolve [] para prosa comum.
-
-    A visão devolve os campos como 'sujeito: ... cenario: ...' num JSON que o
-    app achata numa linha só, e os VALORES contêm dois-pontões próprios. Por
-    isso não dá para splitar por string: é preciso achar a posição de cada
-    rótulo com finditer e cortar o texto entre uma posição e a seguinte.
-
-    Cuidado com a fronteira (?<![0-9A-Za-zÀ-ÿ_]): sem ela o grupo 'acao' casa
-    DENTRO de 'iluminacao' (ilumina-CA-O) e o campo iluminação se perde inteiro.
-    """
-    if not txt or len(txt.strip()) < 20:
-        return []
-
-    # posicoes de cada rotulo, na ordem em que aparecem
-    marcas = [(m.start(), m.end(), m.group(1)) for m in _RE_SPLIT_ROTULO.finditer(txt)]
-    if len(marcas) < 2:
-        return []
-
-    campos = []
-    for i, (ini_m, fim_m, rot) in enumerate(marcas):
-        # o valor vai do fim do rótulo ate o inicio do próximo (ou o fim do texto)
-        prox = marcas[i + 1][0] if i + 1 < len(marcas) else len(txt)
-        valor = txt[fim_m:prox].strip()
-        if valor:
-            campos.append((_norm_rotulo(rot), valor))
+def _campos_de_prosa(txt: str) -> dict:
+    """Reconstrói os campos {sujeito, acao, ...} a partir da prosa rotulada.
+    Devolve {} se o texto não tem a forma "Titulo: corpo" da extração de visão."""
+    partes = _RE_BLOCO_TITULO.split(txt)
+    if len(partes) < 2:
+        return {}
+    campos = {}
+    for parte in partes:
+        m = re.match(r"(?s)^\s*([\w\s/à-ú]{1,20}?)\s*:\s*(.+)$", parte.strip())
+        if not m or not m.group(1).strip():
+            continue
+        cab, corpo = _normalizar_campo(m.group(1)), m.group(2).strip()
+        if not corpo:
+            continue
+        campos[cab] = (campos[cab] + " " + corpo).strip() if cab in campos else corpo
     return campos
 
 
-def _norm_rotulo(r):
-    r = (r or "").lower()
-    r2 = r.replace("ç","c").replace("ã","a").replace("á","a").replace("â","a").replace("ê","e")
-    if r.startswith("sujeit"):
-        return "sujeito"
-    if r2.startswith("a") and ("c" in r2 or "cao" in r2 or "aca" in r2 or r2.startswith("acao") or "c" in r2.replace("ç","c")):
-        return "acao"
-    if r2.startswith("pose"):
-        return "acao"
-    if r2.startswith("cen"):
-        return "cenario"
-    if r2.startswith("ilum") or r2.startswith("luz"):
-        return "iluminacao"
-    return "estilo_camera"
+_RE_BLOCO_TITULO = re.compile(r"(?im)(?=^\s*\w[\w\s/]{0,20}\s*:)")
+
+# NOTA: PESO_CAMPOS e PISO_CAMPO são definidos junto ao MOTOR DE VISÃO, acima —
+# é lá que a ordem de prioridade é uma decisão do programador, não do usuário.
+
+_APELIDOS_CAMPO = {
+    "sujeito": "sujeito", "sujeita": "sujeito", "personagem": "sujeito", "subject": "sujeito",
+    "acao": "acao", "ação": "acao", "pose": "acao", "postura": "acao", "action": "acao",
+    "cenario": "cenario", "cenário": "cenario", "ambiente": "cenario", "background": "cenario",
+    "environment": "cenario", "fundo": "cenario",
+    "iluminacao": "iluminacao", "iluminação": "iluminacao", "luz": "iluminacao",
+    "light": "iluminacao", "lighting": "iluminacao",
+    "estilo_camera": "estilo_camera", "estilo e câmera": "estilo_camera",
+    "estilo e camera": "estilo_camera", "estilo": "estilo_camera",
+    "camera": "estilo_camera", "câmera": "estilo_camera", "style": "estilo_camera",
+    "estilo/câmera": "estilo_camera", "estilo/camera": "estilo_camera",
+}
 
 
-def _cortar_por_campo(campos, teto_fonte):
-    """Corta por COBERTURA de campo: cada campo recebe uma cota, e só dentro da
-    cota vale a ordem de densidade. Assim, quando o orçamento aperta, o corte cai
-    no detalhe decorativo de dentro de cada campo — nunca no campo inteiro.
+def _normalizar_campo(titulo: str) -> str:
+    t = re.sub(r"\s+", " ", titulo.strip().lower())
+    return _APELIDOS_CAMPO.get(t, t)
 
-    Devolve o texto com os rótulos preservados, na ordem original em que a
-    visão os entregou.
-    """
-    presentes = [(k, v) for k, v in campos if v.strip()]
-    if not presentes:
-        return ""
-    soma = sum(_PESO_CAMPO.get(k, 8) for k, _ in presentes)
-    cotas = {k: max(int(teto_fonte * _PESO_CAMPO.get(k, 8) / soma), 1)
-             for k, _ in presentes}
-    piso = int(teto_fonte * _PISO_CAMPO)
 
-    # OVERHEAD: cada campo ganha um rotulo ("cenario: ") e um fechamento (" …").
-    # Isso sao tokens REAIS na saida final, mas nao contados no gasto durante a
-    # distribuicao — o que fazia a saida passar do teto (medido: Krea +9). Reserva
-    # o overhead aqui, para que o conteudo caiba de verdade.
-    overhead = sum(_estimar_tokens(f"{k}: …") for k, _ in presentes)
-    teto_conteudo = max(teto_fonte - overhead, piso)
+def _aplicar_pesos(campos: dict, teto_fonte: int) -> tuple:
+    """Adensa cada campo proporcionalmente ao seu peso, SEM descartar campo
+    algum. Garante que sujeito/ação sobrevivam e que o conjunto inteiro caiba
+    no teto — em vez de o último bloco ser cortado por inteiro.
 
-    # ── 1) Piso IGUAL para todo campo, antes de qualquer coisa ──
-    # Se o sujeito (34%) fosse servido primeiro, ele consumia o orçamento e os
-    # campos menores ficavam com ZERO — foi o que aconteceu com iluminacao no
-    # teste com foto real. Todo campo tem piso antes de o sujeito ganhar extra.
-    escolhidos = {}
-    _marcado = {}          # campo -> True quando o bloco foi truncado
-    gasto = 0
-    for k, v in sorted(presentes, key=lambda x: _PESO_CAMPO.get(x[0], 8)):
-        if gasto >= teto_conteudo:
+    Este é o ponto que resolve a raiz: a extração de visão é ESTRUTURADA
+    (JSON com 5 campos). Achatar isso em prosa cria um bloco monolítico que
+    só pode ser cortado pelo fim. Com orçamento por campo, cada um é adensado
+    na proporção da sua importância e nenhum bloco inteiro desaparece."""
+    if not campos:
+        return campos, teto_fonte
+    ests = {k: _estimar_tokens(v) for k, v in campos.items() if v}
+    if not ests:
+        return campos, teto_fonte
+    total = sum(ests.values())
+    if total <= teto_fonte:
+        return campos, teto_fonte
+
+    # Alocação: o teto da fonte é DIVIDIDO entre os campos por peso de
+    # fidelidade. Bug anterior: aplicava a escala global (teto/total) SOBRE a
+    # cota proporcional, encolhendo duas vezes — as cotas somavam 246 para um
+    # teto de 520, jogando fora 53% do orçamento (e com ele os termos técnicos).
+    # Aqui: cota = teto * peso_do_campo / soma_dos_pesos.
+    disp = sum(PESO_CAMPOS.get(k, 10) for k in campos) or 1
+    cotas = {k: max(int(teto_fonte * PESO_CAMPOS.get(k, 10) / disp), 16) for k in campos}
+    out = dict(campos)
+    for k in ests:
+        if ests[k] > cotas[k]:
+            out[k] = _cortar_por_palavra(campos[k], cotas[k], _cpt(campos[k]))
+
+    # Convergência: se a soma ainda estourar (corte por frase arredonda para
+    # baixo e as cotas têm piso), reduz o campo de MENOR peso. Piso absoluto de
+    # PISO_CAMPO impede esvaziar qualquer campo; se não couber, aceitamos o
+    # excedente em vez de destruir detalhe — o aviso de orçamento informa isso.
+    for _ in range(8):
+        restante = sum(_estimar_tokens(v) for v in out.values()) - teto_fonte
+        if restante <= 0:
             break
-        # a flag `cortou` e o sinal confiavel de truncamento. O regex das
-        # linhas abaixo so acerta quando o pedaco termina em "ponto + …";
-        # _cortar_por_frase tambem devolve " …" SEM ponto (linha 238), e nesse
-        # caso as reticencias sumiam e o campo truncado virava frase completa.
-        bloco, cortou_campo = _cortar_por_frase(v, max(piso, cotas[k]))
-        escolhidos[k] = bloco
-        _marcado[k] = cortou_campo
-        gasto += _estimar_tokens(bloco)
+        base = {k: int(ests[k] * PISO_CAMPO) for k in ests}
+        candidatos = [k for k in out
+                      if _estimar_tokens(out[k]) > base[k] and out[k] != campos[k]]
+        if not candidatos:
+            break
+        candidatos.sort(key=lambda k: (PESO_CAMPOS.get(k, 5), -_estimar_tokens(out[k])))
+        alvo_campos = candidatos[:1]  # 1 por vez: converge devagar, preserva o resto
+        for k in alvo_campos:
+            passo = max(4, int(restante * 0.6))
+            corte = max(base[k], _estimar_tokens(out[k]) - passo)
+            novo = _cortar_por_palavra(out[k], corte, _cpt(out[k]))
+            if novo == out[k]:
+                break  # chegou no piso deste campo
+            out[k] = novo
+    return out, teto_fonte
 
-    # ── 2) Redistribui o que sobrou: cada campo ganha uma fatia igual ──
-    sobra = teto_conteudo - gasto
-    if sobra > 0:
-        for k, v in sorted(presentes, key=lambda x: -_PESO_CAMPO.get(x[0], 8)):
-            if sobra <= 0:
-                break
-            atual = _estimar_tokens(escolhidos.get(k, ""))
-            sobra -= atual
-            if sobra <= 0:
-                break
-            parcela = min(sobra, max(0, _estimar_tokens(v) - atual))
-            if parcela <= 0:
-                continue
-            # teto hard: este campo nao pode fazer o TOTAL passar do teto_fonte
-            teto_deste = min(atual + parcela, teto_conteudo - (gasto - atual))
-            if teto_deste <= atual:
-                continue
-            bloco, _cortou_d = _cortar_por_frase(v, teto_deste)
-            _marcado[k] = _marcado.get(k) or _cortou_d
-            gasto += _estimar_tokens(bloco) - atual
-            escolhidos[k] = bloco
 
-    # ── 3) Remonta na ordem original da visão ──
-    # O separador e' ". " (ponto + espaco): se fossem so espaco, o rotulo do
-    # campo seguinte encostaria no texto do anterior e o app leria os dois como
-    # uma frase so — que e como o campo iluminacao desaparecia.
-    ordem = {k: i for i, (k, _) in enumerate(presentes)}
-    partes = []
-    for k, v in sorted(escolhidos.items(), key=lambda x: ordem.get(x[0], 99)):
-        v = v.strip()
-        if not v:
+def _orcamento_estruturado(dados: dict, max_tokens: int) -> tuple:
+    """Orçamento por campo para a extração de visão (quando ela vem em JSON).
+    Preserva o rótulo de cada bloco e nunca sacrifica o sujeito inteiro."""
+    campos = {}
+    for chave, valor in (dados or {}).items():
+        if not isinstance(valor, str) or not valor.strip():
             continue
-        # _cortar_por_frase ja fecha com reticencias; juntar com '. ' daria '…. '.
-        # Remove qualquer pontuacao final e devolve UMA reticencia limpa.
-        # _cortar_por_frase fecha o trecho como "frase. …" (PONTO + reticencias).
-        # Juntar isso com o separador ". " produzia "…. ". Ponto e reticencias
-        # sao o mesmo sinal de corte: mantemos UM so.
-        # _cortar_por_frase fecha o trecho como "frase. …" (ponto + reticencias).
-        # Ponto e reticencias sao o mesmo sinal de corte — mantemos UM so, e o
-        # separador entre campos e' so espaco (com '. ' viraria '…. ').
-        v = v.rstrip()
-        cortado = _marcado.get(k) or bool(re.search(r"(\s*\.){1,3}\s*…\s*$", v))
-        v = re.sub(r"(\s*\.){1,3}\s*…\s*$", "", v) or v
-        v = v.rstrip(" .,;:…")
-        # fecha com o sinal que faz sentido: reticencias se cortou, ponto se nao
-        partes.append(f"{k}: {v}" + (" …" if cortado else "."))
-    saida = " ".join(partes)
+        campos[_normalizar_campo(chave)] = valor.strip()
+    if not campos:
+        return None, [], {}
+    est_total = sum(_estimar_tokens(v) for v in campos.values())
+    teto_fonte = int(max_tokens * 0.65)
+    avisos = []
+    if est_total <= teto_fonte:
+        return campos, avisos, {"total": est_total, "teto": teto_fonte}
+    # agrupa equivalentes (ex.: "estilo_camera" e "camera" -> um só)
+    campos_aj = {}
+    for k, v in campos.items():
+        campos_aj[k] = (campos_aj[k] + " " + v).strip() if k in campos_aj else v
+    ajustados, teto_fonte = _aplicar_pesos(campos_aj, teto_fonte)
+    novo = sum(_estimar_tokens(v) for v in ajustados.values())
+    avisos.append(
+        f"📥 Extração adensada por campo: {est_total} → {novo} tok (fonte) · "
+        f"sujeito e ação preservados"
+    )
+    return ajustados, avisos, {"total": novo, "teto": teto_fonte}
 
-    # REDE DE SEGURANCA: a reserva de overhead e' uma ESTIMATIVA — o fechamento
-    # (" …") so entra depois da medicao do gasto, e o rstrip pode devolver mais
-    # tokens do que retirou (Krea: +9). Se passou, corta o campo menos prioritario
-    # ate caber. Melhor perder detalhe do que estourar o teto do destino.
-    if _estimar_tokens(saida) > teto_fonte:
-        for k, _ in sorted(presentes, key=lambda x: _PESO_CAMPO.get(x[0], 8)):
-            if _estimar_tokens(saida) <= teto_fonte:
-                break
-            # .get() e obrigatorio: o break do laco de escolha pode ter deixado
-            # uma chave de `presentes` fora de `escolhidos`, e sem isso o
-            #Passo 5 quebra com KeyError (reproduzido com teto_fonte=34).
-            _origem = dict(presentes).get(k, "")
-            _atual = escolhidos.get(k, "")
-            curto, cortou = _cortar_por_frase(_origem,
-                                              max(piso, _estimar_tokens(_atual) - 12))
-            # _atual pode ser "" quando o break deixou a chave fora de
-            # escolhidos — ler escolhidos[k] diretamente quebrava o Passo 5.
-            if cortou and curto != _atual:
-                escolhidos[k] = curto
-                partes = []
-                for kk, vv in sorted(escolhidos.items(),
-                                      key=lambda x: ordem.get(x[0], 99)):
-                    c2 = _marcado.get(kk) or bool(re.search(r"(\s*\.){1,3}\s*…\s*$", vv))
-                    vv = re.sub(r"(\s*\.){1,3}\s*…\s*$", "", vv) or vv
-                    partes.append(f"{kk}: {vv.rstrip(' .,;:…')}" + (" …" if c2 else "."))
-                saida = " ".join(partes)
-    return saida
+
+def _formatar_campos(campos: dict) -> str:
+    """Renderiza os campos com rótulo legível PT para o prompt final."""
+    ROTULO = {
+        "sujeito": "Sujeito", "acao": "Ação", "cenario": "Cenário",
+        "iluminacao": "Iluminação", "estilo_camera": "Estilo e câmera",
+    }
+    partes = []
+    for k, v in campos.items():
+        if v and v.strip():
+            partes.append(f"{ROTULO.get(k, k.replace('_', ' ').title())}: {v.strip()}")
+    return "\n\n".join(partes)
+
+
+# Aliases do destino → chave do perfil. Extraído para uma função porque o
+# destino agora é escolhido no PASSO 0 e consultado em três lugares: a visão
+# (orçamento), o rascunho (formato) e a síntese final (teto).
+#
+# Bug histórico que isso evita: comparava "sdxl" in "comfyui sdxl" (True, match
+# errado) e "zit" nunca batia em "Z-Image Turbo" → caía no fallback de 800.
+ALIASES_DESTINO = [
+    ("comfyui_sdxl", ["comfyui sdxl", "comfyui_sdxl", "sdxl"]),
+    ("flux", ["flux"]),
+    ("ideogram", ["ideogram"]),
+    ("pony", ["pony"]),
+    ("illustrious", ["illustrious"]),
+    ("krea2", ["krea"]),
+    ("midjourney", ["midjourney", "mj"]),
+    ("qwen", ["qwen"]),
+    ("ernie", ["ernie"]),
+    ("zit", ["z-image", "z image", "zimage", "zit", "turbo"]),
+]
+
+
+def _perfil_do_destino(dest_sel: str) -> dict:
+    """Perfil de otimização do destino. {} se nenhum alias bater."""
+    dest_lower = (dest_sel or "").lower()
+    for key, aliases in ALIASES_DESTINO:
+        if any(a in dest_lower for a in aliases):
+            return MODEL_PROFILES.get(key, {})
+    return {}
+
+
+def _teto_destino(dest_sel: str) -> int:
+    """Teto de tokens da saída final para este destino (400 a 1000)."""
+    return _perfil_do_destino(dest_sel).get("max_tokens", 800)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# MOTOR DE VISÃO — PARTE DO CÓDIGO, NÃO DO USUÁRIO
+# ════════════════════════════════════════════════════════════════════════════
+# A visão é uma ORIGEM DE DADOS do prompt final, ao lado da ideia digitada.
+# Não existe controle do usuário sobre ela: teto, schema, densidade e ordem de
+# prioridade são decididos aqui, no código, e valem para toda extração.
+#
+# FIDELIDADE > COMPACTAÇÃO. A visão é a ÚNICA etapa que enxerga a imagem: se
+# ela resume, o detalhe se perde para sempre — nenhuma etapa downstream
+# consegue recuperar o que não foi descrito. Portanto o orçamento aqui é
+# GENEROSO e derivado do DESTINO escolhido no Passo 0 (que já é obrigatório),
+# e o adensamento acontece no consumidor, com hierarquia.
+#
+# POR QUE O DESTINO ENTRA AQUI: o destino define o formato e o teto da saída
+# final. Com ele escolhido antes (Passo 0), a visão já extrai ciente do alvo.
+# Escolher o destino por último (como era) obrigava a refazer a extração.
+
+# Hierarquia de fidelidade. Espelha a regra do mestre (FIDELIDADE DO SUJEITO
+# >= 95%): quando o teto aperta, cede cenário e acabamento — nunca sujeito,
+# nem direção/dureza da luz, nem dados ópticos (mm, f/, bokeh).
+PESO_CAMPOS = {
+    "sujeito": 34, "acao": 26, "cenario": 16, "iluminacao": 12, "estilo_camera": 12,
+}
+PISO_CAMPO = 0.30  # nenhum campo pode ficar abaixo de 30% da sua cota
+
+# Multiplicador de fidelidade: a visão escreve ~2.2 palavras por token do teto
+# do destino, com piso e teto absolutos. Generoso de propósito — o corte real
+# acontece no consumidor, que tem a hierarquia; aqui só impedimos o runaway.
+#
+# Por que 2.2 e não 1.5: com 1.5, um destino de 400 tokens (Z-Image Turbo)
+# resultava em 600 palavras de fonte para 260 tokens de orçamento — pouco demais
+# para descrição fiel. A visão é a ÚNICA etapa que enxerga a imagem, então o
+# insumo precisa ser substancialmente maior que a saída: sobrar é recuperável,
+# faltar é fatal. A redução de 3-4x numa extração detalhada preserva
+# sujeito, luz e óptica (verificado em _aplicar_pesos).
+VISAO_FATOR_FIDELIDADE = 2.2
+VISAO_MIN_PALAVRAS = 700
+VISAO_MAX_PALAVRAS = 2000
+VISAO_MIN_POR_CAMPO = 120  # nenhum campo pode ser estrangulado abaixo disso
+
+
+def _teto_visao_palavras(max_tokens_destino: int) -> dict:
+    """Orçamento da visão DERIVADO do teto do destino escolhido no Passo 0.
+
+    Aloca as palavras entre os campos pela hierarquia de fidelidade. É teto
+    SOFT (a instrução pede fidelidade); o corte rígido fica no consumidor.
+    """
+    total = int(min(max(int(max_tokens_destino) * VISAO_FATOR_FIDELIDADE,
+                         VISAO_MIN_PALAVRAS), VISAO_MAX_PALAVRAS))
+    soma = sum(PESO_CAMPOS.values()) or 1
+    return {k: max(int(total * PESO_CAMPOS.get(k, 10) / soma), VISAO_MIN_POR_CAMPO)
+            for k in PESO_CAMPOS}
+
+
+# Schema da resposta. Structured output rotula os campos — é o que permite ao
+# consumidor adensar POR CAMPO (preservando sujeito e óptica) em vez de cortar
+# o fim do texto. Não é a causa raiz do problema de orçamento: o problema era
+# não haver teto na origem, não haver estrutura.
+SCHEMA_VISAO = {
+    "type": "object",
+    "properties": {
+        "sujeito": {
+            "type": "string",
+            "description": "Identidade observável: gênero, idade aparente, biotipo, cabelo "
+                           "(cor/comprimento/textura/partição), olhos, pele, rosto, corpo, "
+                           "roupa (cor/material/textura/corte), acessórios, marcas visíveis. "
+                           "Seja exaustivo no que a imagem mostra.",
+        },
+        "acao": {
+            "type": "string",
+            "description": "Postura, peso corporal, posição de mãos/dedos/braços/pernas, "
+                           "ângulo do corpo, direção do olhar, expressão.",
+        },
+        "cenario": {
+            "type": "string",
+            "description": "Ambiente com planos fg/mg/bg, arquitetura, objetos, materiais, "
+                           "texturas, cores. Descreva o que dá a identidade do espaço.",
+        },
+        "iluminacao": {
+            "type": "string",
+            "description": "Fonte, direção e ângulo, dureza, intensidade, temperatura de cor, "
+                           "sombras, preenchimento, contraluz, rim light, volumétrica, "
+                           "speculars. NUNCA omita direção nem dureza.",
+        },
+        "estilo_camera": {
+            "type": "string",
+            "description": "Lente em mm, abertura f/, profundidade de campo, bokeh, foco, "
+                           "enquadramento, ângulo, composição, tipo de imagem, acabamento.",
+        },
+    },
+    "required": ["sujeito", "acao", "cenario", "iluminacao", "estilo_camera"],
+}
+
+SYS_VISAO_EXTRACAO = """Você é um perito de reconstrução fotográfica. Sua função é descrever \
+uma imagem de forma TÉCNICA e DENSAMENTE NOMINAL, para que alguém possa \
+reconstruí-la sem vê-la.
+
+PRINCÍPIO — FIDELIDADE ACIMA DE TUDO:
+Esta é a ÚNICA etapa que enxerga a imagem. O que você omitir aqui se perde
+permanentemente. Portanto é PREJUDICADO omitir detalhe e NUNCA é permitido
+resumir para caber em menos palavras. Descreva tudo o que for visível e
+relevante. Se precisar ir além do orçamento, vá — as etapas seguintes sabem
+adensar sem perder o essencial; elas não conseguem recuperar o que sumiu aqui.
+
+REGRAS DE DENSIDADE:
+1. ADJETIVO GENÉRICO É PROIBIDO: "bonita", "incrível", "magnífico", "linda" = 0 pontos.
+   Use o nominal técnico equivalente: "luz volumétrica lateral", "85mm f/1.8",
+   "contraste médio-alto", "textura de pele com poros visíveis".
+2. Descreva o DIFÍCIL, não o óbvio. Não escreva "uma mulher num quarto" — escreva
+   o ângulo, o material, a direção da luz e a cor exata que tornam a cena única.
+3. NÚMERO vence ADJETIVO sempre que houver dado concreto: lente, abertura,
+   temperatura de cor, plano, textura, cor.
+4. Descreva apenas o que está VISÍVEL. Proibido inventar, inferir ou
+   complementar com conhecimento genérico do que "costuma" estar ali.
+5. NUNCA sacrifique: identidade do sujeito, direção/dureza da luz, dados ópticos
+   (mm, f/, DoF, bokeh), enquadramento, materiais decisivos.
+
+ORÇAMENTO DE SAÍDA (referência por campo, em PALAVRAS):
+- sujeito: ~{sujeito}
+- ação: ~{acao}
+- cenário: ~{cenario}
+- iluminação: ~{iluminacao}
+- estilo e câmera: ~{estilo_camera}
+
+Estes números são REFERÊNCIA de densidade, não um limite de asfixia. Ao sentir
+pressão de espaço, ceda APENAS: detalhe atmosférico decorativo, repetição
+redundante, preenchimento genérico. Preserve integralmente sujeito, luz (fonte,
+direção, dureza) e óptica (mm, f/, DoF, bokeh, enquadramento)."""
+
+# Estilo e sensualidade vêm do app (escolha do usuário no Passo 3), mas são
+# aplicados como instrução de LEITURA, não como controle de formato.
+_DIR_VISAO = {
+    "Fotorrealismo": "Interprete a leitura como FOTOGRAFIA REAL: textura de pele, "
+                     "profundidade de campo óptica, lente real. Não use vocabulário de ilustração.",
+    "Anime": "Interprete a leitura como ILUSTRAÇÃO ANIME 2D: cel shading, traço limpo, "
+             "linhas nítidas. Não use vocabulário de fotografia.",
+}
+
+
+def _montar_prompt_visao(estilo: str, sens: str, tetos: dict) -> str:
+    """Monta o prompt da visão. O formato (schema/tetos) é do código; só o
+    estilo e a sensualidade vêm da escolha do usuário no Passo 3.
+
+    `tetos` vem do destino escolhido no Passo 0 — é o que amarra a extração ao
+    formato final e evita refazer trabalho.
+    """
+    p = SYS_VISAO_EXTRACAO.format(**tetos)
+    if "Fotorrealismo" in (estilo or ""):
+        p += "\n\n[DIRETRIZ DE LEITURA — FOTORREALISMO] " + _DIR_VISAO["Fotorrealismo"]
+    elif "Anime" in (estilo or ""):
+        p += "\n\n[DIRETRIZ DE LEITURA — ANIME 2D] " + _DIR_VISAO["Anime"]
+    if sens:
+        p += f"\n\n[NÍVEL DE SENSUALIDADE: {sens}] Avalie o modelo sem omitir nem exagerar atributos."
+    p += "\n\nDescreva a imagem nos 5 campos do schema. Responda APENAS com o JSON."
+    return p
+
+
+def _img_para_inline(img_file) -> tuple:
+    """Upload de imagem → (base64, mime). Mantém a imagem só em memória."""
+    img_file.seek(0)
+    bruto = img_file.read()
+    mime = getattr(img_file, "type", None) or "image/jpeg"
+    return base64.b64encode(bruto).decode(), mime
+
+
+def _chamar_motor_visao(img_file, estilo_conversao: str, sens_escolhida: str,
+                       modelo_gemini: str, api_key: str, max_tokens_destino: int) -> dict:
+    """Motor de visão. É origem de dados do prompt final, não uma feature
+    configurável: o schema, a densidade e a ordem de prioridade estão no código.
+
+    `max_tokens_destino` é o teto do destino escolhido no Passo 0. A visão é a
+    única etapa que enxerga a imagem, então NÃO a estrangulamos: extraímos com
+    fidelidade e deixamos o adensamento com hierarquia para o consumidor. O
+    único limite aqui é de runaway (maxOutputTokens), bem acima do necessário.
+
+    Devolve {"tipo": "json", "dados": {...5 campos...}} ou {"tipo": "texto", ...}.
+    """
+    if not api_key:
+        raise RuntimeError("Chave Visão não configurada — conecte sua chave na barra lateral.")
+
+    tetos = _teto_visao_palavras(max_tokens_destino)
+    b64, mime = _img_para_inline(img_file)
+    # Teto de runaway: 2.5x o orçamento de palavras (folga p/ JSON + folga de
+    # fidelidade). NÃO é um teto de qualidade — a qualidade vem da hierarquia.
+    max_out = int(sum(tetos.values()) * 2.5)
+    corpo = {
+        "system_instruction": {"parts": [{"text": _montar_prompt_visao(estilo_conversao, sens_escolhida, tetos)}]},
+        "contents": [{
+            "role": "user",
+            "parts": [
+                {"inline_data": {"mime_type": mime, "data": b64}},
+                {"text": "Descreva esta imagem com fidelidade absoluta: sujeito, ação, "
+                        "cenário, iluminação (fonte/direção/dureza) e óptica/câmera "
+                        "(mm, f/, DoF, bokeh, enquadramento). Não resuma."},
+            ],
+        }],
+        "generationConfig": {
+            "temperature": 0.15,  # factual: o mínimo de invenção
+            "maxOutputTokens": max_out,
+            "responseMimeType": "application/json",
+            "responseSchema": SCHEMA_VISAO,
+        },
+    }
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo_gemini}:generateContent"
+    req = urllib.request.Request(
+        url, data=_json.dumps(corpo).encode("utf-8"),
+        headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=90) as resp:
+            payload = _json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        corpo_err = e.read().decode("utf-8", "replace")[:600]
+        raise RuntimeError(f"Visão · HTTP {e.code}: {corpo_err}") from e
+    except Exception as e:
+        raise RuntimeError(f"Visão · {e}") from e
+
+    try:
+        texto = payload["candidates"][0]["content"]["parts"][0]["text"]
+    except (KeyError, IndexError, TypeError) as e:
+        finish = (payload.get("candidates") or [{}])[0].get("finishReason", "?")
+        raise RuntimeError(f"Visão · resposta sem texto (finishReason={finish}).") from e
+
+    try:
+        dados = _json.loads(texto)
+    except _json.JSONDecodeError:
+        return {"tipo": "texto", "texto": texto}
+
+    # NÃO cortamos aqui. A visão é a única etapa que enxerga a imagem: cortar
+    # agora é o que produzia a perda de fidelidade. O adensamento com
+    # hierarquia (sujeito > ação > cenário > luz > câmera) acontece no
+    # consumidor, em _orcamento_estruturado, e só quando o destino realmente
+    # não comportar o material.
+    return {"tipo": "json", "dados": dados}
+
+
+def _cortar_palavras(txt: str, max_palavras: int) -> str:
+    """Corta por contagem de palavras em fronteira de frase. Rede de segurança
+    para o modelo; em operação normal a visão já respeita o teto."""
+    partes = re.split(r"(?<=[.;:])\s+", txt)
+    saida, total = [], 0
+    for fr in partes:
+        n = len(fr.split())
+        if total + n > max_palavras:
+            break
+        saida.append(fr)
+        total += n
+    if not saida:
+        # Sem fronteira de frase: corta por palavras brutas, nunca no meio
+        palavras = txt.split()
+        if len(palavras) <= max_palavras:
+            return txt
+        return " ".join(palavras[:max_palavras]).rstrip(",;:.!?")
+    return " ".join(saida)
 
 
 def _get_secret(name: str):
@@ -651,46 +928,51 @@ else:
 # PASSO 0: Motor Destino (OBRIGATÓRIO E PRIMEIRO)
 # --------------------------------------------------------------------------
 # O destino define o FORMATO e o TETO da saída final. Escolhê-lo por último
-# (como estava) obrigava a visão a extrair no escuro e a rascunhar a cena sem
-# saber o formato-alvo; só depois se descobria que o material não cabia — com a
-# extração e o rascunho já pagos em tokens.
+# (como era) obrigava a visão a extrair no escuro, a rascunhar a cena sem
+# saber o formato-alvo, e só então descobrir que o material não cabia — com
+# a extração e o rascunho já pagos em tokens.
 #
 # Escolhendo aqui, na PRIMEIRA etapa, tudo abaixo já trabalha ciente do alvo:
-#   - a visão extrai com o orçamento DERIVADO deste destino;
-#   - o rascunho nasce no formato que o destino espera;
+#   - a visão extrai com o teto DERIVADO deste destino;
+#   - o rascunho é escrito no formato que o destino espera;
 #   - a síntese final não precisa reprocessar nada.
 st.markdown("### 0️⃣ Passo 0: Motor Destino (Obrigatório)")
 st.caption("Defina primeiro para qual plataforma o prompt será compilado. Tudo o que vem "
             "depois — inclusive a extração da imagem — respeita o formato e o limite de "
             "tokens deste motor. Escolher por último desperdiça trabalho.")
-dest_sel = st.selectbox("Plataforma de Imagem Alvo:", OPCOES_DESTINO, key="ck_destino_select",
-                        label_visibility="collapsed")
+dest_sel = st.selectbox(
+    "Plataforma de Imagem Alvo:",
+    OPCOES_DESTINO,
+    key="ck_destino_select",
+    label_visibility="collapsed",
+)
 _perfil_destino = _perfil_do_destino(dest_sel) if dest_sel != OPCOES_DESTINO[0] else {}
 if _perfil_destino:
     st.caption(f"🎯 **{dest_sel}** · formato **{_perfil_destino.get('structure','')}** · "
-               f"teto **{_perfil_destino.get('max_tokens',0)} tokens** para prompt + "
-               f"negative + legenda + hashtags.")
+               f"teto **{_perfil_destino.get('max_tokens',0)} tokens** para prompt + negative "
+               f"+ legenda + hashtags.")
 else:
     st.info("🛑 Escolha o motor de destino para liberar a extração de imagem, o rascunho e a "
             "geração do prompt. Sem ele não há formato nem orçamento definidos.")
-_destino_escolhido = bool(_perfil_destino)
-# Modo de visão só para destinos com teto suficiente (coerência fiel).
-_visao_liberada = _destino_escolhido and destino_suporta_visao(_perfil_destino.get("max_tokens", 0))
 
-# TROCAR DE DESTINO descarta APENAS o que foi compilado para o formato do
-# destino anterior (rascunho e síntese carregam DESTINO/FORMATO dentro).
-# A extração da imagem é fidelidade-first e não pertence a destino nenhum:
-# o corte por teto acontece localmente no Passo 5, sobre o texto extraído.
-# Reenviar a mesma imagem pagaria 1 requisição da cota diária do free tier
-# (20 por dia, por modelo — aferido no erro 429 real) para o mesmo texto.
+# A visão só roda com destino escolhido — ela deriva o orçamento dele.
+_destino_escolhido = bool(_perfil_destino)
+
+# TROCAR DE DESTINO INVALIDA O TRABALHO JÁ FEITO. A extração foi calibrada
+# para o teto/formato do destino anterior; mantê-la produz uma narrativa fora do
+# formato-alvo e obriga a síntese final a reprocessar do zero (o desperdício que
+# esta mudança de sequência existe para eliminar).
 _destino_anterior = st.session_state.get("ck_destino_aplicado")
 if _destino_escolhido and _destino_anterior and _destino_anterior != dest_sel:
-    for _k in ["ck_preprompt", "ck_preprompt_editado", "ck_prompt_final",
-               "ck_ideia_hist_fix", "_pending_ck_preprompt_editado"]:
+    for _k in ["ck_img_parametros", "ck_preprompt", "ck_preprompt_editado",
+               "ck_diagnostico", "ck_prompt_final", "ck_sugestoes_marcadas",
+               "img_suj", "img_cen", "img_act", "img_ilu", "img_est"]:
         st.session_state.pop(_k, None)
-    st.info(f"🔄 Destino alterado para **{dest_sel}**. Rascunho e prompt final "
-            "anteriores foram descartados (cada destino tem o seu formato). "
-            "A extração da imagem foi mantida — serve para qualquer destino.")
+    for _k in ["_pending_img_suj", "_pending_img_cen", "_pending_img_act",
+               "_pending_img_ilu", "_pending_img_est", "_pending_ck_preprompt_editado"]:
+        st.session_state.pop(_k, None)
+    st.info(f"🔄 Destino alterado para **{dest_sel}**. Extração e rascunho anterior "
+            "foram descartados — refaça a extração da imagem ciente do novo formato.")
 if _destino_escolhido:
     st.session_state["ck_destino_aplicado"] = dest_sel
 
@@ -702,7 +984,7 @@ st.markdown("### 1️⃣ Passo 1: A Sua Ideia (A Narrativa Visual)")
 st.caption("O ponto de partida. Descreva o que imagina ou veja a caixa preencher-se usando o Passo 2.")
 st.text_area("Insira a sua Ideia:", key="ck_ideia_input", height=140, label_visibility="collapsed")
 if st.button("🗑️ Limpar Ideia", use_container_width=False):
-    for k in ["ck_img_parametros", "ck_preprompt", "ck_preprompt_editado", "ck_diagnostico", "ck_prompt_final", "ck_sugestoes_marcadas", "ck_norm_info",
+    for k in ["ck_img_parametros", "ck_preprompt", "ck_preprompt_editado", "ck_diagnostico", "ck_prompt_final", "ck_sugestoes_marcadas",
               "ck_ideia_input", "img_suj", "img_cen", "img_act", "img_ilu", "img_est",
               "_pending_ck_ideia_input", "_pending_ck_preprompt_editado", "_pending_img_suj", "_pending_img_cen", "_pending_img_act", "_pending_img_ilu", "_pending_img_est"]:
         st.session_state.pop(k, None)
@@ -726,32 +1008,14 @@ with col_img1:
     img_file = st.file_uploader("Upload de Referência", type=["png", "jpg", "jpeg", "webp"], key="ck_img_uploader", label_visibility="collapsed")
 with col_img2:
     st.write(" ")
-    btn_ler = st.button("👁️ Extrair Imagem (Motor de Visão)", use_container_width=True,
-                            disabled=(not _destino_escolhido) or not _visao_liberada)
-    if not _visao_liberada:
-        st.caption("🔒 Modo de visão indisponível para este destino: o teto de tokens "
-                       "é baixo demais para uma extração fiel. Use um destino com teto "
-                       "≥ 600 tokens (Krea, Flux, ComfyUI, Qwen) ou escreva a ideia "
-                       "manualmente no Passo 1.")
-    elif not _destino_escolhido:
-        st.caption("🔒 Selecione o motor de destino no Passo 0 para liberar a extração — o "
-                       "orçamento da visão é derivado do teto desse motor.")
-# O que a normalização de proporção fez com a imagem enviada — visível para o
-# usuário, para que ele saiba a razão aplicada e o custo real em tiles.
-if st.session_state.get("ck_norm_info"):
-    _ni = st.session_state["ck_norm_info"]
-    if _ni.get("metodo") == "canonica":
-        _rec = (f" · recorte {_ni.get('recorte_pct', 0):.1f}%"
-                if _ni.get("recorte_pct", 0) >= 0.1 else "")
-        _rotulo = (f"📐 Proporção **{_ni.get('proporcao', '?')}** aplicada"
-                   f" (desvio {_ni.get('desvio', 0)}%{_rec})")
-    else:
-        _rotulo = (f"📐 Proporção original **{_ni.get('razao_original', '?')}:1** preservada"
-                   f" — fora do padrão de mercado (mais próxima: "
-                   f"{_ni.get('proporcao', '?')}, desvio {_ni.get('desvio', 0)}%)")
-    st.caption(
-        f"{_rotulo} · {_ni.get('antes', '?')} → **{_ni.get('depois', '?')} px**"
-        f" · {_ni.get('tiles', '?')} tiles ≈ {_ni.get('tokens_aprox', 0)} tokens de imagem")
+    btn_ler = st.button(
+        "👁️ Extrair Imagem (Motor de Visão)",
+        use_container_width=True,
+        disabled=not _destino_escolhido,
+    )
+if not _destino_escolhido:
+    st.caption("🔒 Selecione o motor de destino no Passo 0 para liberar a extração — o "
+               "orçamento da visão é derivado do teto desse motor.")
 if btn_ler:
     if not img_file: st.warning("Selecione uma imagem primeiro.")
     else:
@@ -760,9 +1024,14 @@ if btn_ler:
                 modelo_base = st.session_state.get("modelo_visao_select", MODELO_VISAO_PADRAO)
                 estilo_conversao = st.session_state.get("ck_estilo_conversao", "Manter Estilo Original")
                 sens_escolhida = st.session_state.get("ck_sens_slider", OPCOES_SENSUALIDADE[1])
-                res = _chamar_motor_visao(img_file, estilo_conversao, sens_escolhida,
-                                          modelo_base, _teto_destino(dest_sel))
-                st.session_state["ck_norm_info"] = res.get("norm") or {}
+                # _cfg vive no escopo do sidebar; recarrega a config do usuário.
+                _cfg_visao = carregar_config(st.session_state["user_email"])
+                chave_visao = _cfg_visao.get("chaves", {}).get("Chave Visao", "")
+                res = _chamar_motor_visao(
+                    img_file, estilo_conversao, sens_escolhida,
+                    modelo_base, chave_visao,
+                    _teto_destino(dest_sel),  # orçamento derivado do destino
+                )
                 if res["tipo"] == "json":
                     st.session_state["ck_img_parametros"] = res["dados"]
                     st.session_state["_pending_img_suj"] = res["dados"].get("sujeito", "")
@@ -807,7 +1076,7 @@ with st.container(border=True):
     col_m1, col_m2, col_m3 = st.columns(3)
     with col_m1: estilo_conversao = st.selectbox("Estilo de Arte:", ["Manter Estilo Original", "📸 Converter para Fotorrealismo", "🎨 Converter para Anime"], key="ck_estilo_conversao")
     with col_m2: foco_contexto = st.selectbox("Foco e Contexto:", ["Harmônico (Preencher/Embelezar)", "Literal (Direto, Sem Floreios)"], key="ck_foco_contexto")
-    with col_m3: sens_escolhida = st.select_slider("Sensualidade:", options=OPCOES_SENSUALIDADE, key="ck_sens_slider")
+    with col_m3: sens_escolhida = st.select_slider("Sensualidade:", options=OPCOES_SENSUALIDADE, key="ck_sens_slider", value=st.session_state.get("ck_sens_slider", OPCOES_SENSUALIDADE[1]))
 
 # --------------------------------------------------------------------------
 # PASSO 4: Rascunho & Validação (Opcionais Prévios)
@@ -829,13 +1098,16 @@ if btn_pre:
                 # O rascunho nasce no FORMATO do destino: antes esta etapa não
                 # sabia o alvo e produzia prosa que a síntese final tinha de
                 # reprocessar por completo.
+                _perfil = _perfil_do_destino(dest_sel)
+                _fmt_dest = _perfil.get("structure", "")
+                _dica_dest = _perfil.get("dica_tecnica", "")
                 p = f"IDEIA:\n{st.session_state.ck_ideia_input}\n\n[AGENTE: SENSUALIDADE NÍVEL '{sens_escolhida}']"
                 p += (f"\n[DESTINO ALVO: {dest_sel}]"
-                      f"\n[FORMATO EXIGIDO: {_perfil_destino.get('structure','')}]"
-                      f"\n[ORIENTAÇÃO TÉCNICA DO DESTINO: {_perfil_destino.get('dica_tecnica','')}]"
-                      "\n[RASCUNHO = FONTE DA SÍNTESE FINAL]: descreva a cena nos termos que o "
-                      "destino consome (nominal técnico, sem adjetivo genérico). Não escreva "
-                      "meta-comentário sobre o formato.")
+                      f"\n[FORMATO EXIGIDO: {_fmt_dest}]"
+                      f"\n[ORIENTAÇÃO TÉCNICA DO DESTINO: {_dica_dest}]"
+                      "\n[RASCUNHO = FONTE DA SÍNTESE FINAL]: escreva a cena já descrita em "
+                      "termos que o destino consome (nominal técnico, sem adjetivo genérico). "
+                      "Não escreva meta-comentário sobre o formato.")
                 if "Fotorrealismo" in _estilo:
                     p += "\n[MODIFICADOR ESTILO — CONVERTER PARA FOTORREALISMO]: Reescreva TODA a cena como FOTOGRAFIA REAL. Substitua 'anime, ilustração, desenho, traço' por 'foto fotorrealista, pele real, textura fotográfica'. PROÍBA vocabulário anime/cartoon/ilustração."
                 elif "Anime" in _estilo:
@@ -863,20 +1135,11 @@ if st.session_state.get("ck_preprompt"):
     st.markdown("<div class='ps-legend'><span><span class='ps-user-word'>Ideia Original</span></span> • <span><span class='ps-ai-word'>Ajuste da IA</span></span></div>", unsafe_allow_html=True)
     st.markdown(f"<div class='ps-preprompt'>{_ps_markup_origin(st.session_state['ck_preprompt'], st.session_state.get('ck_ideia_hist_fix', ''))}</div>", unsafe_allow_html=True)
     st.text_area("Ajuste fino do Rascunho (Esta caixa substituirá a Ideia para o Motor Final):", key="ck_preprompt_editado", height=130)
-# "Definida" (feminino) e o que o SYS_COMPOSITOMETRO emite para
-# iluminacao_status e camera_status. Sem ela no teste, luz e camera
-# confirmadas pelo modelo apareciam como pendentes (badge azul ⚙️),
-# iguais a "Ausente".
-def _bdg(s):
-    if s in ("Definido", "Definida", "Presente"):
-        return ("comp-green", "✓")
-    if s in ("Vago", "Estática"):
-        return ("comp-amber", "!")
-    return ("comp-blue", "⚙️")
 diag = st.session_state.get("ck_diagnostico")
 if diag:
     with st.container(border=True):
         c1, c2, c3, c4, c5 = st.columns(5)
+        def _bdg(s): return ("comp-green","✓") if s in ["Definido","Presente"] else ("comp-amber","!") if s in ["Vago","Estática"] else ("comp-blue","⚙️")
         for col, key, label in zip([c1,c2,c3,c4,c5], ["sujeito_status","acao_status","cenario_status","iluminacao_status","camera_status"], ["Sujeito","Ação","Cenário","Luz","Câmera"]):
             cl, ic = _bdg(diag.get(key, ""))
             col.markdown(f"<div class='comp-badge {cl}'>{ic} {label}: {diag.get(key, 'Pendente')}</div>", unsafe_allow_html=True)
@@ -891,9 +1154,8 @@ if diag:
         else: st.session_state["ck_sugestoes_marcadas"] = []
 
 # --------------------------------------------------------------------------
-# PASSO 5: Síntese Final
+# PASSO 5: Motor Destino & Síntese Final
 # --------------------------------------------------------------------------
-# O destino NÃO é escolhido aqui: vem do Passo 0. Este passo só compila.
 st.markdown("---")
 st.markdown("### 5️⃣ Passo 5: Síntese Final")
 st.caption(f"Compilando a narrativa para **{dest_sel}** no formato "
@@ -908,77 +1170,65 @@ if btn_exec:
         with st.spinner(f"Compilando sintaxe ultra-otimizada para {dest_sel}..."):
             try:
                 eng = BANCO_DE_MOTORES[dest_sel]
-                max_tokens = _teto_destino(dest_sel)
-                structure = _perfil_destino.get("structure", "general")
-                # dica_tecnica vive no MODEL_PROFILES (via _perfil_do_destino),
-                # nao no BANCO_DE_MOTORES — ler de eng devolvia "" sempre.
-                _dica = _perfil_destino.get("dica_tecnica", "")
+
+                # --- DEFINIÇÕES OBRIGATÓRIAS (evita NameError) ---
+                _dica = eng.get("dica_tecnica", "")
                 _dica_txt = f"\n💡 DICA TÉCNICA: {_dica}" if _dica else ""
                 bloco = f"\n\n======================================\n3. SINTAXE NATIVA: {dest_sel}\n======================================\n- POSITIVO: {eng['regra_positivo']}\n- NEGATIVO: {eng.get('regra_negativo', 'N/A')}{_dica_txt}\n\nSAÍDA OBRIGATÓRIA:\n1. PROMPT (ENGLISH)\n2. NEGATIVE PROMPT DINÂMICO (ENGLISH)\n3. LEGENDA\n4. HASHTAGS"
 
-                # ── ORÇAMENTO REAL (tokens, não caracteres) ──
-                # O código antigo usava txt_b[:max_tokens] e chamava de tokens:
-                # em PT (≈3 car./token) isso cortava ~67% antes da hora, sempre
-                # no meio da frase. Agora mede tokens e corta por fronteira de
-                # frase, escolhendo o que sobra por densidade de informação.
-                # O `if` decidia pelo rascunho (ck_preprompt) mas lia o ajuste
-                # fino (ck_preprompt_editado), que o usuario pode apagar. O
-                # resultado era txt_b == "" e o Passo 5 saia com a NARRATIVA
-                # VISUAL em branco — sem erro, sem aviso.
-                _ajuste = (st.session_state.get("ck_preprompt_editado") or "").strip()
-                _base = (st.session_state.get("ck_preprompt") or "").strip()
-                txt_b = _ajuste or _base or (st.session_state.get("ck_ideia_input") or "")
-                if not txt_b.strip():
-                    st.error("A narrativa ficou vazia. Escreva no Passo 1 ou gere um rascunho no Passo 4 antes de compilar.")
-                    st.stop()
+                # --- LÓGICA DE PROMPT E ESTRUTURA ---
+                txt_b = st.session_state.ck_preprompt_editado if st.session_state.get("ck_preprompt") else st.session_state.ck_ideia_input
                 sug_aceitas = st.session_state.get("ck_sugestoes_marcadas", [])
                 sug_str = "\n".join(f"- {s}" for s in sug_aceitas) if sug_aceitas else "Nenhuma sugestão."
-                est_antes = _estimar_tokens(txt_b)
-                txt_b, est_fonte, cortou = _orcamento_fonte(txt_b, max_tokens)
-                if cortou:
-                    st.info(f"📥 Narrativa adensada para o formato do destino: "
-                            f"{est_antes} → {est_fonte} tokens (teto-fonte "
-                            f"{int(max_tokens*_TETO_FONTE_PCT)}). Sujeito, luz e óptica preservados.")
 
-                # ── P-Base ──
-                p = f"DESTINO: {dest_sel}\nRATING: {sens_escolhida}\nFORMATO: {structure}\n\n1. NARRATIVA VISUAL (FONTE DA TRADUÇÃO):\n{txt_b}\n\n2. SUGESTÕES CIRÚRGICAS INCORPORADAS:\n{sug_str}"
+                dest_lower = dest_sel.lower()
+                max_tokens = _teto_destino(dest_sel)
 
-                # ── Injeção estrutural por DESTINO (uma vez, sem duplicação) ──
-                # Bug anterior: um if/elif chain com indentação errada, cuja
-                # linha inicial ficou dentro do `if len(txt_b) > max_tokens:`.
-                # O bloco só rodava quando o texto excedia o teto, e a linha
-                # seguinte sobrescrevia `p` incondicionalmente — descartando
-                # toda a injeção. Aqui a seleção é por ALIAS do perfil.
-                _dest_lower = dest_sel.lower()
-                if "flux" in _dest_lower:
+                # Orçamento real. Dois caminhos, ambos com o MESMO teto:
+                #  A) estruturado — a extração de visão devolveu JSON; usa
+                #     orçamento POR CAMPO, que preserva sujeito/ação e os termos
+                #     técnicos de câmera em vez de cortar o fim do texto.
+                #  B) prosa — ideia digitada ou visão em texto; usa o orçamento
+                #     por frase. Nunca corta no meio da oração (o txt_b[:N]
+                #     original destruía a composição e perdia luz/estilo).
+                _campos_vis, _avisos, _meta = (None, [], {})
+                _img_params = st.session_state.get("ck_img_parametros")
+                if _img_params and isinstance(_img_params, dict) and len(_img_params) >= 2:
+                    _campos_vis, _avisos, _meta = _orcamento_estruturado(_img_params, max_tokens)
+                if _campos_vis:
+                    txt_b = _formatar_campos(_campos_vis)
+                    _est_fonte = _meta.get("total", _estimar_tokens(txt_b))
+                else:
+                    txt_b, _est_fonte, _avisos = _orcamento_texto_fonte(txt_b, max_tokens)
+                for _av in _avisos:
+                    st.warning(_av)
+
+                # P-Base (Narrativa + Sugestões)
+                p = f"DESTINO: {dest_sel}\nRATING: {sens_escolhida}\n\n1. NARRATIVA VISUAL (FONTE DA TRADUÇÃO):\n{txt_b}\n\n2. SUGESTÕES CIRÚRGICAS INCORPORADAS:\n{sug_str}"
+
+                # Injeção estrutural (sem duplicação)
+                if "flux" in dest_lower:
                     p += "\n\n[FLUX STRUCTURE: subject | context | lighting | style]"
-                elif "ideogram" in _dest_lower:
-                    p += "\n\n[IDEOGRAM STRUCTURE: concept | elements | colors (max 3) | composition]"
-                elif "midjourney" in _dest_lower:
+                elif "ideogram" in dest_lower:
+                    p += "\n\n[IDEOGRAM STRUCTURE: concept | elements | colors | composition]"
+                elif "midjourney" in dest_lower:
                     p += "\n\n[MJ STRUCTURE: subject + --v 6.1 --style raw --ar 16:9]"
-                elif "illustrious" in _dest_lower:
-                    # ANTES do bloco comfyui: 'ComfyUI / Illustrious' contem
-                    # 'comfyui' e casava com SDXL/PONY, tornando este ramo
-                    # codigo morto e perdendo a regra 'style (artist/movement first)'.
-                    p += "\n\n[ILLUSTRIOUS STRUCTURE: style (artist/movement first) | subject | quality | negative]"
-                elif any(m in _dest_lower for m in ["pony", "sdxl", "comfyui"]):
+                elif any(m in dest_lower for m in ["pony", "sdxl", "comfyui", "illustrious"]):
                     p += "\n\n[SDXL/PONY STRUCTURE: positive-tags, negative-tags]"
-                elif "krea" in _dest_lower:
+                elif "krea" in dest_lower:
                     p += "\n\n[KREA STRUCTURE: instructions | subject | style-params]"
 
-                # Estilo e regras — BLOCO ÚNICO
+                # Re-adiciona estilo e regras (BLOCO ÚNICO — antes STYLE OVERRIDE,
+                # MODO LITERAL e REGRAS FINAIS eram injetados 2×, gastando o
+                # orçamento antes de o modelo escrever uma palavra).
                 _estilo_final = st.session_state.get("ck_estilo_conversao", "Manter Estilo Original")
+                _literal = "Literal" in st.session_state.get("ck_foco_contexto", "")
                 if "Fotorrealismo" in _estilo_final:
                     p += "\n[STYLE OVERRIDE — CONVERT TO PHOTOREALISM]: Rewrite entire scene as photorealistic photo, real skin, photographic texture, photorealistic. PROHIBIT anime/cartoon/illustration/drawing/cel shading terms."
                 elif "Anime" in _estilo_final:
                     p += "\n[STYLE OVERRIDE — CONVERT TO ANIME 2D]: Rewrite entire scene as 2D anime illustration, clean anime linework, cel shading, anime style. Replace photo/smartphone/26mm/photorealistic with anime illustration terms. PROHIBIT photo/smartphone lens/photorealistic terms."
-                if "Literal" in foco_contexto:
+                if _literal:
                     p += "\n[MODO LITERAL]: Remova floreios poéticos/metafóricos, MAS MANTENHA todas as características do sujeito e os detalhes principais da composição. LITERAL NÃO É RESUMO E NÃO É OMISSÃO."
-
-                # ── ORÇAMENTO DE SAÍDA (substitui o "IGNORE o limite") ──
-                # O código antigo mandava "IGNORE o limite" — sem teto real, o
-                # modelo era incentivado a inflar. Agora há teto duro + ordem
-                # de prioridade: o excedente cede legenda/hashtags primeiro.
                 p += (
                     f"\n\n⚠️ ORÇAMENTO DE SAÍDA — TETO DURO: {max_tokens} tokens para TUDO (PROMPT + NEGATIVE + LEGENDA + HASHTAGS).\n"
                     "- DENSIDADE, NÃO VOLUME: cada palavra deve ganhar peso. Adjetivo genérico ('bonito','belo','incrível') = 0 pontos. Nominal técnico ('85mm','rim light','f1.4') = alto valor.\n"
@@ -986,7 +1236,7 @@ if btn_exec:
                     "- PRECEDÊNCIA: FIDELIDADE > ORÇAMENTO, mas 'acima do orçamento' NÃO é licença para inflar nem omitir: é ordem de espremer MAIS DENSIDADE no mesmo teto.\n"
                     "- 'PROMPT' E 'NEGATIVE' EXCLUSIVAMENTE EM INGLÊS."
                 )
-
+                
                 modelo_base = st.session_state.get("modelo_texto_select", MODELO_TEXTO_PADRAO)
                 res, prov = _chamar_motor_texto(SYS_MESTRE_CORE, bloco + "\n\n" + p, modelo_gemini=modelo_base)
                 st.session_state["ck_prompt_final"] = res
