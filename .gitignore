@@ -1,6 +1,41 @@
+# Python
 __pycache__/
-*.pyc
-.venv/
+*.py[cod]
+*$py.class
+*.so
+.Python
 venv/
+env/
+ENV/
+
+# Streamlit
 .streamlit/secrets.toml
-configs_usuarios/
+.streamlit/secrets.toml.local
+
+# Configs locais (por usuário)
+config/
+*.json
+!*.json.example
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build
+dist/
+build/
+*.egg-info/
+
+# Arquivos de deploy/instruções (opcional - mantenha se quiser no repo)
+# DEPLOY_INSTRUCTIONS.md
+# APPS_SCRIPT_CODE.gs

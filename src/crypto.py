@@ -1,89 +1,55 @@
-"""crypto.py — Etapa 2.2 (Fernet obrigatorio, sem fallback fraco)"""
-import hashlib
+# src/crypto.py
+"""Criptografia Fernet para chaves BYOK (chaves do usuário)."""
+import os
 import base64
 import streamlit as st
-
-try:
-    from cryptography.fernet import Fernet
-    HAS_FERNET = True
-except ImportError:
-    HAS_FERNET = False
-    Fernet = None
-
-OPCOES_GEMINI_3 = ["gemini-3.5-flash", "gemini-3.6-flash", "gemini-3.7-flash"]
-MODELO_VISAO_PADRAO = "gemini-3.5-flash"
-MODELO_TEXTO_PADRAO = "gemini-3.5-flash"
+from cryptography.fernet import Fernet
+from typing import Optional
 
 
-def _get_fernet_secret() -> str | None:
-    sec = None
+def _get_ps_fernet_key() -> Optional[str]:
+    """Obtém chave mestra do secrets (lazy)."""
     try:
-        sec = st.secrets.get("PS_FERNET_KEY")
+        return st.secrets.get("PS_FERNET_KEY")
     except Exception:
-        pass
-    if not sec:
-        import os
-        sec = os.environ.get("PS_FERNET_KEY")
-    if not sec or "PLACEHOLDER" in str(sec) or "troque" in str(sec).lower():
-        return None
-    return str(sec).strip()
-
-
-def _chave_fernet():
-    segredo = _get_fernet_secret()
-    if not segredo or not HAS_FERNET:
-        return None
-    try:
-        digest = hashlib.sha256(segredo.encode("utf-8")).digest()
-        return Fernet(base64.urlsafe_b64encode(digest))
-    except Exception:
-        return None
-
-
-def _criptografar(texto: str) -> str:
-    if not texto:
-        return texto
-    f = _chave_fernet()
-    if not f:
-        return texto
-    return f.encrypt(texto.encode("utf-8")).decode("utf-8")
-
-
-def _descriptografar(texto: str) -> str:
-    if not texto:
-        return texto
-    f = _chave_fernet()
-    if not f:
-        return texto
-    try:
-        return f.decrypt(texto.encode("utf-8")).decode("utf-8")
-    except Exception:
-        return texto
-
-
-def mascarar_email(email: str) -> str:
-    email = (email or "").strip().lower()
-    if "@" not in email or "." not in email:
-        if len(email) <= 6:
-            return (email[:1] + "***") if email else email
-        return email[:3] + "********" + email[-3:]
-    last_dot = email.rfind(".")
-    prefix = email[:3]
-    before_dot = email[:last_dot]
-    suffix_core = before_dot[-3:] if len(before_dot) >= 3 else before_dot
-    suffix = suffix_core + email[last_dot:]
-    if len(email) <= 7:
-        return prefix + "***" + suffix
-    return f"{prefix}********{suffix}"
-
-
-def _slug_usuario(email: str) -> str:
-    import re
-    email = (email or "").strip().lower()
-    if not email or "@" not in email:
-        return ""
-    return re.sub(r"[^\w\-.]", "_", email) or ""
+        return os.getenv("PS_FERNET_KEY")
 
 
 def fernet_disponivel() -> bool:
-    return _chave_fernet() is not None
+    """Verifica se criptografia está disponível (chave mestra configurada)."""
+    key = _get_ps_fernet_key()
+    return bool(key and key.strip())
+
+
+def _fernet() -> Fernet:
+    """Retorna instância Fernet (cacheada)."""
+    if not hasattr(_fernet, "_instance"):
+        key = _get_ps_fernet_key()
+        if not key:
+            raise RuntimeError("PS_FERNET_KEY não configurado")
+        # Garante que a chave tem 32 bytes url-safe base64
+        key = key.strip()
+        if len(key) != 44:  # Fernet key é 32 bytes = 44 chars base64url
+            # Deriva chave de 32 bytes via SHA256 se necessário
+            import hashlib
+            key = base64.urlsafe_b64encode(hashlib.sha256(key.encode()).digest()).decode()
+        _fernet._instance = Fernet(key.encode())
+    return _fernet._instance
+
+
+def mascarar_email(email: str) -> str:
+    """Mascarar e-mail para exibição (ex: sergio@exemplo.com -> ser***@exemplo.com)."""
+    if not email or "@" not in email:
+        return email
+    local, domain = email.split("@", 1)
+    if len(local) <= 3:
+        masked = local[0] + "*" * (len(local) - 1)
+    else:
+        masked = local[:3] + "*" * (len(local) - 3)
+    return f"{masked}@{domain}"
+
+
+# Constantes de modelos Gemini (re-exportadas para compatibilidade)
+OPCOES_GEMINI_3 = ["gemini-3.5-flash", "gemini-3.6-flash", "gemini-3.7-flash"]
+MODELO_VISAO_PADRAO = "gemini-3.5-flash"
+MODELO_TEXTO_PADRAO = "gemini-3.5-flash"
