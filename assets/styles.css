@@ -1,0 +1,140 @@
+/* Prompt Studio Cockpit — Design Tokens & Styles */
+/* Cores base (dark theme) */
+:root {
+  --ps-bg: #0b0f14;
+  --ps-bg-elevated: #111820;
+  --ps-border: #1e293b;
+  --ps-text: #e2e8f0;
+  --ps-text-muted: #94a3b8;
+  --ps-accent: #22d3ee;
+  --ps-accent-dim: #06b6d4;
+  --ps-warm: #fbbf24;
+  --ps-danger: #f87171;
+  --ps-success: #4ade80;
+  --ps-card: #151d2a;
+  --ps-input-bg: #0d131a;
+  --ps-focus: #22d3ee;
+}
+
+/* Reset & base */
+.stApp { background: var(--ps-bg); color: var(--ps-text); }
+.block-container { padding-top: 2rem; padding-bottom: 3rem; max-width: 1200px; }
+
+/* Typography */
+.ps-kicker { 
+  font-size: 0.75rem; letter-spacing: 0.2em; text-transform: uppercase; 
+  color: var(--ps-accent); font-weight: 600; margin-bottom: 0.5rem; 
+}
+.hero-title { 
+  font-size: clamp(2.5rem, 5vw, 3.5rem); font-weight: 800; line-height: 1.1; 
+  margin: 0 0 1rem; background: linear-gradient(135deg, var(--ps-text) 0%, var(--ps-accent) 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+.hero-subtitle { 
+  font-size: 1.125rem; color: var(--ps-text-muted); max-width: 60ch; margin: 0 0 2rem; line-height: 1.6; 
+}
+.ps-title { font-size: 1.75rem; font-weight: 700; margin: 0 0 0.25rem; }
+.ps-slogan { color: var(--ps-text-muted); font-size: 1rem; margin-bottom: 1.5rem; }
+.byok-badge { 
+  display: inline-block; padding: 0.5rem 1rem; border-radius: 999px; 
+  background: rgba(34, 211, 238, 0.1); border: 1px solid var(--ps-accent); 
+  font-size: 0.875rem; color: var(--ps-accent); 
+}
+
+/* Cards */
+.showcase-box { 
+  background: var(--ps-card); border: 1px solid var(--ps-border); border-radius: 16px; 
+  padding: 1.5rem; height: 100%; display: flex; flex-direction: column; 
+}
+.label-ideia { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ps-text-muted); margin-bottom: 0.25rem; }
+.text-ideia { font-size: 1.125rem; font-weight: 600; color: var(--ps-text); margin: 0 0 1rem; }
+.label-prompt { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ps-warm); margin-bottom: 0.25rem; }
+.code-prompt { 
+  font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.8rem; 
+  background: var(--ps-input-bg); border: 1px solid var(--ps-border); border-radius: 8px; 
+  padding: 1rem; overflow-x: auto; color: var(--ps-text-muted); line-height: 1.5; 
+}
+.plan-container { margin-top: 2rem; padding: 1.5rem; background: var(--ps-card); border: 1px solid var(--ps-border); border-radius: 16px; }
+
+/* Inputs */
+.stTextArea textarea, .stTextInput input { 
+  background: var(--ps-input-bg) !important; border: 1px solid var(--ps-border) !important; 
+  color: var(--ps-text) !important; border-radius: 10px !important; 
+}
+.stTextArea textarea:focus, .stTextInput input:focus { 
+  border-color: var(--ps-focus) !important; box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.2) !important; 
+}
+.stSelectbox [data-baseweb="select"] > div { 
+  background: var(--ps-input-bg) !important; border-color: var(--ps-border) !important; 
+}
+
+/* Buttons */
+.stButton > button[kind="primary"] { 
+  background: linear-gradient(135deg, var(--ps-accent) 0%, var(--ps-accent-dim) 100%) !important; 
+  border: none !important; color: #0b0f14 !important; font-weight: 600; 
+}
+.stButton > button[kind="primary"]:hover { filter: brightness(1.1); }
+.stButton > button:not([kind="primary"]) { 
+  background: var(--ps-card) !important; border: 1px solid var(--ps-border) !important; 
+  color: var(--ps-text) !important; 
+}
+.stButton > button:not([kind="primary"]):hover { border-color: var(--ps-accent) !important; }
+
+/* Preprompt diff */
+.ps-legend { 
+  display: flex; gap: 1.5rem; font-size: 0.8rem; margin-bottom: 0.5rem; padding: 0 0.5rem; 
+}
+.ps-user-word { color: var(--ps-warm); }
+.ps-ai-word { color: var(--ps-accent); }
+.ps-preprompt { 
+  background: var(--ps-card); border: 1px solid var(--ps-border); border-radius: 10px; 
+  padding: 1rem; line-height: 1.7; white-space: pre-wrap; word-wrap: break-word; 
+}
+
+/* Final output */
+.ps-final-box { 
+  background: var(--ps-input-bg); border: 1px solid var(--ps-border); border-radius: 12px; 
+  padding: 1.5rem; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.875rem; 
+  line-height: 1.6; white-space: pre-wrap; word-wrap: break-word; overflow-x: auto; 
+  max-height: 60vh; overflow-y: auto; 
+}
+
+/* Badges */
+.comp-badge { 
+  display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.4rem 0.75rem; 
+  border-radius: 999px; font-size: 0.75rem; font-weight: 600; text-align: center; 
+}
+.comp-green { background: rgba(74, 222, 128, 0.15); color: var(--ps-success); border: 1px solid rgba(74, 222, 128, 0.3); }
+.comp-amber { background: rgba(251, 191, 36, 0.15); color: var(--ps-warm); border: 1px solid rgba(251, 191, 36, 0.3); }
+.comp-blue { background: rgba(34, 211, 238, 0.15); color: var(--ps-accent); border: 1px solid rgba(34, 211, 238, 0.3); }
+
+/* Sidebar */
+section[data-testid="stSidebar"] { background: var(--ps-bg-elevated); border-right: 1px solid var(--ps-border); }
+section[data-testid="stSidebar"] .stMarkdown { color: var(--ps-text); }
+
+/* Expanders */
+.streamlit-expanderHeader { 
+  background: var(--ps-card) !important; border: 1px solid var(--ps-border) !important; 
+  border-radius: 8px !important; color: var(--ps-text) !important; 
+}
+.streamlit-expanderContent { 
+  background: var(--ps-input-bg) !important; border: 1px solid var(--ps-border) !important; 
+  border-top: none !important; border-radius: 0 0 8px 8px !important; 
+}
+
+/* Containers with border */
+.stContainer > div[style*="border"] { 
+  border-color: var(--ps-border) !important; background: var(--ps-card) !important; 
+}
+
+/* Download button */
+.stDownloadButton > button { 
+  background: var(--ps-card) !important; border: 1px solid var(--ps-border) !important; 
+  color: var(--ps-text) !important; 
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--ps-bg); }
+::-webkit-scrollbar-thumb { background: var(--ps-border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--ps-text-muted); }
