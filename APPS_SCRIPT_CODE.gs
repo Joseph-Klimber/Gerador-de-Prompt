@@ -1,13 +1,13 @@
 // ============================================================
-// Apps Script — Code.gs (Backend de Licença + Configs)
+// Apps Script - Code.gs (Backend de Licenca + Configs)
 // ============================================================
-// COLE ESTE CÓDIGO NO SEU PROJETO APPS SCRIPT (script.google.com)
+// COLE ESTE CODIGO NO SEU PROJETO APPS SCRIPT (script.google.com)
 // Substitua YOUR_SHEET_ID pelo ID da sua planilha Google Sheets
-// Deploy → New deployment → Type: Web app → Execute as: Me → Who has access: Anyone
+// Deploy -> New deployment -> Type: Web app -> Execute as: Me -> Who has access: Anyone
 // Cole a URL gerada no Secrets do Streamlit Cloud como APPS_SCRIPT_URL
 // ============================================================
 
-const SHEET_ID = "YOUR_SHEET_ID"; // ← SUBSTITUA PELO ID DA SUA PLANILHA
+const SHEET_ID = "YOUR_SHEET_ID"; // SUBSTITUA PELO ID DA SUA PLANILHA
 const SHEET_NAME = "Assinaturas"; // Aba com colunas: Email | Expiracao | Config (JSON string)
 const MAX_REQUESTS_PER_MINUTE = 10;
 const CACHE_TTL = 60; // segundos
@@ -29,11 +29,11 @@ function doPost(e) {
     const email = (data.email || "").toLowerCase().trim();
 
     if (!email || !email.includes("@")) {
-      return jsonResponse({ok: false, erro: "Não autorizado"});
+      return jsonResponse({ok: false, erro: "Nao autorizado"});
     }
 
     const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(SHEET_NAME);
-    
+
     switch (action) {
       case "verificar":
         return handleVerificar(sheet, email);
@@ -41,14 +41,13 @@ function doPost(e) {
         return handleCarregar(sheet, email);
       case "salvar":
         const config = data.config;
-        if (!config) return jsonResponse({ok: false, erro: "Config não fornecida"});
+        if (!config) return jsonResponse({ok: false, erro: "Config nao fornecida"});
         return handleSalvar(sheet, email, config);
       default:
-        return jsonResponse({ok: false, erro: "Ação inválida"});
+        return jsonResponse({ok: false, erro: "Acao invalida"});
     }
 
   } catch (err) {
-    // Log interno (não vaza pro usuário)
     console.error("Apps Script Error:", err);
     return jsonResponse({ok: false, erro: "Erro interno"});
   } finally {
@@ -59,8 +58,8 @@ function doPost(e) {
 function handleVerificar(sheet, email) {
   const rows = sheet.getDataRange().getValues();
   let authorized = false, expiracao = "";
-  
-  for (let i = 1; i < rows.length; i++) { // pula header
+
+  for (let i = 1; i < rows.length; i++) {
     if (rows[i][0] && rows[i][0].toString().toLowerCase() === email) {
       const exp = new Date(rows[i][1]);
       if (exp > new Date()) {
@@ -70,21 +69,20 @@ function handleVerificar(sheet, email) {
       break;
     }
   }
-  
-  // SEMPRE resposta genérica — não vaza "expirado" vs "não existe"
+
   return jsonResponse({
     ok: authorized,
     expiracao: authorized ? expiracao : "",
-    erro: authorized ? "" : "Não autorizado"
+    erro: authorized ? "" : "Nao autorizado"
   });
 }
 
 function handleCarregar(sheet, email) {
   const rows = sheet.getDataRange().getValues();
-  
+
   for (let i = 1; i < rows.length; i++) {
     if (rows[i][0] && rows[i][0].toString().toLowerCase() === email) {
-      const configStr = rows[i][2]; // Coluna C = Config
+      const configStr = rows[i][2];
       if (configStr) {
         try {
           const config = JSON.parse(configStr);
@@ -93,32 +91,30 @@ function handleCarregar(sheet, email) {
           return jsonResponse({ok: false, erro: "Config corrompida"});
         }
       }
-      return jsonResponse({ok: false, erro: "Não autorizado"});
+      return jsonResponse({ok: false, erro: "Nao autorizado"});
     }
   }
-  return jsonResponse({ok: false, erro: "Não autorizado"});
+  return jsonResponse({ok: false, erro: "Nao autorizado"});
 }
 
 function handleSalvar(sheet, email, config) {
   const rows = sheet.getDataRange().getValues();
   const configStr = JSON.stringify(config);
   let rowIndex = -1;
-  
+
   for (let i = 1; i < rows.length; i++) {
     if (rows[i][0] && rows[i][0].toString().toLowerCase() === email) {
-      rowIndex = i + 1; // 1-based + header
+      rowIndex = i + 1;
       break;
     }
   }
-  
+
   if (rowIndex > 0) {
-    // Atualiza existente
-    sheet.getRange(rowIndex, 3).setValue(configStr); // Coluna C
+    sheet.getRange(rowIndex, 3).setValue(configStr);
   } else {
-    // Novo (não deveria acontecer no fluxo normal — user já deve estar na planilha via Kiwify)
     sheet.appendRow([email, new Date(), configStr]);
   }
-  
+
   return jsonResponse({ok: true});
 }
 
@@ -128,10 +124,8 @@ function jsonResponse(obj) {
 }
 
 function getClientIdentifier(e) {
-  // Apps Script não expõe IP real; use User-Agent + timestamp como proxy
-  // Para rate-limit real por IP, use Cloudflare Workers / proxy reverso
   const ua = e.headers["User-Agent"] || "unknown";
-  return Utilities.getUuid() + "-" + ua.substring(0, 20); // sessão única aproximada
+  return Utilities.getUuid() + "-" + ua.substring(0, 20);
 }
 
 function checkRateLimit(key) {
@@ -143,13 +137,13 @@ function checkRateLimit(key) {
 }
 
 // ============================================================
-// OPCIONAL: CAPTCHA Turnstile (Cloudflare - Grátis Ilimitado)
+// OPCIONAL: CAPTCHA Turnstile (Cloudflare - Gratis Ilimitado)
 // ============================================================
-// 1. Crie site em https://dash.cloudflare.com/ → Turnstile → Add site
+// 1. Crie site em https://dash.cloudflare.com/ -> Turnstile -> Add site
 // 2. Pegue Site Key + Secret Key
 // 3. No app.py (frontend), adicione widget Turnstile no login
 // 4. No doPost acima, adicione:
-//    if (data.captcha && !verifyTurnstile(data.captcha)) return jsonResponse({ok: false, erro: "CAPTCHA inválido"});
+//    if (data.captcha && !verifyTurnstile(data.captcha)) return jsonResponse({ok: false, erro: "CAPTCHA invalido"});
 //
 // function verifyTurnstile(token) {
 //   const secret = "SUA_SECRET_KEY_TURNSTILE";
