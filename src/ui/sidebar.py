@@ -213,6 +213,7 @@ def _render_showcase() -> None:
 
 def _render_showcase_image(filename: str, fallback_emoji: str) -> None:
     """Renderiza imagem de showcase ou fallback."""
+    from pathlib import Path
     img_path = Path(__file__).parent.parent.parent / "assets" / filename
     try:
         if img_path.exists():
