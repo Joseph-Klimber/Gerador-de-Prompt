@@ -7,15 +7,18 @@ import json
 import html
 import time
 import random
-import secrets
 import unicodedata
 import streamlit as st
+
+# Google GenAI imports com tratamento de erro robusto
 try:
     from google import genai
     from google.genai import types
+    from google.genai import errors as genai_errors
 except ImportError:
     genai = None
     types = None
+    genai_errors = None
 OPCOES_SENSUALIDADE = ["1 - Seguro (SFW)","2 - Menos Seguro","3 - Ecchi Leve","4 - Ecchi","5 - Picante","6 - Dual (Com & Sem Censura)"]
 BANCO_DE_MOTORES = {
     "ComfyUI / Pony SDXL": {"regra_positivo": "Tradução TAG-A-TAG. Mantenha 100% dos detalhes. Ordem: score_9, score_8_up, score_7_up, score_6_up, score_5_up, score_4_up -> source_* -> rating_* -> [contagem e gênero, ex: 1girl, solo] -> [descrição física completa] -> [roupa detalhada completa] -> [ação completa] -> [cenário completo]. Use vírgulas. Nunca resuma.", "regra_negativo": "Sem regras fixas. Crie tags que sejam o oposto exato das características principais (oposto da roupa, oposto da luz, oposto do cenário, oposto da qualidade). Ex: se positivo tem 'highly detailed', negativo tem 'low detail, blurry'."},
@@ -131,19 +134,45 @@ def _extrair_retry_after_segundos(erro_str):
         if m2: return min(float(m2.group(1)), 30.0)
     except Exception: pass
     return None
-def _eh_erro_transitorio_gemini(e):
-    s=str(e).lower()
-    if any(k in s for k in ("invalid argument","validation","not supported","unsupported","unknown field")): return False
-    if any(k in s for k in ("503","429","500","502","504","overloaded","unavailable","resource exhausted","internal error","deadline exceeded")):
-        if any(p in s for p in ("temperature","top_p","top_k","candidate_count","thinking")):
-            if "temperature" in s or "not supported" in s or "unsupported" in s: return False
-        return True
-    try:
-        code=getattr(e,"code",None) or getattr(e,"status_code",None) or getattr(getattr(e,"response",None),"status_code",None)
-        if code in (429,500,502,503,504):
-            if any(p in s for p in ("temperature","candidate_count")) and "not supported" in s: return False
+def _eh_erro_transitorio_gemini(e) -> bool:
+    """Verifica se erro é transitório (retry automático) usando exceções tipadas quando disponível."""
+    # Se temos acesso às exceções tipadas do google.genai, use-as
+    if genai_errors is not None:
+        # ServerError (5xx) → sempre transitório
+        if isinstance(e, genai_errors.ServerError):
             return True
-    except Exception: pass
+        # ClientError com código 429 (rate limit) → transitório
+        if isinstance(e, genai_errors.ClientError):
+            code = getattr(e, "code", None)
+            if code == 429:
+                return True
+            # 400/401/403/404 → não transitório (erro permanente de configuração)
+            if code in (400, 401, 403, 404):
+                return False
+            # Outros 4xx → assumir não transitório por segurança
+            return False
+    
+    # Fallback: string matching legado (caso google.genai.errors não esteja disponível)
+    s = str(e).lower()
+    # Erros de validação/configuração → NÃO transitórios
+    if any(k in s for k in ("invalid argument", "validation", "not supported", "unsupported", "unknown field")):
+        return False
+    # Códigos de erro transitórios conhecidos
+    if any(k in s for k in ("503", "429", "500", "502", "504", "overloaded", "unavailable", "resource exhausted", "internal error", "deadline exceeded")):
+        # Mas se for erro de parâmetro não suportado (ex: temperature), não retentar
+        if any(p in s for p in ("temperature", "top_p", "top_k", "candidate_count", "thinking")):
+            if "temperature" in s or "not supported" in s or "unsupported" in s:
+                return False
+        return True
+    # Tentativa extra via code/status_code attributes
+    try:
+        code = getattr(e, "code", None) or getattr(e, "status_code", None) or getattr(getattr(e, "response", None), "status_code", None)
+        if code in (429, 500, 502, 503, 504):
+            if any(p in s for p in ("temperature", "candidate_count")) and "not supported" in s:
+                return False
+            return True
+    except Exception:
+        pass
     return False
 def _build_gemini_config(system_instruction, model_id, temperature=None):
     if types is None:
@@ -154,15 +183,19 @@ def _build_gemini_config(system_instruction, model_id, temperature=None):
     if temperature is not None: kwargs["temperature"]=temperature
     return types.GenerateContentConfig(**kwargs)
 def _gerar_com_retry(client, model, contents, config, tentativas=3):
-    ultimo_erro=None
+    """Gera conteúdo com retry exponencial e respeito a Retry-After."""
+    ultimo_erro = None
     for tentativa in range(tentativas):
-        try: return client.models.generate_content(model=model, contents=contents, config=config)
+        try:
+            return client.models.generate_content(model=model, contents=contents, config=config)
         except Exception as e:
-            ultimo_erro=e
-            if not _eh_erro_transitorio_gemini(e) or tentativa==tentativas-1: raise
-            retry_after=_extrair_retry_after_segundos(str(e))
-            espera=retry_after if retry_after is not None else (2**(tentativa+1))+random.uniform(0,1.0)
-            espera=min(espera,20.0)
+            ultimo_erro = e
+            if not _eh_erro_transitorio_gemini(e) or tentativa == tentativas - 1:
+                raise
+            retry_after = _extrair_retry_after_segundos(str(e))
+            # Backoff exponencial + jitter menor (0-0.5s), teto 30s
+            espera = retry_after if retry_after is not None else (2 ** (tentativa + 1)) + random.uniform(0, 0.5)
+            espera = min(espera, 30.0)
             time.sleep(espera)
     raise ultimo_erro
 def _msg_erro_diagnostico(e):
@@ -179,42 +212,54 @@ def _msg_erro_amigavel(e):
     return f"⚠️ **Erro Sistémico:** {texto[:500]}"
 def _chamar_motor_texto(system_prompt, user_prompt, modelo_gemini=None, temperature=0.25):
     from src.config_store import carregar_config
-    config=carregar_config(st.session_state.get("user_email",""))
-    chave_texto=st.session_state.get("input_key_texto","").strip() or config.get("chaves",{}).get("Chave Texto","")
-    if not chave_texto or genai is None: raise RuntimeError("Nenhuma chave configurada para Texto. Adicione a 'Chave Gemini (Texto)' no painel lateral.")
-    modelo_segundo_gemini=(modelo_gemini or "").strip() if modelo_gemini else ""
-    if not modelo_segundo_gemini: modelo_segundo_gemini=(st.session_state.get("modelo_texto_select") or "").strip()
-    if not modelo_segundo_gemini: modelo_segundo_gemini=config.get("modelo_texto", MODELO_TEXTO_PADRAO)
-    if modelo_segundo_gemini not in OPCOES_GEMINI_3: modelo_segundo_gemini=MODELO_TEXTO_PADRAO
-    sys_final=f"{system_prompt}\n\n[REF-VERIF:{secrets.token_hex(8)}]"
-    candidatos=[modelo_segundo_gemini]+[m for m in OPCOES_GEMINI_3 if m != modelo_segundo_gemini]
-    ultimo_erro=None
+    config = carregar_config(st.session_state.get("user_email", ""))
+    chave_texto = st.session_state.get("input_key_texto", "").strip() or config.get("chaves", {}).get("Chave Texto", "")
+    if not chave_texto or genai is None:
+        raise RuntimeError("Nenhuma chave configurada para Texto. Adicione a 'Chave Gemini (Texto)' no painel lateral.")
+    modelo_segundo_gemini = (modelo_gemini or "").strip() if modelo_gemini else ""
+    if not modelo_segundo_gemini:
+        modelo_segundo_gemini = (st.session_state.get("modelo_texto_select") or "").strip()
+    if not modelo_segundo_gemini:
+        modelo_segundo_gemini = config.get("modelo_texto", MODELO_TEXTO_PADRAO)
+    if modelo_segundo_gemini not in OPCOES_GEMINI_3:
+        modelo_segundo_gemini = MODELO_TEXTO_PADRAO
+    # Removido token de verificação [REF-VERIF:...] — poluía contexto e consumia tokens
+    sys_final = system_prompt
+    candidatos = [modelo_segundo_gemini] + [m for m in OPCOES_GEMINI_3 if m != modelo_segundo_gemini]
+    ultimo_erro = None
     for modelo_try in candidatos:
         for modo_temp in (temperature, None):
             try:
-                client=genai.Client(api_key=chave_texto)
-                cfg=_build_gemini_config(sys_final, modelo_try, temperature=modo_temp)
-                resp=_gerar_com_retry(client, modelo_try, user_prompt, cfg)
-                texto=getattr(resp,"text",""); texto=str(texto or "").strip()
-                if texto and "[REF-VERIF:" not in texto:
-                    sufixo="" if modo_temp is not None else " sem temp"
+                client = genai.Client(api_key=chave_texto)
+                cfg = _build_gemini_config(sys_final, modelo_try, temperature=modo_temp)
+                resp = _gerar_com_retry(client, modelo_try, user_prompt, cfg)
+                texto = getattr(resp, "text", "")
+                texto = str(texto or "").strip()
+                if texto:
+                    sufixo = "" if modo_temp is not None else " sem temp"
                     return texto, f"{modelo_try} (Texto{sufixo})"
                 raise RuntimeError("O modelo retornou uma resposta em branco.")
             except Exception as e:
-                ultimo_erro=e; s=str(e).lower()
-                eh_transitorio=_eh_erro_transitorio_gemini(e)
-                eh_validation=any(k in s for k in ("invalid argument","validation","not supported","unsupported"))
-                if eh_validation and modo_temp is not None: continue
+                ultimo_erro = e
+                s = str(e).lower()
+                eh_transitorio = _eh_erro_transitorio_gemini(e)
+                eh_validation = any(k in s for k in ("invalid argument", "validation", "not supported", "unsupported"))
+                if eh_validation and modo_temp is not None:
+                    continue
                 if eh_transitorio or "503" in s or "overloaded" in s or "unavailable" in s or "429" in s or "resource exhausted" in s:
-                    if modo_temp is not None: continue
+                    if modo_temp is not None:
+                        continue
                     break
-                if modo_temp is not None: continue
+                if modo_temp is not None:
+                    continue
                 break
         if ultimo_erro is not None and (_eh_erro_transitorio_gemini(ultimo_erro) or "503" in str(ultimo_erro).lower() or "overloaded" in str(ultimo_erro).lower()):
-            if modelo_try==candidatos[-1]: break
+            if modelo_try == candidatos[-1]:
+                break
             continue
         if ultimo_erro is not None and not _eh_erro_transitorio_gemini(ultimo_erro) and "503" not in str(ultimo_erro).lower():
             if "404" in str(ultimo_erro).lower() or "not found" in str(ultimo_erro).lower():
-                if modelo_try!=candidatos[-1]: continue
+                if modelo_try != candidatos[-1]:
+                    continue
         break
     raise RuntimeError(f"Falha no Segundo Gemini (Engenharia de Texto) após fallback {candidatos}: {str(ultimo_erro)}")

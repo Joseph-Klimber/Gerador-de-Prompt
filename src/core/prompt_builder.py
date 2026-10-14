@@ -1,9 +1,11 @@
 # core/prompt_builder.py
 """Construtor do prompt final para o Mestre — separa lógica de montagem da UI."""
 from dataclasses import dataclass
+from typing import List
+
+import streamlit as st
 
 from src.config.settings import OPCOES_SENSUALIDADE
-from src.text_engines import BANCO_DE_MOTORES
 from src.core.destination import injetar_estrutura_destino, teto_destino
 from src.core.state import StateKeys, get_ideia_fonte
 from src.core.token_budget import orcamento_fonte, estimar_tokens
@@ -16,7 +18,7 @@ class PromptContext:
     sensualidade: str
     estilo_conversao: str
     foco_contexto: str
-    sugestoes: list[str]
+    sugestoes: List[str]
     ideia_fonte: str
     max_tokens: int
     structure: str
@@ -25,7 +27,6 @@ class PromptContext:
 
 def build_prompt_context() -> PromptContext:
     """Coleta todo contexto necessário do session_state e monta PromptContext."""
-    destino = StateKeys.get_destino()  # será resolvido via session_state
     return PromptContext(
         destino=st.session_state.get(StateKeys.DESTINO_SELECT, ""),
         sensualidade=st.session_state.get(StateKeys.SENS_SLIDER, OPCOES_SENSUALIDADE[1]),
@@ -39,58 +40,77 @@ def build_prompt_context() -> PromptContext:
     )
 
 
+class PromptTemplate:
+    """Buffer eficiente para montagem de prompts grandes — evita O(n²) em concatenação."""
+
+    def __init__(self):
+        self._parts: List[str] = []
+
+    def add(self, text: str) -> "PromptTemplate":
+        self._parts.append(text)
+        return self
+
+    def add_line(self, text: str = "") -> "PromptTemplate":
+        self._parts.append(text + "\n")
+        return self
+
+    def build(self) -> str:
+        return "".join(self._parts)
+
+
 def montar_prompt_mestre(ctx: PromptContext, perfil) -> str:
     """Monta o prompt completo para o SYS_MESTRE_CORE.
-    
+
     Args:
         ctx: Contexto com parâmetros da UI
         perfil: DestinationProfile resolvido
-    
+
     Returns:
         Prompt string pronto para envio ao modelo.
     """
     max_tokens = ctx.max_tokens
     structure = perfil.structure
     dica_tecnica = perfil.dica_tecnica
-    
+
     # ── 1. Orçamento real na narrativa fonte ──
     txt_b = ctx.ideia_fonte
     if not txt_b.strip():
         raise ValueError("Narrativa vazia — escreva no Passo 1 ou gere rascunho no Passo 4")
-    
+
     est_antes = estimar_tokens(txt_b)
     txt_b, est_fonte, cortou = orcamento_fonte(txt_b, max_tokens)
-    
+
     # ── 2. P-Base (bloco de instruções fixas) ──
-    eng = BANCO_DE_MOTORES.get(ctx.destino, {})
-    regra_pos = eng.get("regra_positivo", "Tradução literal detalhada.")
-    regra_neg = eng.get("regra_negativo", "N/A")
-    
     sug_str = "\n".join(f"- {s}" for s in ctx.sugestoes) if ctx.sugestoes else "Nenhuma sugestão."
     _dica_txt = f"\n💡 DICA TÉCNICA: {dica_tecnica}" if dica_tecnica else ""
-    
-    bloco = (
-        f"DESTINO: {ctx.destino}\n"
-        f"RATING: {ctx.sensualidade}\n"
-        f"FORMATO: {structure}\n\n"
-        f"1. NARRATIVA VISUAL (FONTE DA TRADUÇÃO):\n{txt_b}\n\n"
-        f"2. SUGESTÕES CIRÚRGICAS INCORPORADAS:\n{sug_str}"
-        f"\n\n======================================\n"
-        f"3. SINTAXE NATIVA: {ctx.destino}\n"
-        f"======================================\n"
-        f"- POSITIVO: {regra_pos}\n"
-        f"- NEGATIVO: {regra_neg}"
-        f"{_dica_txt}\n\n"
-        f"SAÍDA OBRIGATÓRIA:\n"
-        f"1. PROMPT (ENGLISH)\n"
-        f"2. NEGATIVE PROMPT DINÂMICO (ENGLISH)\n"
-        f"3. LEGENDA\n"
-        f"4. HASHTAGS"
-    )
-    
+
+    tpl = PromptTemplate()
+    tpl.add_line(f"DESTINO: {ctx.destino}")
+    tpl.add_line(f"RATING: {ctx.sensualidade}")
+    tpl.add_line(f"FORMATO: {structure}")
+    tpl.add_line("")
+    tpl.add_line("1. NARRATIVA VISUAL (FONTE DA TRADUÇÃO):")
+    tpl.add_line(txt_b)
+    tpl.add_line("")
+    tpl.add_line("2. SUGESTÕES CIRÚRGICAS INCORPORADAS:")
+    tpl.add_line(sug_str)
+    tpl.add_line("")
+    tpl.add_line("======================================")
+    tpl.add_line(f"3. SINTAXE NATIVA: {ctx.destino}")
+    tpl.add_line("======================================")
+    tpl.add_line("- POSITIVO: {eng['regra_positivo']}")
+    tpl.add_line("- NEGATIVO: {eng.get('regra_negativo', 'N/A')}")
+    tpl.add_line(_dica_txt)
+    tpl.add_line("")
+    tpl.add_line("SAÍDA OBRIGATÓRIA:")
+    tpl.add_line("1. PROMPT (ENGLISH)")
+    tpl.add_line("2. NEGATIVE PROMPT DINÂMICO (ENGLISH)")
+    tpl.add_line("3. LEGENDA")
+    tpl.add_line("4. HASHTAGS")
+
     # ── 3. Injeção estrutural por destino ──
-    p = injetar_estrutura_destino(bloco, ctx.destino)
-    
+    p = injetar_estrutura_destino(tpl.build(), ctx.destino)
+
     # ── 4. Estilo e regras ──
     if "Fotorrealismo" in ctx.estilo_conversao:
         p += (
@@ -105,14 +125,14 @@ def montar_prompt_mestre(ctx: PromptContext, perfil) -> str:
             "anime style. Replace photo/smartphone/26mm/photorealistic with anime illustration terms. "
             "PROHIBIT photo/smartphone lens/photorealistic terms."
         )
-    
+
     if "Literal" in ctx.foco_contexto:
         p += (
             "\n[MODO LITERAL]: Remova floreios poéticos/metafóricos, MAS MANTENHA todas as "
             "características do sujeito e os detalhes principais da composição. "
             "LITERAL NÃO É RESUMO E NÃO É OMISSÃO."
         )
-    
+
     # ── 5. Orçamento de saída (teto duro) ──
     p += (
         f"\n\n⚠️ ORÇAMENTO DE SAÍDA — TETO DURO: {max_tokens} tokens para TUDO "
@@ -128,7 +148,7 @@ def montar_prompt_mestre(ctx: PromptContext, perfil) -> str:
         "licença para inflar nem omitir: é ordem de espremer MAIS DENSIDADE no mesmo teto.\n"
         "- 'PROMPT' E 'NEGATIVE' EXCLUSIVAMENTE EM INGLÊS."
     )
-    
+
     return p
 
 
