@@ -18,124 +18,66 @@ except ImportError:
     types = None
 OPCOES_SENSUALIDADE = ["1 - Seguro (SFW)","2 - Menos Seguro","3 - Ecchi Leve","4 - Ecchi","5 - Picante","6 - Dual (Com & Sem Censura)"]
 BANCO_DE_MOTORES = {
-    "ComfyUI / Pony SDXL": {
-        "regra_positivo": (
-            "Tradução TAG-A-TAG ultra-compacta. Mantenha 100% dos atributos visuais sem usar artigos (a, an, the) ou verbos de ligação. "
-            "Ordem com Front-Loading Óptico: score_9, score_8_up, score_7_up, score_6_up, score_5_up, score_4_up -> source_* -> rating_* -> "
-            "[enquadramento, ângulo e iluminação principal] -> [contagem e gênero, ex: 1girl, solo] -> [descrição física e rosto completos] -> "
-            "[roupa, cores, materiais e adornos completos] -> [ação e pose exata] -> [cenário fg/mg/bg completo]. Use vírgulas. Zero omissão de atributos."
-        ),
-        "regra_negativo": "Sem regras fixas. Crie tags que sejam o oposto exato das características principais (oposto da roupa, oposto da luz, oposto do cenário, oposto da qualidade). Ex: se positivo tem 'highly detailed', negativo tem 'low detail, blurry'."
-    },
-    "ComfyUI / Illustrious": {
-        "regra_positivo": (
-            "Tradução TAG-A-TAG hierárquica de alta densidade. Mantenha 100% dos detalhes eliminando conectivos gramaticais. "
-            "Ordem com Front-Loading: masterpiece, best quality, amazing quality, very aesthetic, absurdres, newest -> rating -> "
-            "[enquadramento, lente e iluminação] -> [contagem e gênero] -> [corpo, rosto, olhos, cabelo e adornos] -> "
-            "[roupa completa, cortes e materiais] -> [pose exata de membros e olhar] -> [cenário fg/mg/bg completo]. Use vírgulas. Nunca omita atributos."
-        ),
-        "regra_negativo": "Sem regras fixas. Crie tags antônimas. Oponha-se diretamente ao estilo, anatomia e elementos visuais do prompt positivo. Adicione 'displeasing, very displeasing'."
-    },
-    "Flux.1 / Flux.2 (Klein)": {
-        "regra_positivo": (
-            "Tradução em PROSA TELEGRÁFICA DE ALTA DENSIDADE. Mantenha 100% dos detalhes da narrativa original (zero omissão de sujeito, roupa, ação, cenário, iluminação ou lente), "
-            "mas com Compactação Sintática: elimine frases de preenchimento ('who is', 'there is', 'located in', 'we see') e una adjetivos em termos compostos diretos (ex: 'sunlit cobblestone alley' em vez de 'an alley made of cobblestone that is lit by the sun'). "
-            "Ordem obrigatória: [Enquadramento + Lente + Estilo + Iluminação Principal] -> [Sujeito + Biotipo + Rosto + Cabelo + Adornos + Roupa completa] -> [Ação e Pose anatômica] -> [Cenário FG/MG/BG e Micro-texturas]. PROIBIDO OMITIR ATRIBUTOS."
-        ),
-        "regra_negativo": "Não aplicável (deixe em branco)."
-    },
-    "Midjourney v6.1+": {
-        "regra_positivo": (
-            "Tradução em PROSA DENSA E COMPACTA (Token-Packed). Ordem de máxima atenção: "
-            "[Enquadramento, Lente e Iluminação] + [Sujeito detalhado com roupa exata, tecidos e cores] + [Ação e Pose] + [Cenário FG/MG/BG]. "
-            "Elimine artigos e verbos auxiliares desnecessários para concentrar 100% dos tokens em substantivos visuais e adjetivos técnicos. "
-            "Adicione no final: --ar 16:9 --v 6.1 --stylize 250 --style raw. PROIBIDO OMITIR ATRIBUTOS."
-        ),
-        "regra_negativo": "Não aplicável (deixe em branco)."
-    },
-    "ComfyUI / SDXL Base Natural": {
-        "regra_positivo": (
-            "Tradução em PROSA COMPACTA OTIMIZADA PARA CLIP (77/154 tokens). "
-            "Estrutura enxuta sem pronomes relativos: '[Enquadramento, câmera, lente e iluminação], [Sujeito + biotipo + rosto + cabelo + roupas completas em termos compostos], "
-            "[Ação e pose exata], [Cenário FG/MG/BG e texturas]'. Mantenha 100% dos detalhes visuais eliminando palavras vazias ('who is', 'located in', 'the lighting is')."
-        ),
-        "regra_negativo": "Sem regras fixas. Crie um parágrafo de palavras que representem o oposto do estilo e qualidade solicitados, focando em deformações, baixa qualidade e estilos opostos (ex: cartoon se o pedido for foto)."
-    },
-    "Ideogram 4": {
-        "regra_positivo": (
-            "Tradução em PROSA DESCRITIVA DENSA E COMPACTA. Foco na diagramação, cores exatas e tipografia. "
-            "Ordem: [Estilo, Enquadramento e Tipografia entre ASPAS DUPLAS] -> [Sujeito, roupa e materiais com 100% dos detalhes] -> [Ação] -> [Cenário e Iluminação]. "
-            "Use sintaxe enxuta sem conectivos redundantes para preservar todos os detalhes sem diluir a atenção do modelo."
-        ),
-        "regra_negativo": "Não aplicável (deixe em branco)."
-    },
-    "Krea 2": {
-        "regra_positivo": (
-            "Tradução em PROSA ESTRUTURADA E COMPACTA (Alta Densidade Fotográfica). "
-            "Ordem: [Câmera, Lente, Ângulo, DOF e Iluminação Física] -> Foreground ([100% dos detalhes de sujeito, rosto, adornos, roupa e pose em sintaxe direta]) -> "
-            "Midground ([elementos intermediários e interação espacial]) -> Background ([cenário de fundo e texturas]). "
-            "Elimine verbos explicativos e mantenha 100% dos atributos visuais."
-        ),
-        "regra_negativo": "Crie um negativo baseado estritamente no oposto do que foi pedido. Foque em evitar falhas geométricas e iluminação irreal que contrariem o positivo."
-    },
-    "Qwen / Tongyi Wanxiang": {
-        "regra_positivo": (
-            "Tradução em INGLÊS DIRETO DE ALTA DENSIDADE (VLM-Optimized). "
-            "Ordem: [Câmera/Lente + Atmosfera e Luz] + [Sujeito, Biotipo, Rosto e Roupas Detalhadas] + [Ação/Movimento] + [Cenário fg/mg/bg]. "
-            "Mantenha 100% dos detalhes visuais usando frases curtas, diretas e sem metáforas ou conectivos longos."
-        ),
-        "regra_negativo": "Crie um negativo focando exclusivamente no oposto do conceito central e nas falhas anatómicas e de qualidade indesejáveis para esse contexto específico."
-    },
-    "Ernie (ViLG)": {
-        "regra_positivo": (
-            "Tradução em INGLÊS FACTUAL E COMPACTO. Foco em posição espacial exata e atributos diretos. "
-            "Ordem: [Enquadramento e Luz] + [Sujeito completo, roupa e objetos] + [Posição espacial FG/MG/BG no cenário]. Zero metáforas e zero palavras vazias."
-        ),
-        "regra_negativo": "Crie um negativo com termos técnicos de arte que representem o oposto do estilo desejado e que protejam contra anatomia falha."
-    },
-    "Z-Image Turbo (ZiT)": {
-        "regra_positivo": (
-            "Tradução em PROSA TELEGRÁFICA ULTRA-COMPACTA (Empacotamento Semântico). "
-            "Converta 100% dos atributos da narrativa para adjetivos compostos em inglês, eliminando todos os artigos e conectivos dispensáveis. "
-            "Ordem: [Câmera + Luz] -> [Sujeito + cor/material exato da roupa + adornos] -> [Ação/Pose] -> [Cenário fg/mg/bg]. "
-            "Retenção de 100% dos detalhes visuais com mínimo consumo de tokens."
-        ),
-        "regra_negativo": "Crie um negativo que seja a antítese do pedido. Foque em proibir estilos opostos e texturas irrealistas."
-    }
+    "ComfyUI / Pony SDXL": {"regra_positivo": "Tradução TAG-A-TAG. Mantenha 100% dos detalhes. Ordem: score_9, score_8_up, score_7_up, score_6_up, score_5_up, score_4_up -> source_* -> rating_* -> [contagem e gênero, ex: 1girl, solo] -> [descrição física completa] -> [roupa detalhada completa] -> [ação completa] -> [cenário completo]. Use vírgulas. Nunca resuma.", "regra_negativo": "Sem regras fixas. Crie tags que sejam o oposto exato das características principais (oposto da roupa, oposto da luz, oposto do cenário, oposto da qualidade). Ex: se positivo tem 'highly detailed', negativo tem 'low detail, blurry'."},
+    "ComfyUI / Illustrious": {"regra_positivo": "Tradução TAG-A-TAG hierárquica. Mantenha 100% dos detalhes. Ordem: masterpiece, best quality, amazing quality, very aesthetic, absurdres, newest -> rating -> [contagem e gênero] -> [corpo e rosto] -> [roupa completa e materiais] -> [pose exata] -> [cenário completo] -> [luz e câmera]. Use vírgulas. Nunca resuma.", "regra_negativo": "Sem regras fixas. Crie tags antônimas. Oponha-se diretamente ao estilo, anatomia e elementos visuais do prompt positivo. Adicione 'displeasing, very displeasing'."},
+    "Flux.1 / Flux.2 (Klein)": {"regra_positivo": "Tradução em PROSA FLUIDA E DENSA. Mantenha 100% dos detalhes da narrativa original (sem omitir nada do sujeito, roupa, ação, cenário, iluminação ou lente). Escreva um parágrafo longo e descritivo. Descreva materiais, cores exatas e relações espaciais. NUNCA resuma. PROIBIDO OMITIR.", "regra_negativo": "Não aplicável (deixe em branco)."},
+    "Midjourney v6.1+": {"regra_positivo": "Tradução em PROSA DENSA E COMPLETA. Estrutura: [Sujeito detalhado com roupa exata e cores] + [Ação] + [Cenário] + [Luz e Câmera]. Adicione no final: --ar 16:9 --v 6.1 --stylize 250 --style raw. Não omita detalhes vitais. FIDELIDADE > CONCISÃO. PROIBIDO RESUMIR.", "regra_negativo": "Não aplicável (deixe em branco)."},
+    "ComfyUI / SDXL Base Natural": {"regra_positivo": "Tradução em PROSA. 'A breathtaking photo of [Sujeito + Roupas completas detalhadas], who is [Ação], located in [Cenário completo]. The lighting is [Luz exata]. Shot on [Câmera e Lente]'. Mantenha todos os detalhes.", "regra_negativo": "Sem regras fixas. Crie um parágrafo de palavras que representem o oposto do estilo e qualidade solicitados, focando em deformações, baixa qualidade e estilos opostos (ex: cartoon se o pedido for foto)."},
+    "Ideogram 4": {"regra_positivo": "Tradução em PROSA DESCRITIVA E COMPLETA. Foco na diagramação e tipografia. Descreva o sujeito, roupa e cenário com 100% dos detalhes. Qualquer texto literal solicitado DEVE estar entre ASPAS DUPLAS. FIDELIDADE > BREVIDADE — mantenha todos os detalhes mesmo que ultrapasse 150 palavras. PROIBIDO RESUMIR — omissão = falha.", "regra_negativo": "Não aplicável (deixe em branco)."},
+    "Krea 2": {"regra_positivo": "Tradução em PROSA ESTRUTURADA E DENSA. Descreva explicitamente a separação: Foreground (com todos os detalhes do sujeito e roupa), Midground (elementos intermediários e ação) e Background (cenário completo e luz). Mantenha alta densidade de detalhes. PROIBIDO RESUMIR — omitir = falha.", "regra_negativo": "Crie um negativo baseado estritamente no oposto do que foi pedido. Foque em evitar falhas geométricas e iluminação irreal que contrariem o positivo."},
+    "Qwen / Tongyi Wanxiang": {"regra_positivo": "Tradução em INGLÊS LITERAL E DIRETO. Ordem: [Sujeito e Roupas Detalhadas] + [Cenário fg/mg/bg] + [Movimento] + [Linguagem de Câmera/Lente] + [Atmosfera e Luz]. Mantenha todos os detalhes sem floreios poéticos.", "regra_negativo": "Crie um negativo focando exclusivamente no oposto do conceito central e nas falhas anatómicas e de qualidade indesejáveis para esse contexto específico."},
+    "Ernie (ViLG)": {"regra_positivo": "Tradução em INGLÊS (ou chinês se a cena for asiática). Foco em factualidade e posição espacial exata. Descreva onde cada elemento (sujeito completo, roupa, objetos) está no cenário. Zero metáforas.", "regra_negativo": "Crie um negativo com termos técnicos de arte que representem o oposto do estilo desejado e que protejam contra anatomia falha."},
+    "Z-Image Turbo (ZiT)": {"regra_positivo": "Tradução em PROSA DENSA (60-120 palavras, expanda se necessário para manter 95% de fidelidade). Descreva com precisão militar: Sujeito + cor/material exato da roupa + Ação + Cenário fg/mg/bg + Luz + Câmera. Não omita NENHUM atributo da narrativa original. FIDELIDADE > LIMITE DE PALAVRAS. PROIBIDO RESUMIR.", "regra_negativo": "Crie um negativo que seja a antítese do pedido. Foque em proibir estilos opostos e texturas irrealistas."}
 }
-
-SYS_MESTRE_CORE = r"""Você é um COMPILADOR VISUAL DE ALTA DENSIDADE do Prompt Studio.
-Sua ÚNICA função é converter a "Narrativa Visual" fornecida (em português) para um Prompt na sintaxe do motor destino (em inglês) com 100% de retenção de atributos e 0% de desperdício de tokens.
-
+OPCOES_DESTINO = ["Selecione o Motor Destino..."] + list(BANCO_DE_MOTORES.keys())
+OPCOES_GEMINI_3 = ["gemini-3.5-flash","gemini-3.6-flash","gemini-3.7-flash"]
+MODELO_VISAO_PADRAO = "gemini-3.5-flash"
+MODELO_TEXTO_PADRAO = "gemini-3.5-flash"
+SYS_GERADOR_PREPROMPT = r"""Você é o Diretor de Arte Óptica e Composição Visual do Prompt Studio.
+Gere um PRÉ-PROMPT visual completo, cinematográfico e coeso em Português a partir da ideia do usuário.
+REGRAS MANDATÓRIAS:
+1. PRESERVAÇÃO: Preserve nomes de personagens, franquias, gênero e ações informadas.
+2. ZERO FLUFF: Adicione somente o que uma câmera captaria. É ESTRITAMENTE PROIBIDO usar metáforas.
+3. SAÍDA EXCLUSIVA: Responda APENAS com a descrição visual coesa em Português."""
+SYS_COMPOSITOMETRO = r"""Você é o Auditor Óptico e Analista de Composição do Prompt Studio.
+Retorne EXCLUSIVAMENTE um JSON válido no formato:
+{"sujeito_status": "Definido | Vago | Ausente", "sujeito_resumo": "resumo do sujeito", "acao_status": "Presente | Estática | Ausente", "cenario_status": "Definido | Vago | Ausente", "iluminacao_status": "Definida | Inferida pela IA", "camera_status": "Definida | Inferida pela IA", "nivel_sensualidade_sugerido": 1, "diagnostico_texto": "breve diagnostico", "sugestoes_cirurgicas": [ "sugestão 1", "sugestão 2" ]}"""
+SYS_LEITOR_PARAMETRICO = r"""Você é o Cirurgião Óptico FORENSE do Prompt Studio. Extraia 100% dos detalhes visíveis. PROIBIDO RESUMIR.
+Cada valor JSON deve ser denso (não frase curta):
+- sujeito: etnia, biotipo, rosto, expressão, olhos, cabelo (cor/comprimento/padrão), adornos (piercing/tatuagem/unhas/joias/maquiagem)
+- acao: pose exata, direção olhar, inclinação cabeça, cada braço/mão/perna, objetos segurados
+- cenario: fg+mg+bg, texturas parede/chão, objetos/mobiliário/vegetação/arquitetura
+- iluminacao: tipo exato, direção, temperatura, sombras
+- estilo_camera: lente/focal, ângulo, DOF, estilo e qualidade (8k, highly detailed)
+Se faltar item visível você FALHOU.
+Retorne só JSON: {"sujeito":"...","acao":"...","cenario":"...","iluminacao":"...","estilo_camera":"..."}"""
+SYS_MESTRE_CORE = r"""Você é um TRADUTOR LITERAL de alta precisão do Prompt Studio.
+Sua ÚNICA função é converter a "Narrativa Visual" fornecida (em português) para um Prompt na sintaxe do motor destino (em inglês).
 DIRETIVAS CRÍTICAS INEGOCIÁVEIS:
-1. FIDELIDADE ABSOLUTA DE ATRIBUTOS (100% DOS DETALHES VISUAIS):
-Você DEVE incluir NO PROMPT FINAL EM INGLÊS absolutamente TODOS os atributos visuais presentes na Narrativa Visual original:
-- Etnia, biotipo, formato do rosto, expressões, cor/formato de olhos, cabelo (cor, comprimento, padrão).
-- Todos os adornos (piercings, tatuagens, unhas, joias, maquiagem).
-- TODAS as peças de roupa (cores exatas, tecidos, estampas, cortes e caimentos).
-- Posicionamento corporal exato (direção do olhar, inclinação da cabeça, posição de cada braço/mão/perna, objetos segurados).
-- Cenário completo (primeiro plano, plano médio, fundo, texturas de parede/chão, mobiliário/objetos).
-- Iluminação exata (tipo, direção, temperatura, sombras) e especificações de câmera/lente/DOF.
-- Nomes de franquias e personagens citados (ex: Street Fighter, Chun-Li) — preserve LITERALMENTE no prompt em inglês.
-SE VOCÊ OMITIR UM ÚNICO ATRIBUTO VISUAL DA NARRATIVA, VOCÊ FALHOU NA SUA MISSÃO.
-
-2. DESIDRATAÇÃO SINTÁTICA (TOKEN PACKING — COMO NÃO ESTOURAR OS TOKENS):
-Proibido omitir detalhes visuais, mas OBRIGATÓRIO eliminar "gordura gramatical" na tradução para o inglês:
-- Elimine expressões vazias como "there is", "we can see", "who is", "which is", "located in", "featuring a", "with a lighting that".
-- Use aglutinação adjetiva do inglês para reduzir tokens mantendo 100% da informação (Ex: em vez de "a jacket made of black leather with zippers of silver", escreva "silver-zippered black leather jacket").
-- Troque orações longas por locuções diretas separadas por vírgula ou ponto-e-vírgula, preservando cada cor, textura, posição e material.
-
-3. NEGATIVO DINÂMICO (A REGRA DOS ANTÔNIMOS):
-Se o motor suportar Prompts Negativos, gere um negativo que seja o oposto direto da descrição fornecida. NUNCA use as palavras exatas do positivo no negativo (não escreva "no beard" ou "without beard").
+1. PROIBIÇÃO ABSOLUTA DE RESUMOS (FIDELIDADE 100%):
+Você DEVE incluir NO PROMPT FINAL EM INGLÊS absolutamente TODOS os detalhes presentes na Narrativa Visual original. 
+Isto inclui: 
+- Toda a etnia, biotipo, formato do rosto e expressões.
+- Toda a cor de olhos, cor e estilo de cabelo (comprimento, padrão, aspecto).
+- Todos os adornos (piercings, tatuagens, unhas, etc).
+- TODAS as peças de roupa, incluindo cores exatas, tecidos, estampas, cortes e caimentos.
+- O posicionamento corporal exato (para onde olha, inclinação da cabeça, posição de cada braço e mão, objetos segurados).
+- O cenário detalhado (o que está no primeiro plano, o que está no fundo, texturas de parede, objetos pendurados).
+- A iluminação exata descrita.
+- As especificações exatas de câmera, lente e foco.
+- Nomes de franquias e personagens citados (ex: Street Fighter, Chun-Li) — preserve LITERALMENTE no prompt em inglês, nunca generalize para "inspired by" sem o nome original.
+SE VOCÊ OMITIR UM ÚNICO DETALHE DA NARRATIVA, VOCÊ FALHOU NA SUA MISSÃO.
+2. NEGATIVO DINÂMICO (A REGRA DOS ANTÔNIMOS):
+Se o motor suportar Prompts Negativos, você DEVE gerar um negativo que seja o oposto direto da descrição fornecida. NUNCA use as palavras exatas do positivo no negativo (não escreva "no beard" ou "without beard").
 - Se o positivo descreve um "banheiro limpo e branco", o negativo deve incluir "dirty, dark, cluttered, outdoor".
 - Se o positivo é "foto fotorrealista", o negativo deve incluir "illustration, anime, cartoon, 3d render, drawing".
-
-4. SINTAXE E FRONT-LOADING DO MOTOR:
-Respeite a ordem de montagem exigida pelo motor selecionado (posicionando câmera/lente/luz na frente quando especificado para evitar truncamento no final do prompt).
-
+- O negativo atua como um escudo para proteger a fidelidade do sujeito. 
+4. PRESERVAÇÃO DE FRANQUIAS/PERSONAGENS: Se a narrativa citar franquia/personagem, mantenha o nome exato no PROMPT em inglês (ex: "Street Fighter Chun-Li"). Não omita nem generalize — fidelidade exige o nome.
+3. SINTAXE DO MOTOR:
+Respeite a ordem de montagem exigida pelo motor (tags vs. prosa), mas sempre priorizando a regra número 1 (100% de detalhes).
 FORMATO EXATO DE SAÍDA:
 1. PROMPT (ENGLISH)
-[O seu prompt compilado completo, ultra-denso e com 100% dos atributos aqui]
+[O seu prompt traduzido completo e detalhado aqui]
 2. NEGATIVE PROMPT (ENGLISH)
 [O seu prompt negativo baseado em antônimos aqui]
 3. LEGENDA
