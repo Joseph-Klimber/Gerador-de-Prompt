@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 
 from src.config.settings import OPCOES_SENSUALIDADE
+from src.text_engines import BANCO_DE_MOTORES
 from src.core.destination import injetar_estrutura_destino, teto_destino
 from src.core.state import StateKeys, get_ideia_fonte
 from src.core.token_budget import orcamento_fonte, estimar_tokens
@@ -61,6 +62,10 @@ def montar_prompt_mestre(ctx: PromptContext, perfil) -> str:
     txt_b, est_fonte, cortou = orcamento_fonte(txt_b, max_tokens)
     
     # ── 2. P-Base (bloco de instruções fixas) ──
+    eng = BANCO_DE_MOTORES.get(ctx.destino, {})
+    regra_pos = eng.get("regra_positivo", "Tradução literal detalhada.")
+    regra_neg = eng.get("regra_negativo", "N/A")
+    
     sug_str = "\n".join(f"- {s}" for s in ctx.sugestoes) if ctx.sugestoes else "Nenhuma sugestão."
     _dica_txt = f"\n💡 DICA TÉCNICA: {dica_tecnica}" if dica_tecnica else ""
     
@@ -73,8 +78,8 @@ def montar_prompt_mestre(ctx: PromptContext, perfil) -> str:
         f"\n\n======================================\n"
         f"3. SINTAXE NATIVA: {ctx.destino}\n"
         f"======================================\n"
-        f"- POSITIVO: {{eng['regra_positivo']}}\n"
-        f"- NEGATIVO: {{eng.get('regra_negativo', 'N/A')}}"
+        f"- POSITIVO: {regra_pos}\n"
+        f"- NEGATIVO: {regra_neg}"
         f"{_dica_txt}\n\n"
         f"SAÍDA OBRIGATÓRIA:\n"
         f"1. PROMPT (ENGLISH)\n"

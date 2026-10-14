@@ -165,7 +165,7 @@ _DIR_VISAO: Final = {
 # Perfis de otimização por modelo de destino
 MODEL_PROFILES: Final = {
     "flux": {
-        "max_tokens": 512,
+        "max_tokens": 800,
         "structure": "subject-context-lighting-style",
         "dica_tecnica": "Use weighting: subject:1.2, background:1.0, lighting:1.1",
         "tags_obrigatorias": ["subject", "environment"],
