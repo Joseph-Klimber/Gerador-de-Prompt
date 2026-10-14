@@ -82,7 +82,7 @@ def _img_para_inline(img_file) -> tuple[str, str]:
 
 
 def _chamar_motor_visao(img_file, estilo_conversao: str, sens_escolhida: str,
-                       modelo_gemini: str, api_key: str, max_tokens_destino: int) -> dict:
+                       modelo_gemini: str, max_tokens_destino: int) -> dict:
     """Motor de visão. É origem de dados do prompt final.
     
     `max_tokens_destino` é o teto do destino escolhido no Passo 0. A visão é a
@@ -91,9 +91,12 @@ def _chamar_motor_visao(img_file, estilo_conversao: str, sens_escolhida: str,
     
     Devolve {"tipo": "json", "dados": {...5 campos...}} ou {"tipo": "texto", ...}.
     """
+    from src.config_store import carregar_config
+    config = carregar_config(st.session_state.get("user_email", ""))
+    api_key = st.session_state.get("input_key_visao", "").strip() or config.get("chaves", {}).get("Chave Visao", "")
     if not api_key:
         raise RuntimeError("Chave Visão não configurada — conecte sua chave na barra lateral.")
-    
+
     tetos = _teto_visao_palavras(max_tokens_destino)
     b64, mime = _img_para_inline(img_file)
     
