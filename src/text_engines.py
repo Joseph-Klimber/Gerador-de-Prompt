@@ -19,7 +19,7 @@ except ImportError:
     genai = None
     types = None
     genai_errors = None
-from src.config.settings import OPCOES_SENSUALIDADE
+from src.config.settings import OPCOES_SENSUALIDADE, OPCOES_GEMINI_3, MODELO_VISAO_PADRAO, MODELO_TEXTO_PADRAO
 BANCO_DE_MOTORES = {
     "ComfyUI / Pony SDXL": {"regra_positivo": "Tradução TAG-A-TAG. Mantenha 100% dos detalhes. Ordem: score_9, score_8_up, score_7_up, score_6_up, score_5_up, score_4_up -> source_* -> rating_* -> [contagem e gênero, ex: 1girl, solo] -> [descrição física completa] -> [roupa detalhada completa] -> [ação completa] -> [cenário completo]. Use vírgulas. Nunca resuma.", "regra_negativo": "Sem regras fixas. Crie tags que sejam o oposto exato das características principais (oposto da roupa, oposto da luz, oposto do cenário, oposto da qualidade). Ex: se positivo tem 'highly detailed', negativo tem 'low detail, blurry'."},
     "ComfyUI / Illustrious": {"regra_positivo": "Tradução TAG-A-TAG hierárquica. Mantenha 100% dos detalhes. Ordem: masterpiece, best quality, amazing quality, very aesthetic, absurdres, newest -> rating -> [contagem e gênero] -> [corpo e rosto] -> [roupa completa e materiais] -> [pose exata] -> [cenário completo] -> [luz e câmera]. Use vírgulas. Nunca resuma.", "regra_negativo": "Sem regras fixas. Crie tags antônimas. Oponha-se diretamente ao estilo, anatomia e elementos visuais do prompt positivo. Adicione 'displeasing, very displeasing'."},
@@ -33,9 +33,6 @@ BANCO_DE_MOTORES = {
     "Z-Image Turbo (ZiT)": {"regra_positivo": "Tradução em PROSA DENSA (60-120 palavras, expanda se necessário para manter 95% de fidelidade). Descreva com precisão militar: Sujeito + cor/material exato da roupa + Ação + Cenário fg/mg/bg + Luz + Câmera. Não omita NENHUM atributo da narrativa original. FIDELIDADE > LIMITE DE PALAVRAS. PROIBIDO RESUMIR.", "regra_negativo": "Crie um negativo que seja a antítese do pedido. Foque em proibir estilos opostos e texturas irrealistas."}
 }
 OPCOES_DESTINO = ["Selecione o Motor Destino..."] + list(BANCO_DE_MOTORES.keys())
-OPCOES_GEMINI_3 = ["gemini-3.5-flash","gemini-3.6-flash","gemini-3.7-flash"]
-MODELO_VISAO_PADRAO = "gemini-3.5-flash"
-MODELO_TEXTO_PADRAO = "gemini-3.5-flash"
 SYS_GERADOR_PREPROMPT = r"""Você é o Diretor de Arte Óptica e Composição Visual do Prompt Studio.
 Gere um PRÉ-PROMPT visual completo, cinematográfico e coeso em Português a partir da ideia do usuário.
 REGRAS MANDATÓRIAS:

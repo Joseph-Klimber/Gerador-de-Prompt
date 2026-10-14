@@ -15,6 +15,11 @@ PAGE_ICON: Final = "⚡"
 LAYOUT: Final = "wide"
 SIDEBAR_STATE: Final = "expanded"
 
+# Modelos Gemini (BYOK)
+OPCOES_GEMINI_3: Final = ["gemini-3.5-flash", "gemini-3.6-flash", "gemini-3.7-flash"]
+MODELO_VISAO_PADRAO: Final = "gemini-3.5-flash"
+MODELO_TEXTO_PADRAO: Final = "gemini-3.5-flash"
+
 # Token Budget Constants
 CPT_PT: Final = 3.0    # caracteres por token, PT (conservador)
 CPT_EN: Final = 3.85   # caracteres por token, EN (conservador)
