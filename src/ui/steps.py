@@ -228,7 +228,7 @@ def render_passo_4_rascunho_auditoria(destino_ok: bool) -> None:
     """Passo 4: Rascunho & Validação (Opcionais Prévios)."""
     st.markdown("---")
     st.markdown("### 4️⃣ Passo 4: Rascunho & Validação (Opcional)")
-    
+
     col_b1, col_b2 = st.columns(2)
     with col_b1:
         btn_pre = st.button(
@@ -242,46 +242,63 @@ def render_passo_4_rascunho_auditoria(destino_ok: bool) -> None:
             use_container_width=True,
             disabled=not destino_ok,
         )
-    
+
     if not destino_ok:
         st.caption(
             "🔒 O rascunho e a auditoria dependem do motor de destino (Passo 0) — sem ele "
             "não há formato-alvo para rascunhar."
         )
-    
+
     # Rascunho
-        if btn_pre:
-            # Usa get_ideia_fonte() — prioriza ajuste fino > rascunho > ideia original
-            ideia_fonte = get_ideia_fonte()
-            if not ideia_fonte:
-                st.warning("Escreva a sua Ideia no Passo 1 ou gere rascunho no Passo 4.")
-            else:
-                with st.spinner("Desenhando a cena com o Motor de Texto..."):
-                    try:
-                        destino = st.session_state[StateKeys.DESTINO_SELECT]
-                        perfil = perfil_do_destino(destino)
-                        prompt = build_rascunho_prompt(
-                            destino, perfil,
-                            ideia_fonte,
-                            st.session_state[StateKeys.SENS_SLIDER],
-                            st.session_state[StateKeys.ESTILO_CONVERSAO],
-                            st.session_state[StateKeys.FOCO_CONTEXTO],
-                        )
-                        modelo_base = st.session_state.get(StateKeys.MODELO_TEXTO_SELECT, "gemini-1.5-flash")
-                        txt, prov = _chamar_motor_texto(SYS_GERADOR_PREPROMPT, prompt, modelo_gemini=modelo_base)
-                    
-                        st.session_state[StateKeys.IDEIA_HIST_FIX] = st.session_state[StateKeys.IDEIA_INPUT]
-                        st.session_state[StateKeys.PREPROMPT] = txt
-                        st.session_state[StateKeys.PENDING_PREPROMPT_EDITADO] = txt
-                        st.rerun()
-                    except Exception as e:
-                        st.error(_msg_erro_amigavel(e))
-    
+    if btn_pre:
+        # Usa get_ideia_fonte() — prioriza ajuste fino > rascunho > ideia original
+        ideia_fonte = get_ideia_fonte()
+        if not ideia_fonte:
+            st.warning("Escreva a sua Ideia no Passo 1 ou gere rascunho no Passo 4.")
+        else:
+            with st.spinner("Desenhando a cena com o Motor de Texto..."):
+                try:
+                    destino = st.session_state[StateKeys.DESTINO_SELECT]
+                    perfil = perfil_do_destino(destino)
+                    prompt = build_rascunho_prompt(
+                        destino, perfil,
+                        ideia_fonte,
+                        st.session_state[StateKeys.SENS_SLIDER],
+                        st.session_state[StateKeys.ESTILO_CONVERSAO],
+                        st.session_state[StateKeys.FOCO_CONTEXTO],
+                    )
+                    modelo_base = st.session_state.get(StateKeys.MODELO_TEXTO_SELECT, "gemini-1.5-flash")
+                    txt, prov = _chamar_motor_texto(SYS_GERADOR_PREPROMPT, prompt, modelo_gemini=modelo_base)
+
+                    st.session_state[StateKeys.IDEIA_HIST_FIX] = st.session_state[StateKeys.IDEIA_INPUT]
+                    st.session_state[StateKeys.PREPROMPT] = txt
+                    st.session_state[StateKeys.PENDING_PREPROMPT_EDITADO] = txt
+                    st.rerun()
+                except Exception as e:
+                    st.error(_msg_erro_amigavel(e))
+
     # Auditoria
     if btn_ava:
-        if not st.session_state[StateKeys.IDEIA_INPUT].strip():
-            st.warning("Escreva a sua Ideia no Passo 1.")
+        ideia_fonte_auditoria = get_ideia_fonte()
+        if not ideia_fonte_auditoria:
+            st.warning("Escreva a sua Ideia no Passo 1 ou gere rascunho no Passo 4.")
         else:
+            with st.spinner("Raio-X em andamento com o Motor de Texto..."):
+                try:
+                    modelo_base = st.session_state.get(StateKeys.MODELO_TEXTO_SELECT, "gemini-1.5-flash")
+                    txt, prov = _chamar_motor_texto(
+                        SYS_COMPOSITOMETRO,
+                        f"AVALIE:\n{ideia_fonte_auditoria}",
+                        modelo_gemini=modelo_base
+                    )
+                    diag = parse_json_ia(txt)
+                    if not diag:
+                        st.error("⚠️ Erro de formato no Raio-X. Tente novamente.")
+                    else:
+                        st.session_state[StateKeys.DIAGNOSTICO] = diag
+                        st.rerun()
+                except Exception as e:
+                    st.error(_msg_erro_amigavel(e))
             with st.spinner("Raio-X em andamento com o Motor de Texto..."):
                 try:
                     modelo_base = st.session_state.get(StateKeys.MODELO_TEXTO_SELECT, "gemini-1.5-flash")
