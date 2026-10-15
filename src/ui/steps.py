@@ -7,7 +7,7 @@ from src.config.settings import (
     OPCOES_FOCO_CONTEXTO,
 )
 from src.text_engines import OPCOES_DESTINO
-from src.core.state import StateKeys, sync_pending, clear_ideia_cascade, clear_sintese
+from src.core.state import StateKeys, sync_pending, clear_ideia_cascade, clear_sintese, get_ideia_fonte
 from src.core.destination import (
     perfil_do_destino, teto_destino, estrutura_destino, dica_tecnica_destino,
     validar_destino_escolhido,
@@ -75,15 +75,16 @@ def render_passo_1_ideia(destino_ok: bool) -> None:
     st.markdown("---")
     st.markdown("### 1️⃣ Passo 1: A Sua Ideia (A Narrativa Visual)")
     st.caption("O ponto de partida. Descreva o que imagina ou veja a caixa preencher-se usando o Passo 2.")
-    
+
     st.text_area(
         "Insira a sua Ideia:",
         key=StateKeys.IDEIA_INPUT,
         height=140,
         label_visibility="collapsed",
-        disabled=not destino_ok,
+        # Removido disabled=not destino_ok — causava perda de valor ao habilitar
+        # Os botões downstream (visão, rascunho, auditoria) já são desabilitados
     )
-    
+
     if st.button("🗑️ Limpar Ideia", use_container_width=False, disabled=not destino_ok):
         clear_ideia_cascade()
         st.rerun()
@@ -249,30 +250,32 @@ def render_passo_4_rascunho_auditoria(destino_ok: bool) -> None:
         )
     
     # Rascunho
-    if btn_pre:
-        if not st.session_state[StateKeys.IDEIA_INPUT].strip():
-            st.warning("Escreva a sua Ideia no Passo 1.")
-        else:
-            with st.spinner("Desenhando a cena com o Motor de Texto..."):
-                try:
-                    destino = st.session_state[StateKeys.DESTINO_SELECT]
-                    perfil = perfil_do_destino(destino)
-                    prompt = build_rascunho_prompt(
-                        destino, perfil,
-                        st.session_state[StateKeys.IDEIA_INPUT],
-                        st.session_state[StateKeys.SENS_SLIDER],
-                        st.session_state[StateKeys.ESTILO_CONVERSAO],
-                        st.session_state[StateKeys.FOCO_CONTEXTO],
-                    )
-                    modelo_base = st.session_state.get(StateKeys.MODELO_TEXTO_SELECT, "gemini-1.5-flash")
-                    txt, prov = _chamar_motor_texto(SYS_GERADOR_PREPROMPT, prompt, modelo_gemini=modelo_base)
+        if btn_pre:
+            # Usa get_ideia_fonte() — prioriza ajuste fino > rascunho > ideia original
+            ideia_fonte = get_ideia_fonte()
+            if not ideia_fonte:
+                st.warning("Escreva a sua Ideia no Passo 1 ou gere rascunho no Passo 4.")
+            else:
+                with st.spinner("Desenhando a cena com o Motor de Texto..."):
+                    try:
+                        destino = st.session_state[StateKeys.DESTINO_SELECT]
+                        perfil = perfil_do_destino(destino)
+                        prompt = build_rascunho_prompt(
+                            destino, perfil,
+                            ideia_fonte,
+                            st.session_state[StateKeys.SENS_SLIDER],
+                            st.session_state[StateKeys.ESTILO_CONVERSAO],
+                            st.session_state[StateKeys.FOCO_CONTEXTO],
+                        )
+                        modelo_base = st.session_state.get(StateKeys.MODELO_TEXTO_SELECT, "gemini-1.5-flash")
+                        txt, prov = _chamar_motor_texto(SYS_GERADOR_PREPROMPT, prompt, modelo_gemini=modelo_base)
                     
-                    st.session_state[StateKeys.IDEIA_HIST_FIX] = st.session_state[StateKeys.IDEIA_INPUT]
-                    st.session_state[StateKeys.PREPROMPT] = txt
-                    st.session_state[StateKeys.PENDING_PREPROMPT_EDITADO] = txt
-                    st.rerun()
-                except Exception as e:
-                    st.error(_msg_erro_amigavel(e))
+                        st.session_state[StateKeys.IDEIA_HIST_FIX] = st.session_state[StateKeys.IDEIA_INPUT]
+                        st.session_state[StateKeys.PREPROMPT] = txt
+                        st.session_state[StateKeys.PENDING_PREPROMPT_EDITADO] = txt
+                        st.rerun()
+                    except Exception as e:
+                        st.error(_msg_erro_amigavel(e))
     
     # Auditoria
     if btn_ava:
