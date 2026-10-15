@@ -4,7 +4,7 @@ import streamlit as st
 
 from src.config.settings import (
     OPCOES_SENSUALIDADE, OPCOES_ESTILO_CONVERSAO,
-    OPCOES_FOCO_CONTEXTO,
+    OPCOES_FOCO_CONTEXTO, MODELO_VISAO_PADRAO,
 )
 from src.text_engines import OPCOES_DESTINO
 from src.core.state import StateKeys, sync_pending, clear_ideia_cascade, clear_sintese, get_ideia_fonte
@@ -137,52 +137,52 @@ def render_passo_2_visao(destino_ok: bool) -> None:
         )
     
     if btn_ler:
-        if not img_file:
-            st.warning("Selecione uma imagem primeiro.")
-        else:
-            with st.spinner("Analisando matriz óptica com Varredura Ultra-Densa..."):
-                try:
-                    modelo_base = st.session_state.get(StateKeys.MODELO_VISAO_SELECT, "gemini-1.5-flash")
-                    estilo_conversao = st.session_state.get(StateKeys.ESTILO_CONVERSAO, "Manter Estilo Original")
-                    sens_escolhida = st.session_state.get(StateKeys.SENS_SLIDER, OPCOES_SENSUALIDADE[1])
-                    max_tokens = teto_destino(st.session_state.get(StateKeys.DESTINO_SELECT, ""))
-                    
-                    res = _chamar_motor_visao(
-                        img_file, estilo_conversao, sens_escolhida, modelo_base, max_tokens
-                    )
-                    st.session_state[StateKeys.NORM_INFO] = res.get("norm") or {}
-                    
-                    if res["tipo"] == "json":
-                        st.session_state[StateKeys.IMG_PARAMETROS] = res["dados"]
-                        st.session_state[StateKeys.PENDING_IMG_SUJ] = res["dados"].get("sujeito", "")
-                        st.session_state[StateKeys.PENDING_IMG_CEN] = res["dados"].get("cenario", "")
-                        st.session_state[StateKeys.PENDING_IMG_ACT] = res["dados"].get("acao", "")
-                        st.session_state[StateKeys.PENDING_IMG_ILU] = res["dados"].get("iluminacao", "")
-                        st.session_state[StateKeys.PENDING_IMG_EST] = res["dados"].get("estilo_camera", "")
-                        
-                        ideia_extraida = (
-                            f"Sujeito: {res['dados'].get('sujeito','')}\n\n"
-                            f"Ação: {res['dados'].get('acao','')}\n\n"
-                            f"Cenário: {res['dados'].get('cenario','')}\n\n"
-                            f"Iluminação: {res['dados'].get('iluminacao','')}\n\n"
-                            f"Estilo: {res['dados'].get('estilo_camera','')}"
+            if not img_file:
+                st.warning("Selecione uma imagem primeiro.")
+            else:
+                with st.spinner("Analisando matriz óptica com Varredura Ultra-Densa..."):
+                    try:
+                        modelo_base = st.session_state.get(StateKeys.MODELO_VISAO_SELECT, MODELO_VISAO_PADRAO)
+                        estilo_conversao = st.session_state.get(StateKeys.ESTILO_CONVERSAO, "Manter Estilo Original")
+                        sens_escolhida = st.session_state.get(StateKeys.SENS_SLIDER, OPCOES_SENSUALIDADE[1])
+                        max_tokens = teto_destino(st.session_state.get(StateKeys.DESTINO_SELECT, ""))
+
+                        res = _chamar_motor_visao(
+                            img_file, estilo_conversao, sens_escolhida, modelo_base, max_tokens
                         )
-                        st.session_state[StateKeys.PENDING_IDEIA] = ideia_extraida
-                    else:
-                        st.session_state[StateKeys.PENDING_IDEIA] = res["texto"]
-                        st.session_state.pop(StateKeys.IMG_PARAMETROS, None)
-                    
-                    st.session_state.pop(StateKeys.PREPROMPT, None)
-                    st.rerun()
-                except Exception as e:
-                    st.error(_msg_erro_amigavel(e))
-                    with st.expander("🔍 Diagnóstico técnico — copie e me envie se persistir", expanded=False):
-                        st.code(_msg_erro_diagnostico(e), language="text")
-                        st.caption(
-                            f"Modelo: {st.session_state.get('modelo_visao_select', '?')} · "
-                            f"Arquivo: {img_file.name if img_file else '?'} · "
-                            f"Tamanho: {img_file.size/1024:.0f} KB" if img_file else ""
-                        )
+                        st.session_state[StateKeys.NORM_INFO] = res.get("norm") or {}
+
+                        if res["tipo"] == "json":
+                            st.session_state[StateKeys.IMG_PARAMETROS] = res["dados"]
+                            st.session_state[StateKeys.PENDING_IMG_SUJ] = res["dados"].get("sujeito", "")
+                            st.session_state[StateKeys.PENDING_IMG_CEN] = res["dados"].get("cenario", "")
+                            st.session_state[StateKeys.PENDING_IMG_ACT] = res["dados"].get("acao", "")
+                            st.session_state[StateKeys.PENDING_IMG_ILU] = res["dados"].get("iluminacao", "")
+                            st.session_state[StateKeys.PENDING_IMG_EST] = res["dados"].get("estilo_camera", "")
+
+                            ideia_extraida = (
+                                f"Sujeito: {res['dados'].get('sujeito','')}\n\n"
+                                f"Ação: {res['dados'].get('acao','')}\n\n"
+                                f"Cenário: {res['dados'].get('cenario','')}\n\n"
+                                f"Iluminação: {res['dados'].get('iluminacao','')}\n\n"
+                                f"Estilo: {res['dados'].get('estilo_camera','')}"
+                            )
+                            st.session_state[StateKeys.PENDING_IDEIA] = ideia_extraida
+                        else:
+                            st.session_state[StateKeys.PENDING_IDEIA] = res["texto"]
+                            st.session_state.pop(StateKeys.IMG_PARAMETROS, None)
+
+                        st.session_state.pop(StateKeys.PREPROMPT, None)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(_msg_erro_amigavel(e))
+                        with st.expander("🔍 Diagnóstico técnico — copie e me envie se persistir", expanded=False):
+                            st.code(_msg_erro_diagnostico(e), language="text")
+                            st.caption(
+                                f"Modelo: {st.session_state.get('modelo_visao_select', '?')} · "
+                                f"Arquivo: {img_file.name if img_file else '?'} · "
+                                f"Tamanho: {img_file.size/1024:.0f} KB" if img_file else ""
+                            )
     
     # Detalhador pericial editável
     if st.session_state.get(StateKeys.IMG_PARAMETROS):
