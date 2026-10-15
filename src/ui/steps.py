@@ -4,7 +4,7 @@ import streamlit as st
 
 from src.config.settings import (
     OPCOES_SENSUALIDADE, OPCOES_ESTILO_CONVERSAO,
-    OPCOES_FOCO_CONTEXTO, MODELO_VISAO_PADRAO,
+    OPCOES_FOCO_CONTEXTO, MODELO_VISAO_PADRAO, MODELO_TEXTO_PADRAO,
 )
 from src.text_engines import OPCOES_DESTINO
 from src.core.state import StateKeys, sync_pending, clear_ideia_cascade, clear_sintese, get_ideia_fonte
@@ -267,7 +267,7 @@ def render_passo_4_rascunho_auditoria(destino_ok: bool) -> None:
                         st.session_state[StateKeys.ESTILO_CONVERSAO],
                         st.session_state[StateKeys.FOCO_CONTEXTO],
                     )
-                    modelo_base = st.session_state.get(StateKeys.MODELO_TEXTO_SELECT, "gemini-1.5-flash")
+                    modelo_base = st.session_state.get(StateKeys.MODELO_TEXTO_SELECT, MODELO_TEXTO_PADRAO)
                     txt, prov = _chamar_motor_texto(SYS_GERADOR_PREPROMPT, prompt, modelo_gemini=modelo_base)
 
                     st.session_state[StateKeys.IDEIA_HIST_FIX] = st.session_state[StateKeys.IDEIA_INPUT]
@@ -285,7 +285,7 @@ def render_passo_4_rascunho_auditoria(destino_ok: bool) -> None:
         else:
             with st.spinner("Raio-X em andamento com o Motor de Texto..."):
                 try:
-                    modelo_base = st.session_state.get(StateKeys.MODELO_TEXTO_SELECT, "gemini-1.5-flash")
+                    modelo_base = st.session_state.get(StateKeys.MODELO_TEXTO_SELECT, MODELO_TEXTO_PADRAO)
                     txt, prov = _chamar_motor_texto(
                         SYS_COMPOSITOMETRO,
                         f"AVALIE:\n{ideia_fonte_auditoria}",
@@ -301,7 +301,7 @@ def render_passo_4_rascunho_auditoria(destino_ok: bool) -> None:
                     st.error(_msg_erro_amigavel(e))
             with st.spinner("Raio-X em andamento com o Motor de Texto..."):
                 try:
-                    modelo_base = st.session_state.get(StateKeys.MODELO_TEXTO_SELECT, "gemini-1.5-flash")
+                    modelo_base = st.session_state.get(StateKeys.MODELO_TEXTO_SELECT, MODELO_TEXTO_PADRAO)
                     txt, prov = _chamar_motor_texto(
                         SYS_COMPOSITOMETRO, 
                         f"AVALIE:\n{st.session_state[StateKeys.IDEIA_INPUT]}",
@@ -436,7 +436,7 @@ def render_passo_5_sintese(destino_ok: bool) -> None:
                 # monta prompt final (inclui orçamento na narrativa)
                 p = montar_prompt_mestre(ctx, perfil)
                 
-                modelo_base = st.session_state.get(StateKeys.MODELO_TEXTO_SELECT, "gemini-1.5-flash")
+                modelo_base = st.session_state.get(StateKeys.MODELO_TEXTO_SELECT, MODELO_TEXTO_PADRAO)
                 res, prov = _chamar_motor_texto(SYS_MESTRE_CORE, p, modelo_gemini=modelo_base)
                 
                 st.session_state[StateKeys.PROMPT_FINAL] = res
