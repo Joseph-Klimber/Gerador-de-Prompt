@@ -380,9 +380,9 @@ def _render_diagnostico() -> None:
 
 def render_passo_5_sintese(destino_ok: bool) -> None:
     """Passo 5: Síntese Final — compila prompt para o Mestre."""
-    from src.core.prompt_builder import montar_prompt_mestre
-    from src.core.token_budget import orcamento_fonte, estimar_tokens
-    from src.config.settings import TETO_FONTE_PCT
+    from core.prompt_builder import montar_prompt_mestre
+    from core.token_budget import orcamento_fonte, estimar_tokens
+    from config import TETO_FONTE_PCT
     
     st.markdown("---")
     st.markdown("### 5️⃣ Passo 5: Síntese Final")
