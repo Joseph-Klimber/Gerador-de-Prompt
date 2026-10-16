@@ -183,6 +183,34 @@ def get_ideia_fonte() -> str:
     return ajuste or base or ideia
 
 
+def backup_ideia() -> None:
+    """Salva cópia de segurança da ideia atual em chave imune a limpezas."""
+    atual = (st.session_state.get(StateKeys.IDEIA_INPUT) or "").strip()
+    if atual:
+        st.session_state[StateKeys.IDEIA_HIST_FIX] = atual
+
+
+def restore_ideia_if_empty() -> None:
+    """Restaura IDEIA_INPUT se estiver vazio, usando a melhor fonte disponível.
+    
+    Prioridade: IDEIA_HIST_FIX (backup explícito) > PREPROMPT_EDITADO > PREPROMPT.
+    Nunca sobrescreve se IDEIA_INPUT já tiver conteúdo.
+    """
+    if (st.session_state.get(StateKeys.IDEIA_INPUT) or "").strip():
+        return  # já tem conteúdo, não mexe
+    
+    for src_key in (
+        StateKeys.IDEIA_HIST_FIX,
+        StateKeys.PREPROMPT_EDITADO,
+        StateKeys.PREPROMPT,
+    ):
+        val = (st.session_state.get(src_key) or "").strip()
+        if val:
+            st.session_state[StateKeys.IDEIA_INPUT] = val
+            st.session_state[StateKeys.PENDING_IDEIA] = val  # garante persistência no próximo rerun
+            break
+
+
 def is_destino_valido() -> bool:
     """Verifica se destino foi escolhido e é válido."""
     dest = st.session_state.get(StateKeys.DESTINO_SELECT, "")

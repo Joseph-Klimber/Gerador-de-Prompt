@@ -41,7 +41,7 @@ if STYLES_CSS.exists():
     st.markdown(f"<style>{STYLES_CSS.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
 
 # ── Imports core ──
-from core.state import init_state, sync_pending, StateKeys
+from core.state import init_state, sync_pending, StateKeys, restore_ideia_if_empty
 from src.ui.sidebar import render_sidebar, render_login_page
 from src.ui.steps import (
     render_passo_0_destino,
@@ -87,19 +87,22 @@ def main() -> None:
             st.info("💡 Conecte suas chaves na barra lateral para ativar os motores.")
     
     # ── Pipeline de Passos ──
-    destino_ok = render_passo_0_destino()
-    
-    # CRÍTICO: sync_pending ANTES do Passo 1 para evitar race condition
-    # Quando há st.rerun() após extração de visão, o PENDING_IDEIA precisa
-    # estar sincronizado para IDEIA_INPUT ANTES do widget text_area ser criado.
-    sync_pending()
-    
-    render_passo_1_ideia(destino_ok)
-    render_passo_2_visao(destino_ok)
-    render_passo_3_modificadores(destino_ok)
-    render_passo_4_rascunho_auditoria(destino_ok)
-    render_passo_5_sintese(destino_ok)
-    render_output_final()
+        destino_ok = render_passo_0_destino()
+
+        # CRÍTICO: sync_pending ANTES do Passo 1 para evitar race condition
+        # Quando há st.rerun() após extração de visão, o PENDING_IDEIA precisa
+        # estar sincronizado para IDEIA_INPUT ANTES do widget text_area ser criado.
+        sync_pending()
+
+        # SALVA-Vidas: se IDEIA_INPUT sumiu (race condition), restaura do backup
+        restore_ideia_if_empty()
+
+        render_passo_1_ideia(destino_ok)
+        render_passo_2_visao(destino_ok)
+        render_passo_3_modificadores(destino_ok)
+        render_passo_4_rascunho_auditoria(destino_ok)
+        render_passo_5_sintese(destino_ok)
+        render_output_final()
 
 
 if __name__ == "__main__":

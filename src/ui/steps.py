@@ -7,7 +7,7 @@ from config import (
     OPCOES_FOCO_CONTEXTO, MODELO_VISAO_PADRAO, MODELO_TEXTO_PADRAO,
 )
 from src.text_engines import OPCOES_DESTINO
-from core.state import StateKeys, sync_pending, clear_ideia_cascade, clear_sintese, get_ideia_fonte
+from core.state import StateKeys, sync_pending, clear_ideia_cascade, clear_sintese, get_ideia_fonte, backup_ideia
 from core.destination import (
     perfil_do_destino, teto_destino, estrutura_destino, dica_tecnica_destino,
     validar_destino_escolhido,
@@ -250,32 +250,34 @@ def render_passo_4_rascunho_auditoria(destino_ok: bool) -> None:
         )
 
     # Rascunho
-    if btn_pre:
-        # Usa get_ideia_fonte() — prioriza ajuste fino > rascunho > ideia original
-        ideia_fonte = get_ideia_fonte()
-        if not ideia_fonte:
-            st.warning("Escreva a sua Ideia no Passo 1 ou gere rascunho no Passo 4.")
-        else:
-            with st.spinner("Desenhando a cena com o Motor de Texto..."):
-                try:
-                    destino = st.session_state[StateKeys.DESTINO_SELECT]
-                    perfil = perfil_do_destino(destino)
-                    prompt = build_rascunho_prompt(
-                        destino, perfil,
-                        ideia_fonte,
-                        st.session_state[StateKeys.SENS_SLIDER],
-                        st.session_state[StateKeys.ESTILO_CONVERSAO],
-                        st.session_state[StateKeys.FOCO_CONTEXTO],
-                    )
-                    modelo_base = st.session_state.get(StateKeys.MODELO_TEXTO_SELECT, MODELO_TEXTO_PADRAO)
-                    txt, prov = _chamar_motor_texto(SYS_GERADOR_PREPROMPT, prompt, modelo_gemini=modelo_base)
+        if btn_pre:
+            # Backup explícito ANTES de gerar — âncora à prova de falhas
+            backup_ideia()
+            # Usa get_ideia_fonte() — prioriza ajuste fino > rascunho > ideia original
+            ideia_fonte = get_ideia_fonte()
+            if not ideia_fonte:
+                st.warning("Escreva a sua Ideia no Passo 1 ou gere rascunho no Passo 4.")
+            else:
+                with st.spinner("Desenhando a cena com o Motor de Texto..."):
+                    try:
+                        destino = st.session_state[StateKeys.DESTINO_SELECT]
+                        perfil = perfil_do_destino(destino)
+                        prompt = build_rascunho_prompt(
+                            destino, perfil,
+                            ideia_fonte,
+                            st.session_state[StateKeys.SENS_SLIDER],
+                            st.session_state[StateKeys.ESTILO_CONVERSAO],
+                            st.session_state[StateKeys.FOCO_CONTEXTO],
+                        )
+                        modelo_base = st.session_state.get(StateKeys.MODELO_TEXTO_SELECT, MODELO_TEXTO_PADRAO)
+                        txt, prov = _chamar_motor_texto(SYS_GERADOR_PREPROMPT, prompt, modelo_gemini=modelo_base)
 
-                    st.session_state[StateKeys.IDEIA_HIST_FIX] = st.session_state[StateKeys.IDEIA_INPUT]
-                    st.session_state[StateKeys.PREPROMPT] = txt
-                    st.session_state[StateKeys.PENDING_PREPROMPT_EDITADO] = txt
-                    st.rerun()
-                except Exception as e:
-                    st.error(_msg_erro_amigavel(e))
+                        st.session_state[StateKeys.IDEIA_HIST_FIX] = st.session_state[StateKeys.IDEIA_INPUT]
+                        st.session_state[StateKeys.PREPROMPT] = txt
+                        st.session_state[StateKeys.PENDING_PREPROMPT_EDITADO] = txt
+                        st.rerun()
+                    except Exception as e:
+                        st.error(_msg_erro_amigavel(e))
 
     # Auditoria
     if btn_ava:
