@@ -2,14 +2,19 @@
 """Prompt Studio Cockpit — App principal modular.
 
 Arquitetura:
-- config/settings.py       → constantes, perfis, aliases
-- core/token_budget.py     → orçamento real de tokens, corte semiótico
-- core/destination.py      → resolução de perfil via alias
-- core/state.py            → session_state padronizado
-- core/prompt_builder.py   → montagem de prompts (Mestre, Rascunho, Auditoria)
-- ui/sidebar.py            → auth + centro de conexão
-- ui/steps.py              → Passos 0-5 + output final
-- src/*                    → módulos originais (auth, crypto, text_engines, vision, etc.)
+- config.py                  → constantes, perfis, aliases (Single Source of Truth)
+- schemas.py                 → contratos de dados (Pydantic-like dataclasses)
+- core/token_budget.py       → orçamento real de tokens, corte semiótico
+- core/destination.py        → resolução de perfil via alias
+- core/prompt_builder.py     → montagem de prompts (Mestre, Rascunho, Auditoria)
+- core/state.py              → session_state padronizado
+- src/crypto.py              → criptografia Fernet
+- src/config_store.py        → config local + nuvem (Apps Script)
+- src/auth.py                → autenticação via Google Sheets
+- src/text_engines.py        → motores de texto (BANCO_DE_MOTORES, SYS_*, helpers)
+- src/vision.py              → motor de visão (Gemini Vision)
+- ui/sidebar.py              → auth + centro de conexão
+- ui/steps.py                → Passos 0-5 + output final
 """
 import pathlib
 import sys
@@ -22,7 +27,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 # ── Streamlit Config ──
-from src.config.settings import PAGE_TITLE, PAGE_ICON, LAYOUT, SIDEBAR_STATE, STYLES_CSS
+from config import PAGE_TITLE, PAGE_ICON, LAYOUT, SIDEBAR_STATE, STYLES_CSS
 
 st.set_page_config(
     page_title=PAGE_TITLE,
@@ -36,7 +41,7 @@ if STYLES_CSS.exists():
     st.markdown(f"<style>{STYLES_CSS.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
 
 # ── Imports core ──
-from src.core.state import init_state, sync_pending, StateKeys
+from core.state import init_state, sync_pending, StateKeys
 from src.ui.sidebar import render_sidebar, render_login_page
 from src.ui.steps import (
     render_passo_0_destino,
@@ -83,6 +88,12 @@ def main() -> None:
     
     # ── Pipeline de Passos ──
     destino_ok = render_passo_0_destino()
+    
+    # CRÍTICO: sync_pending ANTES do Passo 1 para evitar race condition
+    # Quando há st.rerun() após extração de visão, o PENDING_IDEIA precisa
+    # estar sincronizado para IDEIA_INPUT ANTES do widget text_area ser criado.
+    sync_pending()
+    
     render_passo_1_ideia(destino_ok)
     render_passo_2_visao(destino_ok)
     render_passo_3_modificadores(destino_ok)

@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import Final
 
-from src.config.settings import MODEL_PROFILES, ALIASES_DESTINO
+from config import MODEL_PROFILES, ALIASES_DESTINO
 from src.text_engines import OPCOES_DESTINO
 
 

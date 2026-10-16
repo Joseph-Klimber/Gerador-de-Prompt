@@ -2,8 +2,9 @@
 """Barra lateral: Centro de Conexão e Autenticação."""
 import streamlit as st
 
-from src.crypto import fernet_disponivel, mascarar_email, OPCOES_GEMINI_3, MODELO_VISAO_PADRAO, MODELO_TEXTO_PADRAO
-from src.core.state import StateKeys, init_state
+from src.crypto import fernet_disponivel, mascarar_email
+from config import OPCOES_GEMINI_3, MODELO_VISAO_PADRAO, MODELO_TEXTO_PADRAO
+from core.state import StateKeys, init_state
 from src.config_store import carregar_config, salvar_config
 from src.auth import verificar_acesso_sheets
 

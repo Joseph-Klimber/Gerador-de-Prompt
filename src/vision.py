@@ -16,13 +16,13 @@ except ImportError:
     genai = None
     genai_errors = None
 
-from src.config.settings import (
+from config import (
     OPCOES_SENSUALIDADE, PESO_CAMPO, PISO_CAMPO,
     VISAO_FATOR_FIDELIDADE, VISAO_MIN_PALAVRAS, VISAO_MAX_PALAVRAS,
-    VISAO_MIN_POR_CAMPO, SCHEMA_VISAO, SYS_VISAO_EXTRACAO, _DIR_VISAO,
+    VISAO_MIN_POR_CAMPO, SCHEMA_VISAO, SYS_VISAO_EXTRACAO, DIR_VISAO,
     OPCOES_GEMINI_3, MODELO_VISAO_PADRAO,
 )
-from src.core.token_budget import estimar_tokens
+from core.token_budget import estimar_tokens
 
 
 def _validar_consistencia_lateralidade(dados: dict) -> dict:
@@ -150,9 +150,9 @@ def _montar_prompt_visao(estilo: str, sens: str, tetos: dict) -> str:
     """Monta o prompt da visão com tetos por campo."""
     p = SYS_VISAO_EXTRACAO.format(**tetos)
     if "Fotorrealismo" in (estilo or ""):
-        p += "\n\n[DIRETRIZ DE LEITURA — FOTORREALISMO] " + _DIR_VISAO["Fotorrealismo"]
+        p += "\n\n[DIRETRIZ DE LEITURA — FOTORREALISMO] " + DIR_VISAO["Fotorrealismo"]
     elif "Anime" in (estilo or ""):
-        p += "\n\n[DIRETRIZ DE LEITURA — ANIME 2D] " + _DIR_VISAO["Anime"]
+        p += "\n\n[DIRETRIZ DE LEITURA — ANIME 2D] " + DIR_VISAO["Anime"]
     if sens:
         p += f"\n\n[NÍVEL DE SENSUALIDADE: {sens}] Avalie o modelo sem omitir nem exagerar atributos."
     p += "\n\nDescreva a imagem nos 5 campos do schema. Responda APENAS com o JSON."

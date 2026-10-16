@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from typing import Final
 
-from src.config.settings import (
+from config import (
     CPT_PT, CPT_EN, RE_CJK, RE_TERMOS_FORTES, RE_SUJEITO,
     PESO_CAMPO, PISO_CAMPO, RE_SPLIT_ROTULO,
 )

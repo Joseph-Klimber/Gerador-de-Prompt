@@ -19,7 +19,7 @@ except ImportError:
     genai = None
     types = None
     genai_errors = None
-from src.config.settings import OPCOES_SENSUALIDADE, OPCOES_GEMINI_3, MODELO_VISAO_PADRAO, MODELO_TEXTO_PADRAO
+from config import OPCOES_SENSUALIDADE, OPCOES_GEMINI_3, MODELO_VISAO_PADRAO, MODELO_TEXTO_PADRAO
 BANCO_DE_MOTORES = {
     "ComfyUI / Pony SDXL": {"regra_positivo": "Tradução TAG-A-TAG. Mantenha 100% dos detalhes. Ordem: score_9, score_8_up, score_7_up, score_6_up, score_5_up, score_4_up -> source_* -> rating_* -> [contagem e gênero, ex: 1girl, solo] -> [descrição física completa] -> [roupa detalhada completa] -> [ação completa] -> [cenário completo]. Use vírgulas. Nunca resuma.", "regra_negativo": "Sem regras fixas. Crie tags que sejam o oposto exato das características principais (oposto da roupa, oposto da luz, oposto do cenário, oposto da qualidade). Ex: se positivo tem 'highly detailed', negativo tem 'low detail, blurry'."},
     "ComfyUI / Illustrious": {"regra_positivo": "Tradução TAG-A-TAG hierárquica. Mantenha 100% dos detalhes. Ordem: masterpiece, best quality, amazing quality, very aesthetic, absurdres, newest -> rating -> [contagem e gênero] -> [corpo e rosto] -> [roupa completa e materiais] -> [pose exata] -> [cenário completo] -> [luz e câmera]. Use vírgulas. Nunca resuma.", "regra_negativo": "Sem regras fixas. Crie tags antônimas. Oponha-se diretamente ao estilo, anatomia e elementos visuais do prompt positivo. Adicione 'displeasing, very displeasing'."},

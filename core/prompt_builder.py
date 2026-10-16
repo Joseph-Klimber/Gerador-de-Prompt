@@ -5,10 +5,10 @@ from typing import List
 
 import streamlit as st
 
-from src.config.settings import OPCOES_SENSUALIDADE
-from src.core.destination import injetar_estrutura_destino, teto_destino
-from src.core.state import StateKeys, get_ideia_fonte
-from src.core.token_budget import orcamento_fonte, estimar_tokens
+from config import OPCOES_SENSUALIDADE
+from core.destination import injetar_estrutura_destino, teto_destino
+from core.state import StateKeys, get_ideia_fonte
+from core.token_budget import orcamento_fonte, estimar_tokens
 
 
 @dataclass(frozen=True)

@@ -1,42 +1,41 @@
-# config/settings.py
-"""Configurações centrais do Prompt Studio Cockpit."""
+# config.py
+"""Configuração central do Prompt Studio Cockpit — Single Source of Truth."""
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
+import re
 
-# Paths
-ROOT: Final = Path(__file__).parent.parent.parent
+# ── Paths ──
+ROOT: Final = Path(__file__).parent
 ASSETS_DIR: Final = ROOT / "assets"
 STYLES_CSS: Final = ASSETS_DIR / "styles.css"
 
-# Streamlit Config
+# ── Streamlit Config ──
 PAGE_TITLE: Final = "Prompt Studio Cockpit | Engenharia Preditiva de Prompts IA"
 PAGE_ICON: Final = "⚡"
 LAYOUT: Final = "wide"
 SIDEBAR_STATE: Final = "expanded"
 
-# Modelos Gemini (BYOK)
+# ── Modelos Gemini (BYOK) ──
 OPCOES_GEMINI_3: Final = ["gemini-3.5-flash", "gemini-3.6-flash", "gemini-3.7-flash"]
 MODELO_VISAO_PADRAO: Final = "gemini-3.5-flash"
 MODELO_TEXTO_PADRAO: Final = "gemini-3.5-flash"
 
-# Token Budget Constants
-CPT_PT: Final = 3.0    # caracteres por token, PT (conservador)
-CPT_EN: Final = 3.85   # caracteres por token, EN (conservador)
-TETO_FONTE_PCT: Final = 0.65  # % do teto do destino reservado para narrativa fonte
+# ── Token Budget Constants ──
+CPT_PT: Final = 3.0      # caracteres por token, PT (conservador)
+CPT_EN: Final = 3.85     # caracteres por token, EN (conservador)
+TETO_FONTE_PCT: Final = 0.65   # % do teto do destino reservado para narrativa fonte
 
-# Regex Patterns
-RE_CJK = r"[\u4e00-\u9fff\u3040-\u30ff]"
+# ── Regex Patterns ──
+RE_CJK: Final = r"[\u4e00-\u9fff\u3040-\u30ff]"
 
-# Termos ópticos/fotográficos de alta prioridade
-RE_TERMOS_FORTES = (
+RE_TERMOS_FORTES: Final = (
     r"\b\d{1,3}\s?mm\b|\bf/\d[\d.]*|\bbokeh\b|\bDoF\b|depth of field|"
     r"\banam[oó]rfic\w*|\bter[cç]os\b|\bcontraluz\b|\bcontra-luz\b|\bcontraste\b|"
     r"\brim light\b|\bspecular\b|\bvolum[eé]tric\w*|highlight\w*"
 )
 
-# Termos de sujeito (identidade visual)
-RE_SUJEITO = (
+RE_SUJEITO: Final = (
     r"\b(mulher|homem|menina|menino|jovem|garota|garoto|adolescente|modelo|"
     r"cabelo|olhos|pele|rosto|l[aá]bio|ombro|bra[cç]o|dedo|m[aã]o|perna|"
     r"veste|vestido|blusa|roupa|cal[cç]a|meia|luva|colar|brinco|rel[oó]gio|"
@@ -44,15 +43,14 @@ RE_SUJEITO = (
     r"thigh|wearing|wears|dressed)\b"
 )
 
-# Rótulos da extração estruturada da visão
-RE_SPLIT_ROTULO = (
+RE_SPLIT_ROTULO: Final = (
     r"(?<![0-9A-Za-zÀ-ÿ_])(sujeito|sujeita|acao|a[cç][aã]o|pose|cenario|cen[aá]rio|"
     r"iluminacao|ilumina[cç][aã]o|estilo_camera|estilo e c[aâ]mera|camera|c[aâ]mera|estilo)"
     r"\s*[:\\-]\s*"
 )
 
-# Pesos de prioridade por campo (soma = 100)
-PESO_CAMPO = {
+# ── Pesos de prioridade por campo (soma = 100) ──
+PESO_CAMPO: Final = {
     "sujeito": 34,
     "acao": 24,
     "iluminacao": 16,
@@ -60,16 +58,16 @@ PESO_CAMPO = {
     "cenario": 12,
 }
 
-# Piso mínimo por campo (18% do teto-fonte)
-PISO_CAMPO: Final = 0.18
+# ── Pisos mínimos ──
+PISO_CAMPO: Final = 0.18   # 18% do teto-fonte por campo
 
-# Vision constants (derivados do arquivo original monolítico)
+# ── Vision constants ──
 VISAO_FATOR_FIDELIDADE: Final = 2.2
 VISAO_MIN_PALAVRAS: Final = 700
 VISAO_MAX_PALAVRAS: Final = 2000
 VISAO_MIN_POR_CAMPO: Final = 120
 
-# Schema da resposta da visão (structured output)
+# ── Schema da resposta da visão (structured output) ──
 SCHEMA_VISAO: Final = {
     "type": "object",
     "properties": {
@@ -105,14 +103,14 @@ SCHEMA_VISAO: Final = {
     "required": ["sujeito", "acao", "cenario", "iluminacao", "estilo_camera"],
 }
 
-# System prompt da visão
+# ── System prompt da visão ──
 SYS_VISAO_EXTRACAO: Final = """Você é um perito de reconstrução fotográfica. Sua função é descrever
 uma imagem de forma TÉCNICA e DENSAMENTE NOMINAL, para que alguém possa
 reconstruí-la sem vê-la.
 
-═══════════════════════════════════════════════════════════════
+════════════════════════════════════════════════════════════════
 REGRA ABSOLUTA DE LATERALIDADE (NÃO VIOLAR):
-═══════════════════════════════════════════════════════════════
+════════════════════════════════════════════════════════════════
 TODAS as referências espaciais (esquerda/direita, left/right)
 DEVEM ser do PONTO DE VISTA DA CÂMERA (VIEWER'S PERSPECTIVE).
 
@@ -125,7 +123,7 @@ DEVEM ser do PONTO DE VISTA DA CÂMERA (VIEWER'S PERSPECTIVE).
 Exemplo:
   Personagem de frente, braço direito estendido → aparece à ESQUERDA da imagem
   → Você escreve: "braço no lado esquerdo da imagem (braço direito do sujeito)"
-═══════════════════════════════════════════════════════════════
+════════════════════════════════════════════════════════════════
 
 PRINCÍPIO — FIDELIDADE ACIMA DE TUDO:
 Esta é a ÚNICA etapa que enxerga a imagem. O que você omitir aqui se perde
@@ -159,15 +157,15 @@ pressão de espaço, ceda APENAS: detalhe atmosférico decorativo, repetição
 redundante, preenchimento genérico. Preserve integralmente sujeito, luz (fonte,
 direção, dureza) e óptica (mm, f/, DoF, bokeh, enquadramento)."""
 
-# Diretrizes de estilo para a visão
-_DIR_VISAO: Final = {
+# ── Diretrizes de estilo para a visão ──
+DIR_VISAO: Final = {
     "Fotorrealismo": "Interprete a leitura como FOTOGRAFIA REAL: textura de pele, "
                      "profundidade de campo óptica, lente real. Não use vocabulário de ilustração.",
     "Anime": "Interprete a leitura como ILUSTRAÇÃO ANIME 2D: cel shading, traço limpo, "
              "linhas nítidas. Não use vocabulário de fotografia.",
 }
 
-# Perfis de otimização por modelo de destino
+# ── Perfis de otimização por modelo de destino ──
 MODEL_PROFILES: Final = {
     "flux": {
         "max_tokens": 800,
@@ -241,7 +239,7 @@ MODEL_PROFILES: Final = {
     },
 }
 
-# Aliases para resolver destino → perfil
+# ── Aliases para resolver destino → perfil ──
 ALIASES_DESTINO: Final = [
     ("comfyui_sdxl", ["comfyui / sdxl base natural", "sdxl base natural", "sdxl natural"]),
     ("illustrious",   ["comfyui / illustrious", "illustrious"]),
@@ -255,7 +253,7 @@ ALIASES_DESTINO: Final = [
     ("zit",          ["z-image turbo", "z-image", "zit", "zi t"]),
 ]
 
-# Opções de UI
+# ── Opções de UI ──
 OPCOES_SENSUALIDADE: Final = [
     "Estrita (Sem conteúdo sensual)",
     "Sugestiva (Insinuação artística)",

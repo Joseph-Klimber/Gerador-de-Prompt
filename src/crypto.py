@@ -1,7 +1,8 @@
-# src/crypto.py
+# crypto.py
 """Criptografia Fernet para chaves BYOK (chaves do usuário)."""
 import os
 import base64
+import hashlib
 import streamlit as st
 from cryptography.fernet import Fernet
 from typing import Optional
@@ -21,9 +22,13 @@ def fernet_disponivel() -> bool:
     return bool(key and key.strip())
 
 
+_fernet_instance: Optional[Fernet] = None
+
+
 def _fernet() -> Fernet:
     """Retorna instância Fernet (cacheada)."""
-    if not hasattr(_fernet, "_instance"):
+    global _fernet_instance
+    if _fernet_instance is None:
         key = _get_ps_fernet_key()
         if not key:
             raise RuntimeError("PS_FERNET_KEY não configurado")
@@ -31,10 +36,9 @@ def _fernet() -> Fernet:
         key = key.strip()
         if len(key) != 44:  # Fernet key é 32 bytes = 44 chars base64url
             # Deriva chave de 32 bytes via SHA256 se necessário
-            import hashlib
             key = base64.urlsafe_b64encode(hashlib.sha256(key.encode()).digest()).decode()
-        _fernet._instance = Fernet(key.encode())
-    return _fernet._instance
+        _fernet_instance = Fernet(key.encode())
+    return _fernet_instance
 
 
 def mascarar_email(email: str) -> str:
@@ -47,9 +51,3 @@ def mascarar_email(email: str) -> str:
     else:
         masked = local[:3] + "*" * (len(local) - 3)
     return f"{masked}@{domain}"
-
-
-# Constantes de modelos Gemini (re-exportadas para compatibilidade)
-OPCOES_GEMINI_3 = ["gemini-3.5-flash", "gemini-3.6-flash", "gemini-3.7-flash"]
-MODELO_VISAO_PADRAO = "gemini-3.5-flash"
-MODELO_TEXTO_PADRAO = "gemini-3.5-flash"

@@ -2,17 +2,17 @@
 """Componentes de UI para cada passo do cockpit (Passos 0-5)."""
 import streamlit as st
 
-from src.config.settings import (
+from config import (
     OPCOES_SENSUALIDADE, OPCOES_ESTILO_CONVERSAO,
     OPCOES_FOCO_CONTEXTO, MODELO_VISAO_PADRAO, MODELO_TEXTO_PADRAO,
 )
 from src.text_engines import OPCOES_DESTINO
-from src.core.state import StateKeys, sync_pending, clear_ideia_cascade, clear_sintese, get_ideia_fonte
-from src.core.destination import (
+from core.state import StateKeys, sync_pending, clear_ideia_cascade, clear_sintese, get_ideia_fonte
+from core.destination import (
     perfil_do_destino, teto_destino, estrutura_destino, dica_tecnica_destino,
     validar_destino_escolhido,
 )
-from src.core.prompt_builder import build_rascunho_prompt, build_auditoria_prompt
+from core.prompt_builder import build_rascunho_prompt, build_auditoria_prompt
 from src.text_engines import (
     BANCO_DE_MOTORES, SYS_GERADOR_PREPROMPT, SYS_COMPOSITOMETRO, SYS_MESTRE_CORE,
     _chamar_motor_texto, _msg_erro_amigavel, _msg_erro_diagnostico, parse_json_ia,
