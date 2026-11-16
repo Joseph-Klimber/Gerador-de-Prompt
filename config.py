@@ -3,7 +3,6 @@
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
-import re
 
 # ── Paths ──
 ROOT: Final = Path(__file__).parent

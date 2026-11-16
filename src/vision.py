@@ -17,12 +17,11 @@ except ImportError:
     genai_errors = None
 
 from config import (
-    OPCOES_SENSUALIDADE, PESO_CAMPO, PISO_CAMPO,
+    PESO_CAMPO,
     VISAO_FATOR_FIDELIDADE, VISAO_MIN_PALAVRAS, VISAO_MAX_PALAVRAS,
     VISAO_MIN_POR_CAMPO, SCHEMA_VISAO, SYS_VISAO_EXTRACAO, DIR_VISAO,
-    OPCOES_GEMINI_3, MODELO_VISAO_PADRAO,
+    OPCOES_GEMINI_3,
 )
-from core.token_budget import estimar_tokens
 from core.contracts import EstiloConversao
 
 
