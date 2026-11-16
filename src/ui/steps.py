@@ -135,6 +135,18 @@ def render_passo_2_visao(destino_ok: bool) -> None:
             "🔒 Selecione o motor de destino no Passo 0 para liberar a extração — o "
             "orçamento da visão é derivado do teto desse motor."
         )
+
+        # Validação client-side 10MB (Roteiro: mensagem exata "Imagem limite: 10 MB.")
+        if img_file and getattr(img_file, "size", 0) > 10 * 1024 * 1024:
+            st.error("Imagem limite: 10 MB.")
+            st.caption("🔒 Upload bloqueado localmente — imagem não foi enviada ao modelo.")
+            return  # Sai da função sem chamar IA
+
+        # Validação client-side 10MB (Roteiro: mensagem exata "Imagem limite: 10 MB.")
+        if img_file and getattr(img_file, "size", 0) > 10 * 1024 * 1024:
+            st.error("Imagem limite: 10 MB.")
+            st.caption("🔒 Upload bloqueado localmente — imagem não foi enviada ao modelo.")
+            return  # Sai da função sem chamar IA
     
     # Info de normalização da imagem
     if st.session_state.get(StateKeys.NORM_INFO):
@@ -269,7 +281,7 @@ def render_passo_4_rascunho_auditoria(destino_ok: bool) -> None:
         backup_ideia()
         ideia_fonte = get_ideia_fonte()
         if not ideia_fonte:
-            st.warning("Escreva a sua Ideia no Passo 1 ou gere rascunho no Passo 4.")
+            st.warning("Escreva sua Ideia no Passo 1.")
         else:
             st.session_state[StateKeys.IDEIA_HIST_FIX] = ideia_fonte
             st.session_state[StateKeys.PENDING_IDEIA] = ideia_fonte
@@ -297,7 +309,7 @@ def render_passo_4_rascunho_auditoria(destino_ok: bool) -> None:
         restore_ideia_if_empty()
         ideia_fonte_auditoria = get_ideia_fonte()
         if not ideia_fonte_auditoria:
-            st.warning("Escreva a sua Ideia no Passo 1 ou gere rascunho no Passo 4.")
+            st.warning("Escreva sua Ideia no Passo 1.")
         else:
             with st.spinner("Raio-X em andamento com o Motor de Texto..."):
                 try:
@@ -345,11 +357,11 @@ def _render_diagnostico() -> None:
         if s in ("Vago", "Estática"):
             return ("comp-amber", "!")
         return ("comp-blue", "⚙️")
-    
+
     diag = st.session_state.get(StateKeys.DIAGNOSTICO)
     if not diag:
         return
-    
+
     with st.container(border=True):
         c1, c2, c3, c4, c5 = st.columns(5)
         for col, key, label in zip(
@@ -362,10 +374,10 @@ def _render_diagnostico() -> None:
                 f"<div class='comp-badge {cl}'>{ic} {label}: {diag.get(key, 'Pendente')}</div>",
                 unsafe_allow_html=True
             )
-        
+
         if diag.get("diagnostico_texto"):
             st.caption(f"ℹ️ **Diagnóstico:** {diag.get('diagnostico_texto')}")
-        
+
         sugestoes = diag.get("sugestoes_cirurgicas", [])
         if sugestoes:
             st.markdown("##### ✨ Sugestões Cirúrgicas Opcionais (Ajudam o Motor):")
@@ -383,13 +395,13 @@ def render_passo_5_sintese(destino_ok: bool) -> None:
     from core.prompt_builder import montar_prompt_mestre
     from core.token_budget import orcamento_fonte, estimar_tokens
     from config import TETO_FONTE_PCT
-    
+
     st.markdown("---")
     st.markdown("### 5️⃣ Passo 5: Síntese Final")
-    
+
     destino = st.session_state.get(StateKeys.DESTINO_SELECT, "")
     perfil = perfil_do_destino(destino) if destino_ok else None
-    
+
     if perfil:
         st.caption(
             f"Compilando a narrativa para **{destino}** no formato "
@@ -397,32 +409,32 @@ def render_passo_5_sintese(destino_ok: bool) -> None:
         )
     else:
         st.caption("Selecione o destino no Passo 0 para ver o teto e formato.")
-    
+
     btn_exec = st.button(
         "⚡ Gerar Código do Prompt",
         type="primary",
         use_container_width=True,
         disabled=not destino_ok,
     )
-    
+
     if btn_exec:
         if not destino_ok:
-            st.error("🛑 Pare! Selecione o motor de destino no Passo 0 antes de gerar.")
+            st.error("Selecione para qual motor")
             return
         if not st.session_state[StateKeys.IDEIA_INPUT].strip():
-            st.warning("Descreva a sua Ideia no Passo 1 antes de gerar.")
+            st.warning("Escreva sua Ideia no Passo 1.")
             return
-        
+
         with st.spinner(f"Compilando sintaxe ultra-otimizada para {destino}..."):
             try:
                 eng = BANCO_DE_MOTORES[destino]
                 max_tokens = perfil.max_tokens
                 structure = perfil.structure
-                
+
                 # Constrói prompt do Mestre
                 from core.prompt_builder import PromptContext, montar_prompt_mestre
                 modelo_base = st.session_state.get(StateKeys.MODELO_TEXTO_SELECT, MODELO_TEXTO_PADRAO)
-                
+
                 ctx = PromptContext(
                     destino=destino,
                     sensualidade=st.session_state.get(StateKeys.SENS_SLIDER, OPCOES_SENSUALIDADE[1]),
@@ -434,11 +446,11 @@ def render_passo_5_sintese(destino_ok: bool) -> None:
                     structure=structure,
                     dica_tecnica=perfil.dica_tecnica,
                 )
-                
+
                 # monta prompt final (inclui orçamento na narrativa)
                 p = montar_prompt_mestre(ctx, perfil)
                 res, prov = _chamar_motor_texto(SYS_MESTRE_CORE, p, modelo_gemini=modelo_base)
-                
+
                 st.session_state[StateKeys.PROMPT_FINAL] = res
                 st.session_state[StateKeys.PROV_USADO] = prov
                 st.session_state[StateKeys.DEST_USADO] = destino
@@ -462,18 +474,18 @@ def render_passo_5_sintese(destino_ok: bool) -> None:
 def render_output_final() -> None:
     """Renderiza o prompt final com download e copy."""
     import html
-    
+
     if not st.session_state.get(StateKeys.PROMPT_FINAL):
         return
-    
+
     st.markdown("---")
     st.markdown(f"### 📋 Prompt Especializado ({st.session_state.get(StateKeys.DEST_USADO)})")
     st.caption(f"Gerado via {st.session_state.get(StateKeys.PROV_USADO)} · Download local — nada é salvo no servidor")
-    
+
     _final_txt = st.session_state[StateKeys.PROMPT_FINAL]
     st.markdown(f"<div class='ps-final-box'>{html.escape(_final_txt)}</div>", unsafe_allow_html=True)
     st.caption("↔️ Quebra automática ativa — sem scroll horizontal.")
-    
+
     st.download_button(
         "⬇️ Baixar Prompt (.txt)",
         data=_final_txt,
@@ -481,7 +493,7 @@ def render_output_final() -> None:
         mime="text/plain",
         use_container_width=True,
     )
-    
+
     with st.expander("📋 Copiar manualmente"):
         st.code(_final_txt, language="text")
         st.caption("Selecione tudo (Ctrl+A) → Copiar (Ctrl+C)")

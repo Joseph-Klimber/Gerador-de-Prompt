@@ -192,7 +192,7 @@ def _chamar_motor_visao(img_file, estilo_conversao: str, sens_escolhida: str,
     config = carregar_config(st.session_state.get("user_email", ""))
     api_key = st.session_state.get("input_key_visao", "").strip() or config.get("chaves", {}).get("Chave Visao", "")
     if not api_key:
-        raise RuntimeError("Chave Visão não configurada — conecte sua chave na barra lateral.")
+        raise RuntimeError("Nenhuma chave configurada para Visão")
 
     tetos = _teto_visao_palavras(max_tokens_destino)
     b64, mime = _img_para_inline(img_file)

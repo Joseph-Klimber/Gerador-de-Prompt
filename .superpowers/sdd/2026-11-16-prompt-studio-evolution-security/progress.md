@@ -26,3 +26,21 @@ Task 5: complete (EstiloConversao Enum replace substring)
   - Commit included above
   - Suite: ALL tests PASS
 
+Task 6: complete (dead code cleanup)
+  - Removed src/ui/cockpit.py, src/ui/landing.py
+  - Cleaned unused imports in text_engines.py, vision.py, config.py
+  - genai_errors kept (used for typed exception handling)
+  - Commit: chore: remove dead code
+  - Suite: ALL tests PASS
+
+Task 7: complete (10MB validation + HTML cards + error messages)
+  - Added 10MB client-side validation in render_passo_2_visao with exact message
+  - Fixed showcase-box and plan-container HTML cards using st.container
+  - Aligned error messages: 'Escreva sua Ideia no Passo 1.', 'Selecione para qual motor', 'Nenhuma chave configurada para ...'
+  - Commit: fix: 10MB client-side validation; fix HTML cards; align error messages to Roteiro
+  - Suite: ALL tests PASS
+
+Task 8: complete (Final Phase 1 Gate)
+  - Full test suite PASS (all 12+ tests)
+  - py_compile clean across all modules
+  - Commit: feat: Fase 1 completa — segurança, arquitetura, contratos, limpeza

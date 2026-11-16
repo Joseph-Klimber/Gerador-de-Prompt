@@ -190,35 +190,33 @@ def _processar_login(email_input: str) -> None:
 def _render_showcase() -> None:
     """Renderiza os dois cards de exemplo (elfa + carro)."""
     from pathlib import Path
-    
+
     col_a, col_b = st.columns(2)
-    
+
     with col_a:
-        st.markdown('<div class="showcase-box">', unsafe_allow_html=True)
-        st.markdown('<p class="label-ideia">Ideia simples</p>', unsafe_allow_html=True)
-        st.markdown('<p class="text-ideia">"uma elfa na escadaria"</p>', unsafe_allow_html=True)
-        st.markdown('<p class="label-prompt">Prompt engenharia</p>', unsafe_allow_html=True)
-        st.markdown(
-            '<div class="code-prompt">score_9, score_8_up, source_anime, 1girl, solo, '
-            'long silver hair, green eyes, ornate armor, standing on stone stairs, '
-            'volumetric light, highly detailed...</div>',
-            unsafe_allow_html=True
-        )
-        _render_showcase_image("elfa.jpg", "📚")
-        st.markdown('</div>', unsafe_allow_html=True)
-    
+        with st.container(border=True):
+            st.markdown('<p class="label-ideia">Ideia simples</p>', unsafe_allow_html=True)
+            st.markdown('<p class="text-ideia">"uma elfa na escadaria"</p>', unsafe_allow_html=True)
+            st.markdown('<p class="label-prompt">Prompt engenharia</p>', unsafe_allow_html=True)
+            st.markdown(
+                '<div class="code-prompt">score_9, score_8_up, source_anime, 1girl, solo, '
+                'long silver hair, green eyes, ornate armor, standing on stone stairs, '
+                'volumetric light, highly detailed...</div>',
+                unsafe_allow_html=True
+            )
+            _render_showcase_image("elfa.jpg", "📚")
+
     with col_b:
-        st.markdown('<div class="showcase-box">', unsafe_allow_html=True)
-        st.markdown('<p class="label-ideia">Ideia simples</p>', unsafe_allow_html=True)
-        st.markdown('<p class="text-ideia">"carro esportivo futurista"</p>', unsafe_allow_html=True)
-        st.markdown('<p class="label-prompt">Prompt engenharia</p>', unsafe_allow_html=True)
-        st.markdown(
-            '<div class="code-prompt">photorealistic, ultra detailed, sports car, metallic paint, '
-            'studio lighting, 85mm lens, shallow depth of field, 8k...</div>',
-            unsafe_allow_html=True
-        )
-        _render_showcase_image("carro.jpg", "📸")
-        st.markdown('</div>', unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown('<p class="label-ideia">Ideia simples</p>', unsafe_allow_html=True)
+            st.markdown('<p class="text-ideia">"carro esportivo futurista"</p>', unsafe_allow_html=True)
+            st.markdown('<p class="label-prompt">Prompt engenharia</p>', unsafe_allow_html=True)
+            st.markdown(
+                '<div class="code-prompt">photorealistic, ultra detailed, sports car, metallic paint, '
+                'studio lighting, 85mm lens, shallow depth of field, 8k...</div>',
+                unsafe_allow_html=True
+            )
+            _render_showcase_image("carro.jpg", "📸")
 
 
 def _render_showcase_image(filename: str, fallback_emoji: str) -> None:
@@ -243,31 +241,30 @@ def _render_showcase_image(filename: str, fallback_emoji: str) -> None:
 def _render_planos() -> None:
     """Renderiza cards de planos com botões Kiwify."""
     import os
-    
-    st.markdown('<div class="plan-container">', unsafe_allow_html=True)
-    st.markdown("### Escolha seu plano")
-    st.caption("Pagamento fora do app — compra na Kiwify libera seu e-mail na planilha.")
-    
-    _KIWIFY_FALLBACK = {
-        "LINK_KIWIFY_15_DIAS": "https://pay.kiwify.com.br/MXVL98k",
-        "LINK_KIWIFY_30_DIAS": "https://pay.kiwify.com.br/dyfEGe5",
-        "LINK_KIWIFY_90_DIAS": "https://pay.kiwify.com.br/xo0m3rF",
-    }
-    
-    def _kiwify_link(days_key: str) -> str:
-        v = os.getenv(days_key) or st.secrets.get(days_key, "")
-        if v and "PLACEHOLDER" not in str(v) and str(v).strip() not in ("", "#"):
-            return v
-        return _KIWIFY_FALLBACK.get(days_key, "#")
-    
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.markdown("**15 dias**")
-        st.link_button("Comprar 15 dias", _kiwify_link("LINK_KIWIFY_15_DIAS"), use_container_width=True)
-    with c2:
-        st.markdown("**30 dias**")
-        st.link_button("Comprar 30 dias", _kiwify_link("LINK_KIWIFY_30_DIAS"), use_container_width=True, type="primary")
-    with c3:
-        st.markdown("**90 dias**")
-        st.link_button("Comprar 90 dias", _kiwify_link("LINK_KIWIFY_90_DIAS"), use_container_width=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+
+    with st.container(border=True):
+        st.markdown("### Escolha seu plano")
+        st.caption("Pagamento fora do app — compra na Kiwify libera seu e-mail na planilha.")
+
+        _KIWIFY_FALLBACK = {
+            "LINK_KIWIFY_15_DIAS": "https://pay.kiwify.com.br/MXVL98k",
+            "LINK_KIWIFY_30_DIAS": "https://pay.kiwify.com.br/dyfEGe5",
+            "LINK_KIWIFY_90_DIAS": "https://pay.kiwify.com.br/xo0m3rF",
+        }
+
+        def _kiwify_link(days_key: str) -> str:
+            v = os.getenv(days_key) or st.secrets.get(days_key, "")
+            if v and "PLACEHOLDER" not in str(v) and str(v).strip() not in ("", "#"):
+                return v
+            return _KIWIFY_FALLBACK.get(days_key, "#")
+
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.markdown("**15 dias**")
+            st.link_button("Comprar 15 dias", _kiwify_link("LINK_KIWIFY_15_DIAS"), use_container_width=True)
+        with c2:
+            st.markdown("**30 dias**")
+            st.link_button("Comprar 30 dias", _kiwify_link("LINK_KIWIFY_30_DIAS"), use_container_width=True, type="primary")
+        with c3:
+            st.markdown("**90 dias**")
+            st.link_button("Comprar 90 dias", _kiwify_link("LINK_KIWIFY_90_DIAS"), use_container_width=True)

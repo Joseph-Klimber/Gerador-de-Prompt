@@ -213,7 +213,7 @@ def _chamar_motor_texto(system_prompt, user_prompt, modelo_gemini=None, temperat
     config = carregar_config(st.session_state.get("user_email", ""))
     chave_texto = st.session_state.get("input_key_texto", "").strip() or config.get("chaves", {}).get("Chave Texto", "")
     if not chave_texto or genai is None:
-        raise RuntimeError("Nenhuma chave configurada para Texto. Adicione a 'Chave Gemini (Texto)' no painel lateral.")
+        raise RuntimeError("Nenhuma chave configurada para Texto")
     modelo_segundo_gemini = (modelo_gemini or "").strip() if modelo_gemini else ""
     if not modelo_segundo_gemini:
         modelo_segundo_gemini = (st.session_state.get("modelo_texto_select") or "").strip()
