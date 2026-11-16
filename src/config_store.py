@@ -4,7 +4,7 @@ Compatível com Streamlit Community Cloud (filesystem efêmero)."""
 import json
 import pathlib
 import os
-from src.crypto import fernet_disponivel, _fernet
+from src.crypto import fernet_disponivel, _fernet, _get_ps_fernet_key
 from src.auth import _get_apps_script_url
 
 # Detecta Streamlit Cloud (filesystem efêmero — não persiste entre reboots)
@@ -106,6 +106,17 @@ def carregar_config(email: str) -> dict:
     return {}
 
 
+def _hmac_sign(payload: str) -> str:
+    """Gera assinatura HMAC-SHA256 para payload usando a chave mestra."""
+    import hmac
+    import hashlib
+    import base64
+    key = _get_ps_fernet_key() or ""
+    hmac_key = hashlib.sha256(key.encode()).digest()
+    sig = hmac.new(hmac_key, payload.encode(), hashlib.sha256).digest()
+    return base64.urlsafe_b64encode(sig).decode().rstrip("=")
+
+
 def salvar_config(dados: dict, email: str) -> tuple[bool, str | None]:
     """Salva configuração (local + nuvem se disponível).
     
@@ -134,16 +145,21 @@ def salvar_config(dados: dict, email: str) -> tuple[bool, str | None]:
         # No Cloud: avisa que config fica só na sessão atual
         pass
     
-    # 2. Tenta nuvem (não bloqueia se falhar) - SEMPRE envia payload criptografado
+    # 2. Tenta nuvem (não bloqueia se falhar) - SEMPRE envia payload criptografado com assinatura HMAC
     APPS_SCRIPT_URL = _get_apps_script_url()
     if APPS_SCRIPT_URL:
         try:
             import urllib.request
-            payload = {"action": "salvar", "email": email, "payload": encrypted}
+            payload_dict = {"action": "salvar", "email": email, "payload": encrypted}
+            payload_str = json.dumps(payload_dict)
+            sig = _hmac_sign(payload_str)
             req = urllib.request.Request(
                 APPS_SCRIPT_URL,
-                data=json.dumps(payload).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
+                data=payload_str.encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Signature": sig
+                },
                 method="POST",
             )
             with urllib.request.urlopen(req, timeout=10) as resp:
