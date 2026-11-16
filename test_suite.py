@@ -85,7 +85,7 @@ class MockError(Exception):
         super().__init__(msg)
         self.code = code
 
-transient_errors = ['503 Service Unavailable', '429 Too Many Requests', '500 Internal Server Error', 'Resource exhausted']
+transient_errors = ['503 Service Unavailable', '429 Too Many Requests', '500 Internal Server Error', 'Resource exhausted', 'The read operation timed out', 'URLError: connection refused']
 permanent_errors = ['Invalid argument: temperature', 'Validation failed: unknown field', 'Not supported: candidate_count']
 
 for msg in transient_errors:
@@ -148,7 +148,7 @@ checks = [
     ('_gerar_com_retry_visao', '_gerar_com_retry_visao' in vision_src),
     ('Retry loop with candidatos', 'for modelo_try in candidatos' in vision_src),
     ('_eh_erro_transitorio_visao', '_eh_erro_transitorio_visao' in vision_src),
-    ('Timeout 120s', '120' in vision_src),
+    ('Timeout 90s no retry', 'timeout=90' in inspect.getsource(_gerar_com_retry_visao)),
     ('MODELO_VISAO_PADRAO', 'MODELO_VISAO_PADRAO' in vision_src),
 ]
 for name, result in checks:
@@ -238,8 +238,48 @@ assert btn_pre_line > destino_ok_line, 'btn_pre deve estar FORA do if not destin
 print('   OK Passo 4: indentacao do handler Rascunhar CORRETA (fora do if not destino_ok)')
 print()
 
-# 10. Security - No secrets exposed
-print('10. SEGURANCA - SEM SEGREDOS EXPOSTOS')
+# 10. Security - Client-side encryption for cloud payload
+print('10. SEGURANCA - CRIPTOGRAFIA CLIENT-SIDE NO PAYLOAD NUVEM')
+import json
+from unittest.mock import patch, MagicMock
+
+def test_config_store_encrypts_payload_before_sending():
+    """Testa que salvar_config criptografa o payload antes de enviar ao Apps Script"""
+    import urllib.request
+    
+    captured = {'data': None}
+    def mock_urlopen(req, timeout=10):
+        captured['data'] = req.data.decode('utf-8') if req.data else None
+        captured['headers'] = dict(req.headers)
+        class MockResponse:
+            status_code = 200
+            def read(self): return b'{"ok": true}'
+            def decode(self, enc): return self.read().decode(enc)
+        return MockResponse()
+    
+    # Patch no urllib.request global (config_store importa dentro da função)
+    with patch('urllib.request.urlopen', mock_urlopen):
+        with patch('src.config_store._get_apps_script_url', return_value='https://script.google.com/macros/s/test/exec'):
+            with patch('src.config_store.fernet_disponivel', return_value=True):
+                with patch('src.config_store._fernet') as mock_fernet:
+                    mock_fernet.return_value.encrypt.return_value = b'encrypted_token'
+                    from src.config_store import salvar_config
+                    result = salvar_config({"chaves": {"Chave Visao": "sk-test-real-key"}}, email="test@test.com")
+                    assert result[0] == True
+                    assert captured['data'] is not None
+                    # Verificar que o payload enviado contém o token criptografado, não o dict em claro
+                    payload = json.loads(captured['data'])
+                    assert 'payload' in payload
+                    assert isinstance(payload['payload'], str)
+                    assert payload['payload'] == 'encrypted_token'
+                    # Verificar que a chave real NÃO está no payload
+                    assert 'sk-test-real-key' not in captured['data']
+
+test_config_store_encrypts_payload_before_sending()
+print('   OK Payload criptografado antes de enviar para nuvem')
+
+# 11. Security - No secrets exposed
+print('11. SEGURANCA - SEM SEGREDOS EXPOSTOS')
 for root, dirs, files in os.walk('src'):
     for f in files:
         if f.endswith('.py'):

@@ -81,11 +81,25 @@ def carregar_config(email: str) -> dict:
             )
             with urllib.request.urlopen(req, timeout=10) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
-            if data.get("ok") and data.get("config"):
+            if data.get("ok"):
+                # Nuvem retorna payload criptografado (novo formato) ou config em claro (legado)
+                if data.get("payload"):
+                    # Novo formato: payload criptografado
+                    decrypted = _decrypt(data["payload"])
+                    if decrypted:
+                        config_data = decrypted
+                    else:
+                        config_data = {}
+                elif data.get("config"):
+                    # Formato legado: config em claro (compatibilidade)
+                    config_data = data["config"]
+                else:
+                    config_data = {}
+                
                 # Salva localmente para próxima vez (só se não Cloud)
-                if not IS_STREAMLIT_CLOUD:
-                    salvar_config(data["config"], email=email)
-                return data["config"]
+                if config_data and not IS_STREAMLIT_CLOUD:
+                    salvar_config(config_data, email=email)
+                return config_data
         except Exception:
             pass
     
@@ -120,12 +134,12 @@ def salvar_config(dados: dict, email: str) -> tuple[bool, str | None]:
         # No Cloud: avisa que config fica só na sessão atual
         pass
     
-    # 2. Tenta nuvem (não bloqueia se falhar)
+    # 2. Tenta nuvem (não bloqueia se falhar) - SEMPRE envia payload criptografado
     APPS_SCRIPT_URL = _get_apps_script_url()
     if APPS_SCRIPT_URL:
         try:
             import urllib.request
-            payload = {"action": "salvar", "email": email, "config": dados}
+            payload = {"action": "salvar", "email": email, "payload": encrypted}
             req = urllib.request.Request(
                 APPS_SCRIPT_URL,
                 data=json.dumps(payload).encode("utf-8"),
