@@ -14,7 +14,7 @@ print('1. IMPORTS E ESTRUTURA')
 from config import (OPCOES_GEMINI_3, MODELO_VISAO_PADRAO, MODELO_TEXTO_PADRAO,
                         OPCOES_SENSUALIDADE, OPCOES_ESTILO_CONVERSAO, OPCOES_FOCO_CONTEXTO,
                         MODEL_PROFILES, ALIASES_DESTINO, TETO_FONTE_PCT)
-from core.state import StateKeys, DEFAULTS, init_state, sync_pending, get_ideia_fonte, clear_ideia_cascade, clear_sintese
+from core.state import StateKeys, DEFAULTS, prioridade_fonte
 from core.destination import perfil_do_destino, teto_destino, estrutura_destino, validar_destino_escolhido
 from core.token_budget import estimar_tokens, cortar_por_frase, extrair_campos_rotulados, cortar_por_campo, orcamento_fonte
 from core.prompt_builder import build_rascunho_prompt, build_auditoria_prompt, PromptContext, PromptTemplate
@@ -122,14 +122,13 @@ print('   OK sync_pending: testado manualmente no app (requer streamlit run)')
 # Test get_ideia_fonte priority (test logic directly, not via streamlit session_state)
 def test_get_ideia_fonte_logic():
     """Test the priority logic of get_ideia_fonte"""
-    # Simulate the logic: ajuste > base > ideia
-    def logic(ajuste, base, ideia):
-        return (ajuste or "").strip() or (base or "").strip() or (ideia or "").strip()
-    
-    assert logic('Editado pelo usuario', 'Rascunho original', 'Ideia original') == 'Editado pelo usuario'
-    assert logic('', 'Rascunho original', 'Ideia original') == 'Rascunho original'
-    assert logic('', '', 'Ideia original') == 'Ideia original'
-    assert logic('', '', '') == ''
+    from core.state import prioridade_fonte
+    # Simulate the logic via the pure function
+    state = {}
+    assert prioridade_fonte({**state, StateKeys.PREPROMPT_EDITADO: 'Editado pelo usuario', StateKeys.PREPROMPT: 'Rascunho original', StateKeys.IDEIA_INPUT: 'Ideia original'}) == 'Editado pelo usuario'
+    assert prioridade_fonte({**state, StateKeys.PREPROMPT: 'Rascunho original', StateKeys.IDEIA_INPUT: 'Ideia original'}) == 'Rascunho original'
+    assert prioridade_fonte({**state, StateKeys.IDEIA_INPUT: 'Ideia original'}) == 'Ideia original'
+    assert prioridade_fonte({}) == ''
     print('   OK get_ideia_fonte: prioridade EDITADO > PREPROMPT > IDEIA_INPUT')
 
 test_get_ideia_fonte_logic()

@@ -23,6 +23,7 @@ from config import (
     OPCOES_GEMINI_3, MODELO_VISAO_PADRAO,
 )
 from core.token_budget import estimar_tokens
+from core.contracts import EstiloConversao
 
 
 def _validar_consistencia_lateralidade(dados: dict) -> dict:
@@ -78,7 +79,7 @@ def _eh_erro_transitorio_visao(e) -> bool:
     s = str(e).lower()
     if any(k in s for k in ("invalid argument", "validation", "not supported", "unsupported", "unknown field")):
         return False
-    if any(k in s for k in ("503", "429", "500", "502", "504", "overloaded", "unavailable", "resource exhausted", "internal error", "deadline exceeded")):
+    if any(k in s for k in ("503", "429", "500", "502", "504", "overloaded", "unavailable", "resource exhausted", "internal error", "deadline exceeded", "timed out", "timeout", "read operation timed out", "connection reset", "connection refused", "remote end closed")):
         if any(p in s for p in ("temperature", "top_p", "top_k", "candidate_count", "thinking")):
             if "temperature" in s or "not supported" in s or "unsupported" in s:
                 return False
@@ -106,7 +107,12 @@ def _extrair_retry_after_segundos(erro_str: str):
 
 
 def _gerar_com_retry_visao(corpo: dict, modelo: str, api_key: str, tentativas=3) -> dict:
-    """Chama API de visão com retry exponencial e respeito a Retry-After."""
+    """Chama API de visão com retry exponencial e respeito a Retry-After.
+
+    Erros de timeout (read hang) NÃO repetem no mesmo modelo: uma tentativa e
+    passa a bola para o fallback de modelos, limitando o pior caso a
+    ~timeout x nº de candidatos em vez de timeout x tentativas x candidatos.
+    """
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent"
     headers = {"Content-Type": "application/json", "x-goog-api-key": api_key}
     data = json.dumps(corpo).encode("utf-8")
@@ -115,7 +121,7 @@ def _gerar_com_retry_visao(corpo: dict, modelo: str, api_key: str, tentativas=3)
     for tentativa in range(tentativas):
         try:
             req = urllib.request.Request(url, data=data, headers=headers)
-            with urllib.request.urlopen(req, timeout=120) as resp:
+            with urllib.request.urlopen(req, timeout=90) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
             ultimo_erro = e
@@ -128,7 +134,9 @@ def _gerar_com_retry_visao(corpo: dict, modelo: str, api_key: str, tentativas=3)
             time.sleep(espera)
         except Exception as e:
             ultimo_erro = e
-            if not _eh_erro_transitorio_visao(e) or tentativa == tentativas - 1:
+            s = str(e).lower()
+            eh_timeout = any(k in s for k in ("timed out", "timeout", "read operation timed out"))
+            if not _eh_erro_transitorio_visao(e) or tentativa == tentativas - 1 or eh_timeout:
                 raise RuntimeError(f"Visão · {e}") from e
             retry_after = _extrair_retry_after_segundos(str(e))
             espera = retry_after if retry_after is not None else (2 ** (tentativa + 1)) + random.uniform(0, 0.5)
@@ -149,10 +157,13 @@ def _teto_visao_palavras(max_tokens_destino: int) -> dict:
 def _montar_prompt_visao(estilo: str, sens: str, tetos: dict) -> str:
     """Monta o prompt da visão com tetos por campo."""
     p = SYS_VISAO_EXTRACAO.format(**tetos)
-    if "Fotorrealismo" in (estilo or ""):
+    if estilo == EstiloConversao.FOTORREALISMO.value:
         p += "\n\n[DIRETRIZ DE LEITURA — FOTORREALISMO] " + DIR_VISAO["Fotorrealismo"]
-    elif "Anime" in (estilo or ""):
+    elif estilo == EstiloConversao.ANIME.value:
         p += "\n\n[DIRETRIZ DE LEITURA — ANIME 2D] " + DIR_VISAO["Anime"]
+    if EstiloConversao.ANTI_PORCELANA_MARKER in (estilo or ""):
+        p += ("\n\n[DIRETRIZ DE LEITURA — FOTOGRÁFICO REALISTA / ANTI-PORCELANA] "
+              + DIR_VISAO["Anti-Porcelana"])
     if sens:
         p += f"\n\n[NÍVEL DE SENSUALIDADE: {sens}] Avalie o modelo sem omitir nem exagerar atributos."
     p += "\n\nDescreva a imagem nos 5 campos do schema. Responda APENAS com o JSON."

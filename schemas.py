@@ -15,6 +15,7 @@ class SensualidadeLevel(str, Enum):
 class EstiloConversao(str, Enum):
     MANTER = "Manter Estilo Original"
     FOTORREALISMO = "📸 Converter para Fotorrealismo"
+    FOTORREALISMO_REALISTA = "📸 Converter para Fotorrealismo — Fotográfico Realista (Anti-Porcelana)"
     ANIME = "🎨 Converter para Anime"
 
 

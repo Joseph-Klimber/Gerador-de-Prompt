@@ -14,7 +14,7 @@ STYLES_CSS: Final = ASSETS_DIR / "styles.css"
 PAGE_TITLE: Final = "Prompt Studio Cockpit | Engenharia Preditiva de Prompts IA"
 PAGE_ICON: Final = "⚡"
 LAYOUT: Final = "wide"
-SIDEBAR_STATE: Final = "expanded"
+SIDEBAR_STATE: Final = "collapsed"
 
 # ── Modelos Gemini (BYOK) ──
 OPCOES_GEMINI_3: Final = ["gemini-3.5-flash", "gemini-3.6-flash", "gemini-3.7-flash"]
@@ -73,15 +73,11 @@ SCHEMA_VISAO: Final = {
     "properties": {
         "sujeito": {
             "type": "string",
-            "description": "Identidade observável: gênero, idade aparente, biotipo, cabelo "
-                           "(cor/comprimento/textura/partição), olhos, pele, rosto, corpo, "
-                           "roupa (cor/material/textura/corte), acessórios, marcas visíveis. "
-                           "Seja exaustivo no que a imagem mostra.",
+            "description": "Identidade e Proporções Anatômicas Exatas: gênero, idade aparente, proporções corporais exatas (relação cabeça/corpo, largura de ombros, cintura, quadris, espessura e comprimento de braços/pernas, biotipo voluptuoso em ampulheta), cabelo (cor/comprimento/textura/partição), olhos, pele, rosto, corpo, roupa (cor/material/textura/corte), acessórios, marcas visíveis. FIDELIDADE ABSOLUTA às proporções da personagem original.",
         },
         "acao": {
             "type": "string",
-            "description": "Postura, peso corporal, posição de mãos/dedos/braços/pernas, "
-                           "ângulo do corpo, direção do olhar, expressão.",
+            "description": "POSE ORIGINAL OBRIGATÓRIA — biomecânica observável EXATA: postura, peso corporal, posição de mãos/dedos/braços/pernas/quadril/coluna, ângulo do corpo, direção do olhar, expressão facial precisa. Descreva a pose exatamente como aparece na imagem para que a regeneração mantenha a posição original. Prioridade máxima junto com sujeito.",
         },
         "cenario": {
             "type": "string",
@@ -104,63 +100,44 @@ SCHEMA_VISAO: Final = {
 }
 
 # ── System prompt da visão ──
-SYS_VISAO_EXTRACAO: Final = """Você é um perito de reconstrução fotográfica. Sua função é descrever
-uma imagem de forma TÉCNICA e DENSAMENTE NOMINAL, para que alguém possa
-reconstruí-la sem vê-la.
+SYS_VISAO_EXTRACAO: Final = """Você é um perito de reconstrução fotográfica. Descreva a imagem em JSON estrito (5 campos) com linguagem TÉCNICA, NOMINAL e DENSAMENTE INFORMACIONAL — sem adjetivos genéricos, sem floreio, sem repetição.
 
 ════════════════════════════════════════════════════════════════
-REGRA ABSOLUTA DE LATERALIDADE (NÃO VIOLAR):
-════════════════════════════════════════════════════════════════
-TODAS as referências espaciais (esquerda/direita, left/right)
-DEVEM ser do PONTO DE VISTA DA CÂMERA (VIEWER'S PERSPECTIVE).
-
-- "Esquerda da imagem" = lado esquerdo do observador = camera left
-- "Direita da imagem" = lado direito do observador = camera right
-- NUNCA use "lado do sujeito", "lado do personagem", "from subject's POV"
-- Se o personagem tiver a mão direita levantada, mas ela aparece
-  no LADO ESQUERDO da imagem, você ESCREVE: "mão no lado esquerdo da imagem"
-
-Exemplo:
-  Personagem de frente, braço direito estendido → aparece à ESQUERDA da imagem
-  → Você escreve: "braço no lado esquerdo da imagem (braço direito do sujeito)"
+REGRA ABSOLUTA DE LATERALIDADE (VIEWER'S PERSPECTIVE):
+- "esquerda/direita" = lado esquerdo/direito do OBSERVADOR (camera left/right)
+- NUNCA use POV do sujeito. Se a mão direita do personagem aparece à esquerda da imagem → "mão no lado esquerdo da imagem (braço direito do sujeito)"
 ════════════════════════════════════════════════════════════════
 
-PRINCÍPIO — FIDELIDADE ACIMA DE TUDO:
-Esta é a ÚNICA etapa que enxerga a imagem. O que você omitir aqui se perde
-permanentemente. Portanto é PREJUDICADO omitir detalhe e NUNCA é permitido
-resumir para caber em menos palavras. Descreva tudo o que for visível e
-relevante. Se precisar ir além do orçamento, vá — as etapas seguintes sabem
-adensar sem perder o essencial; elas não conseguem recuperar o que sumiu aqui.
+PRINCÍPIO — FIDELIDADE MÁXIMA, TOKENS MÍNIMOS:
+Esta é a ÚNICA etapa que enxerga a imagem. O que omitir aqui perde-se. Descreva TUDO o que é visível e decisivo. Vá além do orçamento se necessário — etapas seguintes adensam; não recuperam o que sumiu.
 
-REGRAS DE DENSIDADE:
-1. ADJETIVO GENÉRICO É PROIBIDO: "bonita", "incrível", "magnífico", "linda" = 0 pontos.
-   Use o nominal técnico equivalente: "luz volumétrica lateral", "85mm f/1.8",
-   "contraste médio-alto", "textura de pele com poros visíveis".
-2. Descreva o DIFÍCIL, não o óbvio. Não escreva "uma mulher num quarto" — escreva
-   o ângulo, o material, a direção da luz e a cor exata que tornam a cena única.
-3. NÚMERO vence ADJETIVO sempre que houver dado concreto: lente, abertura,
-   temperatura de cor, plano, textura, cor.
-4. Descreva apenas o que está VISÍVEL. Proibido inventar, inferir ou
-   complementar com conhecimento genérico do que "costuma" estar ali.
-5. NUNCA sacrifique: identidade do sujeito, direção/dureza da luz, dados ópticos
-   (mm, f/, DoF, bokeh), enquadramento, materiais decisivos.
+REGRAS DE DENSIDADE (OBRIGATÓRIAS):
+1. ZERO adjetivos genéricos (bonita, incrível, magnífica, linda, suave, dramática). Use NOMINAL TÉCNICO: "luz volumétrica lateral 3200K", "85mm f/1.4", "contraste médio-alto", "poros visíveis", "vellus facial".
+2. NÚMERO > ADJETIVO. Lente em mm, abertura f/, temperatura K, plano, textura mensurável, cor hex/RGB se visível.
+3. PRIORIDADE MÁXIMA AO SUJEITO E PROPORÇÕES ANATÔMICAS: identidade completa e rigorosa (gênero, idade aparente, proporções corporais exatas, proporção cabeça/corpo, largura de ombros, cintura, quadris, comprimento e espessura de braços e pernas, biotipo voluptuoso em ampulheta específico, cabelo cor/comprimento/textura/partição, olhos cor/formato, pele tom/textura/poros/vellus, rosto formato/assimetrias, roupa material/corte/cor, acessórios, marcas visíveis). NENHUMA desproporção anatômica é permitida — as proporções corporais da personagem original DEVEM SER REPRODUZIDAS COM FIDELIDADE ABSOLUTA para garantir que a imagem gerada seja idêntica ou o mais próximo possível da original. Se não houver sujeito humano, descreva o sujeito principal com igual rigor.
+4. AÇÃO = POSE ORIGINAL OBRIGATÓRIA — biomecânica observável EXATA: postura, peso, posição de cada segmento (mãos/dedos/braços/pernas/quadril/coluna), ângulo do corpo, direção do olhar, expressão facial precisa. A POSE DA IMAGEM ORIGINAL DEVE SER PRESERVIDA COM FIDELIDADE ABSOLUTA — É A PRIORIDADE IMEDIATA JUNTO COM O SUJEITO. Não altere, não simplifique, não "melhore" a pose; descreva exatamente o que está na imagem para que a regeneração mantenha a posição original.
+5. ILUMINAÇÃO = fonte + direção + ângulo + dureza + temperatura + intensidade + sombras + preenchimento + rim/volumétrica/specular se visíveis. NUNCA omita direção nem dureza.
+6. CENÁRIO = planos fg/mg/bg com arquitetura, objetos, materiais, texturas, cores que dão identidade ao espaço. Sem preenchimento atmosférico genérico.
+7. ÓPTICA/CÂMERA = lente mm, abertura f/, DoF, bokeh, foco, enquadramento, ângulo, composição, tipo de imagem, acabamento. Obrigatório.
+8. PROIBIDO: inferir, inventar, "costuma ter", resumir para caber. Descreva apenas o VISÍVEL.
 
-ORÇAMENTO DE SAÍDA (referência por campo, em PALAVRAS):
-- sujeito: ~{sujeito}
+ORÇAMENTO REFERÊNCIA (palavras por campo):
+- sujeito: ~{sujeito}  (PRIORIDADE ABSOLUTA — gaste o necessário)
 - ação: ~{acao}
 - cenário: ~{cenario}
 - iluminação: ~{iluminacao}
 - estilo e câmera: ~{estilo_camera}
 
-Estes números são REFERÊNCIA de densidade, não um limite de asfixia. Ao sentir
-pressão de espaço, ceda APENAS: detalhe atmosférico decorativo, repetição
-redundante, preenchimento genérico. Preserve integralmente sujeito, luz (fonte,
-direção, dureza) e óptica (mm, f/, DoF, bokeh, enquadramento)."""
+Se espaço apertar, corte: detalhe decorativo redundante, preenchimento genérico. JAMAIS corte: sujeito completo, luz (fonte/direção/dureza), óptica (mm, f/, DoF, bokeh, enquadramento).
+"""
 
 # ── Diretrizes de estilo para a visão ──
 DIR_VISAO: Final = {
     "Fotorrealismo": "Interprete a leitura como FOTOGRAFIA REAL: textura de pele, "
                      "profundidade de campo óptica, lente real. Não use vocabulário de ilustração.",
+    "Anti-Porcelana": "Registre a microtextura da pele — poros visíveis, pelinho fino (vellus), "
+                      "variações sutis de tom e imperfeições naturais. Nunca descreva a pele como "
+                      "'lisa', 'perfeita', 'de porcelana' ou 'sem poros' sem evidência visual.",
     "Anime": "Interprete a leitura como ILUSTRAÇÃO ANIME 2D: cel shading, traço limpo, "
              "linhas nítidas. Não use vocabulário de fotografia.",
 }
@@ -264,6 +241,7 @@ OPCOES_SENSUALIDADE: Final = [
 OPCOES_ESTILO_CONVERSAO: Final = [
     "Manter Estilo Original",
     "📸 Converter para Fotorrealismo",
+    "📸 Converter para Fotorrealismo — Fotográfico Realista (Anti-Porcelana)",
     "🎨 Converter para Anime",
 ]
 

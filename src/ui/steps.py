@@ -1,13 +1,15 @@
 # ui/steps.py
 """Componentes de UI para cada passo do cockpit (Passos 0-5)."""
 import streamlit as st
+from PIL import Image, ImageOps
 
 from config import (
     OPCOES_SENSUALIDADE, OPCOES_ESTILO_CONVERSAO,
     OPCOES_FOCO_CONTEXTO, MODELO_VISAO_PADRAO, MODELO_TEXTO_PADRAO,
 )
 from src.text_engines import OPCOES_DESTINO
-from core.state import StateKeys, sync_pending, clear_ideia_cascade, clear_sintese, get_ideia_fonte, backup_ideia
+from core.state import StateKeys
+from src.ui.state_adapter import sync_pending, get_ideia_fonte, backup_ideia, restore_ideia_if_empty, is_destino_valido
 from core.destination import (
     perfil_do_destino, teto_destino, estrutura_destino, dica_tecnica_destino,
     validar_destino_escolhido,
@@ -70,20 +72,28 @@ def render_passo_0_destino() -> bool:
     return bool(perfil)
 
 
+def _on_ideia_change() -> None:
+    """Callback disparado quando o usuário altera o texto do Passo 1."""
+    val = (st.session_state.get(StateKeys.IDEIA_INPUT) or "").strip()
+    if val:
+        st.session_state[StateKeys.IDEIA_HIST_FIX] = val
+        st.session_state[StateKeys.PENDING_IDEIA] = val
+
+
 def render_passo_1_ideia(destino_ok: bool) -> None:
-    """Passo 1: A Ideia (narrativa visual)."""
-    st.markdown("---")
-    st.markdown("### 1️⃣ Passo 1: A Sua Ideia (A Narrativa Visual)")
+    """Passo 1: A Sua Ideia (narrativa visual)."""
+    st.markdown("### 3️⃣ Passo 3: A Sua Ideia (A Narrativa Visual)")
     st.caption("O ponto de partida. Descreva o que imagina ou veja a caixa preencher-se usando o Passo 2.")
 
-    st.text_area(
+    ideia_val = st.text_area(
         "Insira a sua Ideia:",
         key=StateKeys.IDEIA_INPUT,
         height=140,
         label_visibility="collapsed",
-        # Removido disabled=not destino_ok — causava perda de valor ao habilitar
-        # Os botões downstream (visão, rascunho, auditoria) já são desabilitados
+        on_change=_on_ideia_change,
     )
+    if ideia_val and ideia_val.strip():
+        st.session_state[StateKeys.IDEIA_HIST_FIX] = ideia_val.strip()
 
     if st.button("🗑️ Limpar Ideia", use_container_width=False, disabled=not destino_ok):
         clear_ideia_cascade()
@@ -91,27 +101,34 @@ def render_passo_1_ideia(destino_ok: bool) -> None:
 
 
 def render_passo_2_visao(destino_ok: bool) -> None:
-    """Passo 2: Referência Óptica (Imagem Opcional) — Extração via Visão."""
-    st.markdown("---")
+    """Passo 2: Referência Óptica (Imagem Opcional) — Extração via Visão. Largura total."""
     st.markdown("### 2️⃣ Passo 2: Referência Óptica (Opcional)")
     st.caption("Sem inspiração para escrever? Faça upload de uma imagem. A Via de Visão extrairá os micro-detalhes para o Passo 1.")
     
-    col_img1, col_img2 = st.columns([4, 6])
-    with col_img1:
-        img_file = st.file_uploader(
-            "Upload de Referência",
-            type=["png", "jpg", "jpeg", "webp"],
-            key=StateKeys.IMG_UPLOADER,
-            label_visibility="collapsed",
-            disabled=not destino_ok,
-        )
-    with col_img2:
-        st.write(" ")
-        btn_ler = st.button(
-            "👁️ Extrair Imagem (Motor de Visão)",
-            use_container_width=True,
-            disabled=not destino_ok,
-        )
+    img_file = st.file_uploader(
+        "Upload de Referência",
+        type=["png", "jpg", "jpeg", "webp"],
+        key=StateKeys.IMG_UPLOADER,
+        label_visibility="collapsed",
+        disabled=not destino_ok,
+    )
+
+    # Miniatura da referência (máx 512×512) — a extração continua na imagem original
+    if img_file:
+        try:
+            img_file.seek(0)
+            _thumb = ImageOps.exif_transpose(Image.open(img_file))
+            _thumb.thumbnail((512, 512))
+            st.image(_thumb, caption=f"📎 {img_file.name} — miniatura máx. 512×512")
+        except Exception:
+            st.warning("Não foi possível gerar a miniatura desta imagem — a extração pode continuar.")
+        st.caption("🔍 Miniatura reduzida para visualização; o Motor de Visão recebe a imagem original em alta.")
+
+    btn_ler = st.button(
+        "👁️ Extrair Imagem (Motor de Visão)",
+        use_container_width=True,
+        disabled=not destino_ok,
+    )
     
     if not destino_ok:
         st.caption(
@@ -209,78 +226,75 @@ def render_passo_2_visao(destino_ok: bool) -> None:
 
 
 def render_passo_3_modificadores(destino_ok: bool) -> None:
-    """Passo 3: Modificadores Globais."""
-    st.markdown("---")
-    st.markdown("### 3️⃣ Passo 3: Modificadores Globais")
+    """Passo 3: Modificadores Globais — metade da tela, lado a lado com o Passo 0."""
+    st.markdown("### 1️⃣ Passo 1: Modificadores Globais")
     st.caption("ℹ️ *Aviso: Estes filtros guiam a geração do seu prompt final. (Também alteram a leitura caso envie uma Imagem no Passo 2).")
-    
+
     with st.container(border=True):
-        col_m1, col_m2, col_m3 = st.columns(3)
+        # Estilo em linha própria: o preset Anti-Porcelana tem nome longo
+        st.selectbox("Estilo de Arte:", OPCOES_ESTILO_CONVERSAO, key=StateKeys.ESTILO_CONVERSAO, disabled=not destino_ok)
+        col_m1, col_m2 = st.columns(2)
         with col_m1:
-            st.selectbox("Estilo de Arte:", OPCOES_ESTILO_CONVERSAO, key=StateKeys.ESTILO_CONVERSAO, disabled=not destino_ok)
-        with col_m2:
             st.selectbox("Foco e Contexto:", OPCOES_FOCO_CONTEXTO, key=StateKeys.FOCO_CONTEXTO, disabled=not destino_ok)
-        with col_m3:
+        with col_m2:
             st.select_slider("Sensualidade:", options=OPCOES_SENSUALIDADE, key=StateKeys.SENS_SLIDER, disabled=not destino_ok)
 
 
 def render_passo_4_rascunho_auditoria(destino_ok: bool) -> None:
-    """Passo 4: Rascunho & Validação (Opcionais Prévios)."""
+    """Passo 4: Rascunho & Validação — largura total (após a Ideia)."""
     st.markdown("---")
     st.markdown("### 4️⃣ Passo 4: Rascunho & Validação (Opcional)")
 
-    col_b1, col_b2 = st.columns(2)
-    with col_b1:
-        btn_pre = st.button(
-            "👁️ Rascunhar Cena (Via Motor de Texto)",
-            use_container_width=True,
-            disabled=not destino_ok,
-        )
-    with col_b2:
-        btn_ava = st.button(
-            "🔍 Auditar no Compositômetro (Raio-X)",
-            use_container_width=True,
-            disabled=not destino_ok,
-        )
+    btn_pre = st.button(
+        "👁️ Rascunhar Cena (Via Motor de Texto)",
+        use_container_width=True,
+        disabled=not destino_ok,
+    )
+    btn_ava = st.button(
+        "🔍 Auditar no Compositômetro (Raio-X)",
+        use_container_width=True,
+        disabled=not destino_ok,
+    )
 
     if not destino_ok:
         st.caption(
             "🔒 O rascunho e a auditoria dependem do motor de destino (Passo 0) — sem ele "
             "não há formato-alvo para rascunhar."
         )
+        return
 
     # Rascunho
-        if btn_pre:
-            # Backup explícito ANTES de gerar — âncora à prova de falhas
-            backup_ideia()
-            # Usa get_ideia_fonte() — prioriza ajuste fino > rascunho > ideia original
-            ideia_fonte = get_ideia_fonte()
-            if not ideia_fonte:
-                st.warning("Escreva a sua Ideia no Passo 1 ou gere rascunho no Passo 4.")
-            else:
-                with st.spinner("Desenhando a cena com o Motor de Texto..."):
-                    try:
-                        destino = st.session_state[StateKeys.DESTINO_SELECT]
-                        perfil = perfil_do_destino(destino)
-                        prompt = build_rascunho_prompt(
-                            destino, perfil,
-                            ideia_fonte,
-                            st.session_state[StateKeys.SENS_SLIDER],
-                            st.session_state[StateKeys.ESTILO_CONVERSAO],
-                            st.session_state[StateKeys.FOCO_CONTEXTO],
-                        )
-                        modelo_base = st.session_state.get(StateKeys.MODELO_TEXTO_SELECT, MODELO_TEXTO_PADRAO)
-                        txt, prov = _chamar_motor_texto(SYS_GERADOR_PREPROMPT, prompt, modelo_gemini=modelo_base)
-
-                        st.session_state[StateKeys.IDEIA_HIST_FIX] = st.session_state[StateKeys.IDEIA_INPUT]
-                        st.session_state[StateKeys.PREPROMPT] = txt
-                        st.session_state[StateKeys.PENDING_PREPROMPT_EDITADO] = txt
-                        st.rerun()
-                    except Exception as e:
-                        st.error(_msg_erro_amigavel(e))
+    if btn_pre:
+        restore_ideia_if_empty()
+        backup_ideia()
+        ideia_fonte = get_ideia_fonte()
+        if not ideia_fonte:
+            st.warning("Escreva a sua Ideia no Passo 1 ou gere rascunho no Passo 4.")
+        else:
+            st.session_state[StateKeys.IDEIA_HIST_FIX] = ideia_fonte
+            st.session_state[StateKeys.PENDING_IDEIA] = ideia_fonte
+            with st.spinner("Desenhando a cena com o Motor de Texto..."):
+                try:
+                    destino = st.session_state[StateKeys.DESTINO_SELECT]
+                    perfil = perfil_do_destino(destino)
+                    prompt = build_rascunho_prompt(
+                        destino, perfil,
+                        ideia_fonte,
+                        st.session_state[StateKeys.SENS_SLIDER],
+                        st.session_state[StateKeys.ESTILO_CONVERSAO],
+                        st.session_state[StateKeys.FOCO_CONTEXTO],
+                    )
+                    modelo_base = st.session_state.get(StateKeys.MODELO_TEXTO_SELECT, MODELO_TEXTO_PADRAO)
+                    txt, prov = _chamar_motor_texto(SYS_GERADOR_PREPROMPT, prompt, modelo_gemini=modelo_base)
+                    st.session_state[StateKeys.PREPROMPT] = txt
+                    st.session_state[StateKeys.PENDING_PREPROMPT_EDITADO] = txt
+                    st.rerun()
+                except Exception as e:
+                    st.error(_msg_erro_amigavel(e))
 
     # Auditoria
     if btn_ava:
+        restore_ideia_if_empty()
         ideia_fonte_auditoria = get_ideia_fonte()
         if not ideia_fonte_auditoria:
             st.warning("Escreva a sua Ideia no Passo 1 ou gere rascunho no Passo 4.")
@@ -301,23 +315,7 @@ def render_passo_4_rascunho_auditoria(destino_ok: bool) -> None:
                         st.rerun()
                 except Exception as e:
                     st.error(_msg_erro_amigavel(e))
-            with st.spinner("Raio-X em andamento com o Motor de Texto..."):
-                try:
-                    modelo_base = st.session_state.get(StateKeys.MODELO_TEXTO_SELECT, MODELO_TEXTO_PADRAO)
-                    txt, prov = _chamar_motor_texto(
-                        SYS_COMPOSITOMETRO, 
-                        f"AVALIE:\n{st.session_state[StateKeys.IDEIA_INPUT]}",
-                        modelo_gemini=modelo_base
-                    )
-                    diag = parse_json_ia(txt)
-                    if not diag:
-                        st.error("⚠️ Erro de formato no Raio-X. Tente novamente.")
-                    else:
-                        st.session_state[StateKeys.DIAGNOSTICO] = diag
-                        st.rerun()
-                except Exception as e:
-                    st.error(_msg_erro_amigavel(e))
-    
+
     # Exibe rascunho com diff
     if st.session_state.get(StateKeys.PREPROMPT):
         st.markdown(
@@ -334,7 +332,7 @@ def render_passo_4_rascunho_auditoria(destino_ok: bool) -> None:
             key=StateKeys.PREPROMPT_EDITADO,
             height=130,
         )
-    
+
     # Exibe diagnóstico (badges)
     _render_diagnostico()
 
@@ -422,14 +420,16 @@ def render_passo_5_sintese(destino_ok: bool) -> None:
                 structure = perfil.structure
                 
                 # Constrói prompt do Mestre
-                from src.core.prompt_builder import PromptContext
+                from core.prompt_builder import PromptContext, montar_prompt_mestre
+                modelo_base = st.session_state.get(StateKeys.MODELO_TEXTO_SELECT, MODELO_TEXTO_PADRAO)
+                
                 ctx = PromptContext(
                     destino=destino,
                     sensualidade=st.session_state.get(StateKeys.SENS_SLIDER, OPCOES_SENSUALIDADE[1]),
                     estilo_conversao=st.session_state.get(StateKeys.ESTILO_CONVERSAO, "Manter Estilo Original"),
                     foco_contexto=st.session_state.get(StateKeys.FOCO_CONTEXTO, "Harmônico (Preencher/Embelezar)"),
                     sugestoes=st.session_state.get(StateKeys.SUGESTOES_MARCADAS, []),
-                    ideia_fonte="",  # será preenchido dentro de montar_prompt_mestre
+                    ideia_fonte=get_ideia_fonte(),
                     max_tokens=max_tokens,
                     structure=structure,
                     dica_tecnica=perfil.dica_tecnica,
@@ -437,8 +437,6 @@ def render_passo_5_sintese(destino_ok: bool) -> None:
                 
                 # monta prompt final (inclui orçamento na narrativa)
                 p = montar_prompt_mestre(ctx, perfil)
-                
-                modelo_base = st.session_state.get(StateKeys.MODELO_TEXTO_SELECT, MODELO_TEXTO_PADRAO)
                 res, prov = _chamar_motor_texto(SYS_MESTRE_CORE, p, modelo_gemini=modelo_base)
                 
                 st.session_state[StateKeys.PROMPT_FINAL] = res
@@ -449,14 +447,15 @@ def render_passo_5_sintese(destino_ok: bool) -> None:
                 st.error(_msg_erro_amigavel(e))
                 with st.expander("🔍 Diagnóstico técnico — copie e me envie se persistir"):
                     st.code(_msg_erro_diagnostico(e), language="text")
+                    _modelo_diag = st.session_state.get(StateKeys.MODELO_TEXTO_SELECT, MODELO_TEXTO_PADRAO)
                     try:
                         _sys_len = len(SYS_MESTRE_CORE)
                         _user_len = len(p)
-                        _cfg_preview = str(_build_gemini_config(SYS_MESTRE_CORE, modelo_base, temperature=0.25))[:800]
+                        _cfg_preview = str(_build_gemini_config(SYS_MESTRE_CORE, _modelo_diag, temperature=0.25))[:800]
                     except Exception as _diag_e:
                         _sys_len = _user_len = 0
                         _cfg_preview = str(_diag_e)[:600]
-                    st.caption(f"Modelo: {modelo_base} · System: {_sys_len} chars · User+Bloco: {_user_len} chars")
+                    st.caption(f"Modelo: {_modelo_diag} · System: {_sys_len} chars · User+Bloco: {_user_len} chars")
                     st.code(_cfg_preview, language="text")
 
 

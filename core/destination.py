@@ -1,32 +1,10 @@
 # core/destination.py
 """Resolução de perfil do destino — alias matching e teto de tokens."""
-from dataclasses import dataclass
 from typing import Final
 
 from config import MODEL_PROFILES, ALIASES_DESTINO
 from src.text_engines import OPCOES_DESTINO
-
-
-@dataclass(frozen=True)
-class DestinationProfile:
-    """Perfil imutável de otimização para um destino."""
-    key: str
-    max_tokens: int
-    structure: str
-    dica_tecnica: str
-    tags_obrigatorias: list[str]
-    proibicoes: list[str]
-    
-    @classmethod
-    def from_dict(cls, key: str, data: dict) -> "DestinationProfile":
-        return cls(
-            key=key,
-            max_tokens=data.get("max_tokens", 800),
-            structure=data.get("structure", "general"),
-            dica_tecnica=data.get("dica_tecnica", ""),
-            tags_obrigatorias=data.get("tags_obrigatorias", []),
-            proibicoes=data.get("proibicoes", []),
-        )
+from core.contracts import DestinationProfile
 
 
 def perfil_do_destino(dest_sel: str) -> DestinationProfile | None:
@@ -46,7 +24,15 @@ def perfil_do_destino(dest_sel: str) -> DestinationProfile | None:
         if any(a in dl for a in apelidos):
             data = MODEL_PROFILES.get(chave)
             if data:
-                return DestinationProfile.from_dict(chave, data)
+                return DestinationProfile(
+                    key=chave,
+                    label=dest_sel,
+                    max_tokens=data.get("max_tokens", 800),
+                    structure=data.get("structure", "general"),
+                    dica_tecnica=data.get("dica_tecnica", ""),
+                    tags_obrigatorias=tuple(data.get("tags_obrigatorias", [])),
+                    proibicoes=tuple(data.get("proibicoes", [])),
+                )
     return None
 
 

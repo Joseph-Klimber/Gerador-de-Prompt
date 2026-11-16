@@ -6,9 +6,10 @@ from typing import List
 import streamlit as st
 
 from config import OPCOES_SENSUALIDADE
+from src.text_engines import BANCO_DE_MOTORES
 from core.destination import injetar_estrutura_destino, teto_destino
-from core.state import StateKeys, get_ideia_fonte
-from core.token_budget import orcamento_fonte, estimar_tokens
+from core.state import StateKeys, prioridade_fonte
+from core.contracts import EstiloConversao
 
 
 @dataclass(frozen=True)
@@ -33,7 +34,7 @@ def build_prompt_context() -> PromptContext:
         estilo_conversao=st.session_state.get(StateKeys.ESTILO_CONVERSAO, "Manter Estilo Original"),
         foco_contexto=st.session_state.get(StateKeys.FOCO_CONTEXTO, "Harmônico (Preencher/Embelezar)"),
         sugestoes=st.session_state.get(StateKeys.SUGESTOES_MARCADAS, []),
-        ideia_fonte=get_ideia_fonte(),
+        ideia_fonte=prioridade_fonte(dict(st.session_state)),
         max_tokens=teto_destino(st.session_state.get(StateKeys.DESTINO_SELECT, "")),
         structure="",  # preenchido depois
         dica_tecnica="",  # preenchido depois
@@ -98,8 +99,9 @@ def montar_prompt_mestre(ctx: PromptContext, perfil) -> str:
     tpl.add_line("======================================")
     tpl.add_line(f"3. SINTAXE NATIVA: {ctx.destino}")
     tpl.add_line("======================================")
-    tpl.add_line("- POSITIVO: {eng['regra_positivo']}")
-    tpl.add_line("- NEGATIVO: {eng.get('regra_negativo', 'N/A')}")
+    eng = BANCO_DE_MOTORES[ctx.destino]
+    tpl.add_line(f"- POSITIVO: {eng['regra_positivo']}")
+    tpl.add_line(f"- NEGATIVO: {eng.get('regra_negativo', 'N/A')}")
     tpl.add_line(_dica_txt)
     tpl.add_line("")
     tpl.add_line("SAÍDA OBRIGATÓRIA:")
@@ -112,13 +114,13 @@ def montar_prompt_mestre(ctx: PromptContext, perfil) -> str:
     p = injetar_estrutura_destino(tpl.build(), ctx.destino)
 
     # ── 4. Estilo e regras ──
-    if "Fotorrealismo" in ctx.estilo_conversao:
+    if ctx.estilo_conversao == EstiloConversao.FOTORREALISMO.value:
         p += (
             "\n[STYLE OVERRIDE — CONVERT TO PHOTOREALISM]: "
             "Rewrite entire scene as photorealistic photo, real skin, photographic texture, "
             "photorealistic. PROHIBIT anime/cartoon/illustration/drawing/cel shading terms."
         )
-    elif "Anime" in ctx.estilo_conversao:
+    elif ctx.estilo_conversao == EstiloConversao.ANIME.value:
         p += (
             "\n[STYLE OVERRIDE — CONVERT TO ANIME 2D]: "
             "Rewrite entire scene as 2D anime illustration, clean anime linework, cel shading, "
@@ -126,7 +128,19 @@ def montar_prompt_mestre(ctx: PromptContext, perfil) -> str:
             "PROHIBIT photo/smartphone lens/photorealistic terms."
         )
 
-    if "Literal" in ctx.foco_contexto:
+    if EstiloConversao.ANTI_PORCELANA_MARKER in ctx.estilo_conversao:
+        p += (
+            "\n[SKIN TEXTURE OVERRIDE — REALISTIC / ANTI-PORCELAIN]: "
+            "The PROMPT MUST describe natural human skin with micro-texture: visible pores, "
+            "fine vellus hair (peach fuzz), subtle uneven skin tone, natural imperfections, "
+            "soft diffused studio light. "
+            "The NEGATIVE PROMPT MUST include: plastic skin, porcelain doll skin, waxy skin, "
+            "airbrushed skin, over-smoothed skin, beauty filter, doll-like. "
+            "PROHIBIT 'flawless skin', 'perfect smooth skin', 'flawless complexion', "
+            "'airbrushed' in the PROMPT."
+        )
+
+    if EstiloConversao.LITERAL.value in ctx.foco_contexto:
         p += (
             "\n[MODO LITERAL]: Remova floreios poéticos/metafóricos, MAS MANTENHA todas as "
             "características do sujeito e os detalhes principais da composição. "
@@ -165,21 +179,30 @@ def build_rascunho_prompt(destino: str, perfil, ideia: str, sensualidade: str,
         "destino consome (nominal técnico, sem adjetivo genérico). Não escreva "
         "meta-comentário sobre o formato."
     )
-    if "Fotorrealismo" in _estilo:
+    if _estilo == EstiloConversao.FOTORREALISMO.value:
         p += (
             "\n[MODIFICADOR ESTILO — CONVERTER PARA FOTORREALISMO]: Reescreva TODA a cena "
             "como FOTOGRAFIA REAL. Substitua 'anime, ilustração, desenho, traço' por "
             "'foto fotorrealista, pele real, textura fotográfica'. "
             "PROÍBA vocabulário anime/cartoon/ilustração."
         )
-    elif "Anime" in _estilo:
+    elif _estilo == EstiloConversao.ANIME.value:
         p += (
             "\n[MODIFICADOR ESTILO — CONVERTER PARA ANIME 2D]: Reescreva TODA a cena como "
             "ILUSTRAÇÃO ANIME 2D. Substitua 'foto, câmera de smartphone, lente 26mm, "
             "fotorrealista' por 'ilustração anime, traço anime limpo, cel shading, "
             "linhas nítidas, anime style'. PROÍBA 'foto, smartphone, lente, fotorrealista'."
         )
-    if "Literal" in foco_contexto:
+    if EstiloConversao.ANTI_PORCELANA_MARKER in _estilo:
+        p += (
+            "\n[MODIFICADOR ESTILO — FOTOGRÁFICO REALISTA / ANTI-PORCELANA]: Ao descrever a "
+            "cena, use microtextura de pele real: poros visíveis, pelinho fino "
+            "(vellus/peach fuzz), tom de pele levemente irregular, imperfeições naturais e "
+            "luz de estúdio suave e difusa. PROÍBA 'pele de porcelana, pele plástica, pele de "
+            "boneca, pele lisa perfeita, retoque airbrush' — e inclua esses termos no negative "
+            "quando o destino aceitar negative prompt."
+        )
+    if EstiloConversao.LITERAL.value in foco_contexto:
         p += "\n[AGENTE LITERAL]: Seja 100% fiel, sem floreios estéticos inúteis."
     return p
 

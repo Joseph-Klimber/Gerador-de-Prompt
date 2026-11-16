@@ -155,7 +155,7 @@ def _eh_erro_transitorio_gemini(e) -> bool:
     if any(k in s for k in ("invalid argument", "validation", "not supported", "unsupported", "unknown field")):
         return False
     # Códigos de erro transitórios conhecidos
-    if any(k in s for k in ("503", "429", "500", "502", "504", "overloaded", "unavailable", "resource exhausted", "internal error", "deadline exceeded")):
+    if any(k in s for k in ("503", "429", "500", "502", "504", "overloaded", "unavailable", "resource exhausted", "internal error", "deadline exceeded", "timed out", "timeout", "read operation timed out", "connection reset", "connection refused", "remote end closed")):
         # Mas se for erro de parâmetro não suportado (ex: temperature), não retentar
         if any(p in s for p in ("temperature", "top_p", "top_k", "candidate_count", "thinking")):
             if "temperature" in s or "not supported" in s or "unsupported" in s:
@@ -206,6 +206,7 @@ def _msg_erro_amigavel(e):
     if "404" in texto or "not found" in texto.lower(): return "⚠️ **Modelo não encontrado (404).** O id selecionado (gemini-3.5/3.6/3.7-flash) pode não estar liberado para sua chave/região. Tente outro dos 3 em Ferramentas Avançadas."
     if "429" in texto or "quota" in texto.lower() or "resource exhausted" in texto.lower(): return "⏳ **Limite de uso da API atingido (429/Quota).** Sua cota gratuita para esta chave acabou. Troque a chave, aguarde o reset (24h) ou use outra conta."
     if "503" in texto or "overloaded" in texto.lower() or "unavailable" in texto.lower(): return "🔌 **Servidores do Google sobrecarregados (503).** O código já tentou 3 vezes com backoff. Se persiste: é sobrecarga regional — tente outro modelo (3.5/3.6/3.7) em Ferramentas Avançadas, troque de chave/projeto ou aguarde 5-10 min."
+    if any(k in texto.lower() for k in ("timed out", "timeout", "read operation timed out", "deadline exceeded")): return "⏱️ **Tempo limite de conexão esgotado (Timeout de Rede).** A API do Google demorou para responder ao processar os dados. Verifique sua conexão ou tente novamente."
     return f"⚠️ **Erro Sistémico:** {texto[:500]}"
 def _chamar_motor_texto(system_prompt, user_prompt, modelo_gemini=None, temperature=0.25):
     from src.config_store import carregar_config

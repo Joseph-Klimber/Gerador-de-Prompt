@@ -4,7 +4,8 @@ import streamlit as st
 
 from src.crypto import fernet_disponivel, mascarar_email
 from config import OPCOES_GEMINI_3, MODELO_VISAO_PADRAO, MODELO_TEXTO_PADRAO
-from core.state import StateKeys, init_state
+from core.state import StateKeys, DEFAULTS
+from src.ui.state_adapter import init_state, sync_pending, get_ideia_fonte, backup_ideia, restore_ideia_if_empty, is_destino_valido
 from src.config_store import carregar_config, salvar_config
 from src.auth import verificar_acesso_sheets
 
@@ -114,7 +115,12 @@ def _logout() -> None:
 
 def _render_sidebar_login() -> None:
     """Sidebar para tela de login (compacta)."""
-    st.caption("Faça login com o e-mail da compra.")
+    st.caption("Modo Bypass Ativo (acesso direto).")
+    if st.button("Entrar Direto (Bypass)", use_container_width=True, type="primary"):
+        st.session_state[StateKeys.AUTENTICADO] = True
+        st.session_state[StateKeys.USER_EMAIL] = "bypass@local.admin"
+        st.session_state[StateKeys.EXPIRACAO] = "Ilimitado"
+        st.rerun()
 
 
 def render_login_page() -> None:
@@ -148,8 +154,11 @@ def render_login_page() -> None:
     
     email_input = st.text_input("E-mail da compra", placeholder="seu@email.com", key="login_email")
     
-    if st.button("Entrar no Sistema", type="primary", use_container_width=True):
-        _processar_login(email_input)
+    if st.button("🚀 Entrar (Bypass / Acesso Direto)", type="primary", use_container_width=True):
+        st.session_state[StateKeys.AUTENTICADO] = True
+        st.session_state[StateKeys.USER_EMAIL] = "bypass@local.admin"
+        st.session_state[StateKeys.EXPIRACAO] = "Ilimitado"
+        st.rerun()
     
     st.caption("LGPD: Imagens com pessoas são processadas apenas para extração e descartadas. Nada é salvo no servidor.")
     st.stop()
