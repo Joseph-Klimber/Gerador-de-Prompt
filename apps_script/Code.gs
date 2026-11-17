@@ -8,7 +8,7 @@
 // Cole a URL gerada no Secrets do Streamlit Cloud como APPS_SCRIPT_URL
 // ============================================================
 
-const SHEET_ID = "YOUR_SHEET_ID"; // SUBSTITUA PELO ID DA SUA PLANILHA
+const SHEET_ID = "180xWEBt4Lu8dqHQCBIwfyMgYA1vdN8eD1FehK-aiXLI"; // ID da planilha de produção
 const SHEET_NAME = "Assinaturas"; // Aba com colunas: Email | Expiracao | Config (JSON string)
 const HMAC_KEY = "YOUR_HMAC_KEY"; // SUBSTITUA PELA PS_FERNET_KEY (mesma chave do Streamlit)
 const MAX_REQUESTS_PER_MINUTE_EMAIL = 20;

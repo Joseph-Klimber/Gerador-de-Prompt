@@ -53,22 +53,24 @@ LINK_KIWIFY_VITALICIO = "https://pay.kiwify.com.br/..."
 
 ## 3. Configurar Google Apps Script
 
-### 3.1 Criar Planilha
-1. Abra [sheets.google.com](https://sheets.google.com)
-2. Nova planilha → nomeie "Prompt Studio Assinaturas"
-3. Aba `Assinaturas` com cabeçalhos:
-   - A1: `Email`
-   - B1: `Expiracao`
-   - C1: `Config`
-4. Copie o **SHEET_ID** da URL: `https://docs.google.com/spreadsheets/d/<SHEET_ID>/edit`
+### 3.1 Planilha (JÁ EXISTE)
+
+**ID:** `180xWEBt4Lu8dqHQCBIwfyMgYA1vdN8eD1FehK-aiXLI`
+**URL:** https://docs.google.com/spreadsheets/d/180xWEBt4Lu8dqHQCBIwfyMgYA1vdN8eD1FehK-aiXLI/edit
+
+Verifique se a aba se chama **`Assinaturas`** com cabeçalhos:
+- A1: `Email`
+- B1: `Expiracao`
+- C1: `Config`
+
+Adicione usuários beta (ver seção 5).
 
 ### 3.2 Criar Projeto Apps Script
 1. Acesse [script.google.com](https://script.google.com)
 2. `Novo projeto` → "Prompt Studio Backend"
-3. Substitua `Code.gs` pelo conteúdo de `apps_script/Code.gs`
-4. **Substitua placeholders**:
+3. Substitua `Code.gs` pelo conteúdo de `apps_script/Code.gs` (o **SHEET_ID já está preenchido**)
+4. **Substitua apenas o placeholder**:
    ```javascript
-   const SHEET_ID = "SEU_SHEET_ID_AQUI";
    const HMAC_KEY = "SUA_PS_FERNET_KEY_AQUI";  // IGUAL à do secrets.toml
    ```
 

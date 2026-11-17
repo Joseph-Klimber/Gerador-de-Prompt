@@ -1,13 +1,20 @@
 # Deploy do Apps Script (Produção)
 
-## 1. Preparar Planilha Google Sheets
+## 1. Planilha Google Sheets (JÁ EXISTE)
 
-1. Crie uma planilha no Google Sheets
-2. Crie uma aba chamada `Assinaturas` com cabeçalhos:
-   - **A1**: `Email`
-   - **B1**: `Expiracao`
-   - **C1**: `Config`
-3. Copie o **ID da planilha** da URL: `https://docs.google.com/spreadsheets/d/<SHEET_ID>/edit`
+**ID:** `180xWEBt4Lu8dqHQCBIwfyMgYA1vdN8eD1FehK-aiXLI`
+**URL:** https://docs.google.com/spreadsheets/d/180xWEBt4Lu8dqHQCBIwfyMgYA1vdN8eD1FehK-aiXLI/edit
+
+Verifique se a aba se chama **`Assinaturas`** com cabeçalhos:
+- **A1**: `Email`
+- **B1**: `Expiracao`
+- **C1**: `Config`
+
+Adicione usuários beta na aba `Assinaturas`:
+| Email | Expiracao | Config |
+|-------|-----------|--------|
+| teste@exemplo.com | 2026-12-31 23:59:59 | {} |
+| seu@email.com | 2026-12-31 23:59:59 | {} |
 
 ## 2. Criar Projeto Apps Script
 
