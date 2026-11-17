@@ -324,7 +324,7 @@ def render_passo_2_visao(destino_ok: bool) -> None:
 def render_passo_3_modificadores(destino_ok: bool) -> None:
     """Passo 3: Modificadores Globais — metade da tela, lado a lado com o Passo 0."""
     st.markdown("### 1️⃣ Passo 1: Modificadores Globais")
-    st.caption("ℹ️ *Aviso: Estes filtros guiam a geração do seu prompt final. (Também alteram a leitura caso envie uma Imagem no Passo 2).")
+    st.caption("ℹ️ *Aviso: Estes filtros guiam a geração do rascunho (Passo 4) e do prompt final. Não alteram a extração de imagem do Passo 2.*")
 
     # Detectar mudança de modificadores e invalidar rascunho/síntese
     modificadores_atuais = (
