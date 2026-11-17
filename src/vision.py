@@ -36,15 +36,15 @@ def _validar_consistencia_lateralidade(dados: dict) -> dict:
     """
     if not dados or not isinstance(dados, dict):
         return dados
-    
+
     try:
         import logging
         logger = logging.getLogger(__name__)
     except Exception:
         return dados
-    
+
     texto_completo = " ".join(str(v) for v in dados.values() if isinstance(v, str)).lower()
-    
+
     # Padrões de contradição: mesmo membro descrito dos dois lados
     contradicoes = [
         (r"braço no lado esquerdo", r"mão direita"),
@@ -54,23 +54,23 @@ def _validar_consistencia_lateralidade(dados: dict) -> dict:
         (r"lado esquerdo da imagem.*braço direito", ""),
         (r"lado direito da imagem.*braço esquerdo", ""),
     ]
-    
+
     for padrao1, padrao2 in contradicoes:
         if padrao2 and re.search(padrao1, texto_completo) and re.search(padrao2, texto_completo):
             logger.warning(f"[Vision] Possível inconsistência lateral: {padrao1} + {padrao2}")
         elif padrao2 == "" and re.search(padrao1, texto_completo):
             logger.warning(f"[Vision] Lateralidade explícita mista: {padrao1}")
-    
+
     return dados
 
 
-    def _teto_visao_palavras(max_tokens_destino: int) -> dict:
-        """Orçamento da visão DERIVADO do teto do destino escolhido no Passo 0."""
-        total = int(min(max(int(max_tokens_destino) * VISAO_FATOR_FIDELIDADE,
-                             VISAO_MIN_PALAVRAS), VISAO_MAX_PALAVRAS))
-        soma = sum(PESO_CAMPO.values()) or 1
-        return {k: max(int(total * PESO_CAMPO.get(k, 10) / soma), VISAO_MIN_POR_CAMPO)
-                for k in PESO_CAMPO}
+def _teto_visao_palavras(max_tokens_destino: int) -> dict:
+    """Orçamento da visão DERIVADO do teto do destino escolhido no Passo 0."""
+    total = int(min(max(int(max_tokens_destino) * VISAO_FATOR_FIDELIDADE,
+                         VISAO_MIN_PALAVRAS), VISAO_MAX_PALAVRAS))
+    soma = sum(PESO_CAMPO.values()) or 1
+    return {k: max(int(total * PESO_CAMPO.get(k, 10) / soma), VISAO_MIN_POR_CAMPO)
+            for k in PESO_CAMPO}
 
 
 def _montar_prompt_visao(estilo: str, sens: str, tetos: dict) -> str:
@@ -140,7 +140,7 @@ def _gerar_com_retry_visao(corpo: dict, modelo: str, api_key: str, tentativas=3)
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent"
     headers = {"Content-Type": "application/json", "x-goog-api-key": api_key}
     data = json.dumps(corpo).encode("utf-8")
-    
+
     for tentativa in range(tentativas):
         try:
             req = urllib.request.Request(url, data=data, headers=headers)
@@ -171,7 +171,7 @@ def _chamar_motor_visao(img_file, estilo_conversao: str, sens_escolhida: str,
     from core.state import StateKeys
     email = st.session_state.get(StateKeys.USER_EMAIL, "")
     config = carregar_config(email)
-    
+
     chaves_dict = config.get("chaves", {})
     api_key = (
         st.session_state.get("input_key_visao", "").strip()
@@ -196,43 +196,7 @@ def _chamar_motor_visao(img_file, estilo_conversao: str, sens_escolhida: str,
     candidatos = [modelo_principal] + [m for m in OPCOES_GEMINI_3 if m != modelo_principal]
     ultimo_erro = None
 
-    # Se a lib oficial genai estiver disponível e configurada, usa ela; senão usa urllib (REST)
-    if genai is not None:
-        try:
-            client = genai.Client(api_key=api_key)
-            for modelo_try in candidatos:
-                try:
-                    response = client.models.generate_content(
-                        model=modelo_try,
-                        contents=[
-                            types.Part.from_bytes(data=b64, mime_type=mime),
-                            "Descreva esta imagem com fidelidade absoluta: sujeito, ação, "
-                            "cenário, iluminação (fonte/direção/dureza) e óptica/câmera "
-                            "(mm, f/, DoF, bokeh, enquadramento). Não resuma. Responda APENAS com JSON válido."
-                        ],
-                        config={
-                            "system_instruction": prompt_sistema,
-                            "temperature": 0.25,
-                            "max_output_tokens": max_out,
-                            "response_mime_type": "application/json",
-                        },
-                    )
-                    texto = response.text or ""
-                    from src.text_engines import parse_json_ia
-                    dados = parse_json_ia(texto)
-                    if not dados:
-                        return {"tipo": "texto", "texto": texto}
-                    dados = _validar_consistencia_lateralidade(dados)
-                    return {"tipo": "json", "dados": dados}
-                except Exception as e:
-                    ultimo_erro = e
-                    if not _eh_erro_transitorio_visao(e) and modelo_try == candidatos[-1]:
-                        break
-                    continue
-        except Exception as e:
-            ultimo_erro = e
-
-    # Fallback / Execução via REST (urllib) — Altamente resiliente a erros de SDK
+    # Execução via REST (urllib) — timeout explícito, retry exponencial, respeito a Retry-After
     corpo_base = {
         "system_instruction": {"parts": [{"text": prompt_sistema}]},
         "contents": [{
