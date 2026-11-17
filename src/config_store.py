@@ -4,6 +4,8 @@ Compatível com Streamlit Community Cloud (filesystem efêmero)."""
 import json
 import pathlib
 import os
+import time
+from datetime import datetime
 from src.crypto import fernet_disponivel, _fernet, _get_ps_fernet_key
 from src.auth import _get_apps_script_url
 
@@ -18,6 +20,16 @@ IS_STREAMLIT_CLOUD = (
 CONFIG_DIR = pathlib.Path(__file__).parent.parent / "config"
 if not IS_STREAMLIT_CLOUD:
     CONFIG_DIR.mkdir(exist_ok=True)
+
+
+def _now() -> str:
+    """Retorna timestamp atual formatado HH:MM:SS."""
+    return datetime.now().strftime("%H:%M:%S")
+
+
+def _msg(msg: str) -> str:
+    """Prefixa mensagem com timestamp."""
+    return f"[{_now()}] {msg}"
 
 
 def _config_path(email: str) -> pathlib.Path:
@@ -70,41 +82,50 @@ def carregar_config(email: str) -> dict:
     # 2. Fallback nuvem (se Apps Script configurado)
         APPS_SCRIPT_URL = _get_apps_script_url()
         if APPS_SCRIPT_URL:
-            try:
-                import urllib.request
-                payload = {"action": "carregar", "email": email}
-                req = urllib.request.Request(
-                    APPS_SCRIPT_URL,
-                    data=json.dumps(payload).encode("utf-8"),
-                    headers={"Content-Type": "application/json"},
-                    method="POST",
-                )
-                with urllib.request.urlopen(req, timeout=10) as resp:
-                    data = json.loads(resp.read().decode("utf-8"))
-                # Verifica HMAC na resposta (proteção contra adulteração)
-                if not _verify_config_hmac(data):
-                    raise ValueError("HMAC inválido na resposta do servidor")
-                if data.get("ok"):
-                    # Nuvem retorna payload criptografado (novo formato) ou config em claro (legado)
-                    if data.get("payload"):
-                        # Novo formato: payload criptografado
-                        decrypted = _decrypt(data["payload"])
-                        if decrypted:
-                            config_data = decrypted
+            max_retries = 2
+            backoff_delays = [1, 2]
+            payload = {"action": "carregar", "email": email}
+            data_bytes = json.dumps(payload).encode("utf-8")
+        
+            for attempt in range(max_retries + 1):
+                try:
+                    import urllib.request
+                    req = urllib.request.Request(
+                        APPS_SCRIPT_URL,
+                        data=data_bytes,
+                        headers={"Content-Type": "application/json"},
+                        method="POST",
+                    )
+                    with urllib.request.urlopen(req, timeout=10) as resp:
+                        data = json.loads(resp.read().decode("utf-8"))
+                    # Verifica HMAC na resposta (proteção contra adulteração)
+                    if not _verify_config_hmac(data):
+                        raise ValueError("HMAC inválido na resposta do servidor")
+                    if data.get("ok"):
+                        # Nuvem retorna payload criptografado (novo formato) ou config em claro (legado)
+                        if data.get("payload"):
+                            # Novo formato: payload criptografado
+                            decrypted = _decrypt(data["payload"])
+                            if decrypted:
+                                config_data = decrypted
+                            else:
+                                config_data = {}
+                        elif data.get("config"):
+                            # Formato legado: config em claro (compatibilidade)
+                            config_data = data["config"]
                         else:
                             config_data = {}
-                    elif data.get("config"):
-                        # Formato legado: config em claro (compatibilidade)
-                        config_data = data["config"]
-                    else:
-                        config_data = {}
 
-                    # Salva localmente para próxima vez (só se não Cloud)
-                    if config_data and not IS_STREAMLIT_CLOUD:
-                        salvar_config(config_data, email=email)
-                    return config_data
-            except Exception:
-                pass
+                        # Salva localmente para próxima vez (só se não Cloud)
+                        if config_data and not IS_STREAMLIT_CLOUD:
+                            salvar_config(config_data, email=email)
+                        return config_data
+                except Exception as e:
+                    if attempt == max_retries:
+                        # Log error silently, fallback to empty config
+                        pass
+                if attempt < max_retries:
+                    time.sleep(backoff_delays[attempt])
     
     return {}
 
@@ -168,30 +189,38 @@ def salvar_config(dados: dict, email: str) -> tuple[bool, str | None]:
     # 2. Tenta nuvem (não bloqueia se falhar) - SEMPRE envia payload criptografado com assinatura HMAC
     APPS_SCRIPT_URL = _get_apps_script_url()
     if APPS_SCRIPT_URL:
-        try:
-            import urllib.request
-            payload_dict = {"action": "salvar", "email": email, "payload": encrypted}
-            payload_str = json.dumps(payload_dict)
-            sig = _hmac_sign(payload_str)
-            req = urllib.request.Request(
-                APPS_SCRIPT_URL,
-                data=payload_str.encode("utf-8"),
-                headers={
-                    "Content-Type": "application/json",
-                    "X-Signature": sig
-                },
-                method="POST",
-            )
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                result = json.loads(resp.read().decode("utf-8"))
-            if not result.get("ok"):
-                if IS_STREAMLIT_CLOUD:
-                    return False, f"Falha ao salvar na nuvem: {result.get('erro')}"
-                return True, f"Aviso: nuvem falhou ({result.get('erro')}) — local salvo"
-        except Exception as e:
-            if IS_STREAMLIT_CLOUD:
-                return False, f"Falha ao salvar na nuvem: {e}"
-            return True, f"Aviso: nuvem indisponível ({e}) — local salvo"
+        max_retries = 2
+        backoff_delays = [1, 2]
+        payload_dict = {"action": "salvar", "email": email, "payload": encrypted}
+        payload_str = json.dumps(payload_dict)
+        sig = _hmac_sign(payload_str)
+        
+        for attempt in range(max_retries + 1):
+            try:
+                import urllib.request
+                req = urllib.request.Request(
+                    APPS_SCRIPT_URL,
+                    data=payload_str.encode("utf-8"),
+                    headers={
+                        "Content-Type": "application/json",
+                        "X-Signature": sig
+                    },
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    result = json.loads(resp.read().decode("utf-8"))
+                if not result.get("ok"):
+                    if IS_STREAMLIT_CLOUD:
+                        return False, _msg(f"Falha ao salvar na nuvem: {result.get('erro')}")
+                    return True, _msg(f"Aviso: nuvem falhou ({result.get('erro')}) — local salvo")
+                break  # Success
+            except Exception as e:
+                if attempt == max_retries:
+                    if IS_STREAMLIT_CLOUD:
+                        return False, _msg(f"Falha ao salvar na nuvem: {e}")
+                    return True, _msg(f"Aviso: nuvem indisponível ({e}) — local salvo")
+            if attempt < max_retries:
+                time.sleep(backoff_delays[attempt])
     
     if IS_STREAMLIT_CLOUD and not APPS_SCRIPT_URL:
         return False, "APPS_SCRIPT_URL não configurado — config não será persistida"
