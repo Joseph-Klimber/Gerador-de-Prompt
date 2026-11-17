@@ -1,9 +1,8 @@
 # src/vision.py
-"""Motor de Visão — Extração estruturada de imagens via Gemini Vision."""
+"""Motor de Visão — Extração estruturada de imagens via Gemini Vision.
+Refatorado para usar google.genai client (consistente com text_engines.py)."""
 import base64
 import json
-import urllib.request
-import urllib.error
 import re
 import time
 import random
@@ -11,16 +10,18 @@ import streamlit as st
 
 try:
     from google import genai
+    from google.genai import types
     from google.genai import errors as genai_errors
 except ImportError:
     genai = None
+    types = None
     genai_errors = None
 
 from config import (
     PESO_CAMPO,
     VISAO_FATOR_FIDELIDADE, VISAO_MIN_PALAVRAS, VISAO_MAX_PALAVRAS,
-    VISAO_MIN_POR_CAMPO, SCHEMA_VISAO, SYS_VISAO_EXTRACAO, DIR_VISAO,
-    OPCOES_GEMINI_3,
+    VISAO_MIN_POR_CAMPO, SYS_VISAO_EXTRACAO, DIR_VISAO,
+    OPCOES_GEMINI_3, MODELO_VISAO_PADRAO,
 )
 from core.contracts import EstiloConversao
 
@@ -101,47 +102,9 @@ def _extrair_retry_after_segundos(erro_str: str):
         if m: return min(float(m.group(1)), 30.0)
         m2 = re.search(r"Retry-After:\s*([0-9]+)", erro_str, re.IGNORECASE)
         if m2: return min(float(m2.group(1)), 30.0)
-    except Exception: pass
+    except Exception:
+        pass
     return None
-
-
-def _gerar_com_retry_visao(corpo: dict, modelo: str, api_key: str, tentativas=3) -> dict:
-    """Chama API de visão com retry exponencial e respeito a Retry-After.
-
-    Erros de timeout (read hang) NÃO repetem no mesmo modelo: uma tentativa e
-    passa a bola para o fallback de modelos, limitando o pior caso a
-    ~timeout x nº de candidatos em vez de timeout x tentativas x candidatos.
-    """
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent"
-    headers = {"Content-Type": "application/json", "x-goog-api-key": api_key}
-    data = json.dumps(corpo).encode("utf-8")
-    
-    ultimo_erro = None
-    for tentativa in range(tentativas):
-        try:
-            req = urllib.request.Request(url, data=data, headers=headers)
-            with urllib.request.urlopen(req, timeout=90) as resp:
-                return json.loads(resp.read().decode("utf-8"))
-        except urllib.error.HTTPError as e:
-            ultimo_erro = e
-            corpo_err = e.read().decode("utf-8", "replace")
-            if not _eh_erro_transitorio_visao(e) or tentativa == tentativas - 1:
-                raise RuntimeError(f"Visão · HTTP {e.code}: {corpo_err[:600]}") from e
-            retry_after = _extrair_retry_after_segundos(corpo_err)
-            espera = retry_after if retry_after is not None else (2 ** (tentativa + 1)) + random.uniform(0, 0.5)
-            espera = min(espera, 30.0)
-            time.sleep(espera)
-        except Exception as e:
-            ultimo_erro = e
-            s = str(e).lower()
-            eh_timeout = any(k in s for k in ("timed out", "timeout", "read operation timed out"))
-            if not _eh_erro_transitorio_visao(e) or tentativa == tentativas - 1 or eh_timeout:
-                raise RuntimeError(f"Visão · {e}") from e
-            retry_after = _extrair_retry_after_segundos(str(e))
-            espera = retry_after if retry_after is not None else (2 ** (tentativa + 1)) + random.uniform(0, 0.5)
-            espera = min(espera, 30.0)
-            time.sleep(espera)
-    raise ultimo_erro
 
 
 def _teto_visao_palavras(max_tokens_destino: int) -> dict:
@@ -179,21 +142,12 @@ def _img_para_inline(img_file) -> tuple[str, str]:
 
 def _chamar_motor_visao(img_file, estilo_conversao: str, sens_escolhida: str,
                        modelo_gemini: str, max_tokens_destino: int) -> dict:
-    """Motor de visão. É origem de dados do prompt final.
-    
-    `max_tokens_destino` é o teto do destino escolhido no Passo 0. A visão é a
-    única etapa que enxerga a imagem, então NÃO a estrangulamos: extraímos com
-    fidelidade e deixamos o adensamento com hierarquia para o consumidor.
-    
-    Devolve {"tipo": "json", "dados": {...5 campos...}} ou {"tipo": "texto", ...}.
-    Inclui retry exponencial, fallback de modelos e respeito a Retry-After.
-    """
+    """Motor de visão. É origem de dados do prompt final."""
     from src.config_store import carregar_config
     from core.state import StateKeys
     email = st.session_state.get(StateKeys.USER_EMAIL, "")
     config = carregar_config(email)
     
-    # Busca a chave em todas as origens possíveis (session_state, config store, chaves de texto como fallback)
     chaves_dict = config.get("chaves", {})
     api_key = (
         st.session_state.get("input_key_visao", "").strip()
@@ -208,12 +162,53 @@ def _chamar_motor_visao(img_file, estilo_conversao: str, sens_escolhida: str,
 
     tetos = _teto_visao_palavras(max_tokens_destino)
     b64, mime = _img_para_inline(img_file)
-    
-    # Teto de runaway: 2.5x o orçamento de palavras (folga p/ JSON + folha de fidelidade)
     max_out = int(sum(tetos.values()) * 2.5)
-    
     prompt_sistema = _montar_prompt_visao(estilo_conversao, sens_escolhida, tetos)
-    
+
+    modelo_principal = (modelo_gemini or "").strip()
+    if not modelo_principal or modelo_principal not in OPCOES_GEMINI_3:
+        modelo_principal = MODELO_VISAO_PADRAO
+
+    candidatos = [modelo_principal] + [m for m in OPCOES_GEMINI_3 if m != modelo_principal]
+    ultimo_erro = None
+
+    # Se a lib oficial genai estiver disponível e configurada, usa ela; senão usa urllib (REST)
+    if genai is not None:
+        try:
+            client = genai.Client(api_key=api_key)
+            for modelo_try in candidatos:
+                try:
+                    response = client.models.generate_content(
+                        model=modelo_try,
+                        contents=[
+                            types.Part.from_bytes(data=b64, mime_type=mime),
+                            "Descreva esta imagem com fidelidade absoluta: sujeito, ação, "
+                            "cenário, iluminação (fonte/direção/dureza) e óptica/câmera "
+                            "(mm, f/, DoF, bokeh, enquadramento). Não resuma. Responda APENAS com JSON válido."
+                        ],
+                        config={
+                            "system_instruction": prompt_sistema,
+                            "temperature": 0.25,
+                            "max_output_tokens": max_out,
+                            "response_mime_type": "application/json",
+                        },
+                    )
+                    texto = response.text or ""
+                    from src.text_engines import parse_json_ia
+                    dados = parse_json_ia(texto)
+                    if not dados:
+                        return {"tipo": "texto", "texto": texto}
+                    dados = _validar_consistencia_lateralidade(dados)
+                    return {"tipo": "json", "dados": dados}
+                except Exception as e:
+                    ultimo_erro = e
+                    if not _eh_erro_transitorio_visao(e) and modelo_try == candidatos[-1]:
+                        break
+                    continue
+        except Exception as e:
+            ultimo_erro = e
+
+    # Fallback / Execução via REST (urllib) — Altamente resiliente a erros de SDK
     corpo_base = {
         "system_instruction": {"parts": [{"text": prompt_sistema}]},
         "contents": [{
@@ -226,53 +221,27 @@ def _chamar_motor_visao(img_file, estilo_conversao: str, sens_escolhida: str,
             ],
         }],
         "generationConfig": {
-            "temperature": 0.15,  # factual: o mínimo de invenção
+            "temperature": 0.25,
             "maxOutputTokens": max_out,
             "responseMimeType": "application/json",
-            "responseSchema": SCHEMA_VISAO,
         },
     }
-    
-    # Fallback de modelos: o selecionado + os outros 3.5/3.6/3.7
-    modelo_principal = (modelo_gemini or "").strip()
-    if not modelo_principal:
-        modelo_principal = MODELO_VISAO_PADRAO
-    if modelo_principal not in OPCOES_GEMINI_3:
-        modelo_principal = MODELO_VISAO_PADRAO
-    
-    candidatos = [modelo_principal] + [m for m in OPCOES_GEMINI_3 if m != modelo_principal]
-    ultimo_erro = None
-    
+
     for modelo_try in candidatos:
-        corpo = dict(corpo_base)  # shallow copy
+        corpo = dict(corpo_base)
         try:
             payload = _gerar_com_retry_visao(corpo, modelo_try, api_key)
+            texto = payload["candidates"][0]["content"]["parts"][0]["text"]
+            from src.text_engines import parse_json_ia
+            dados = parse_json_ia(texto)
+            if not dados:
+                return {"tipo": "texto", "texto": texto}
+            dados = _validar_consistencia_lateralidade(dados)
+            return {"tipo": "json", "dados": dados}
         except Exception as e:
             ultimo_erro = e
-            s = str(e).lower()
-            eh_transitorio = _eh_erro_transitorio_visao(e)
-            # Se erro transitório (503, 429, etc.) e não é o último modelo, tenta próximo
-            if eh_transitorio or "503" in s or "overloaded" in s or "unavailable" in s or "429" in s or "resource exhausted" in s:
-                if modelo_try != candidatos[-1]:
-                    continue
-            # Se erro não transitório ou último modelo, para
-            break
-        # Sucesso: processa resposta
-        try:
-            texto = payload["candidates"][0]["content"]["parts"][0]["text"]
-        except (KeyError, IndexError, TypeError) as e:
-            finish = (payload.get("candidates") or [{}])[0].get("finishReason", "?")
-            raise RuntimeError(f"Visão · resposta sem texto (finishReason={finish}).") from e
-        
-        try:
-            dados = json.loads(texto)
-        except json.JSONDecodeError:
-            return {"tipo": "texto", "texto": texto}
-        
-        # Validação leve de consistência lateral (defesa em profundidade)
-        dados = _validar_consistencia_lateralidade(dados)
-        
-        # NÃO cortamos aqui. A visão é a única etapa que enxerga a imagem.
-        return {"tipo": "json", "dados": dados}
-    
+            if not _eh_erro_transitorio_visao(e) and modelo_try == candidatos[-1]:
+                break
+            continue
+
     raise RuntimeError(f"Falha na Visão (Gemini) após fallback {candidatos}: {ultimo_erro}")
