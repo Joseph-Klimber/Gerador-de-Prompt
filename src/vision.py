@@ -3,6 +3,8 @@
 Refatorado para usar google.genai client (consistente com text_engines.py)."""
 import base64
 import json
+import urllib.request
+import urllib.error
 import re
 import time
 import random
@@ -62,58 +64,13 @@ def _validar_consistencia_lateralidade(dados: dict) -> dict:
     return dados
 
 
-def _eh_erro_transitorio_visao(e) -> bool:
-    """Verifica se erro de visão é transitório (retry automático) usando exceções tipadas."""
-    if genai_errors is not None:
-        if isinstance(e, genai_errors.ServerError):
-            return True
-        if isinstance(e, genai_errors.ClientError):
-            code = getattr(e, "code", None)
-            if code == 429:
-                return True
-            if code in (400, 401, 403, 404):
-                return False
-            return False
-    
-    # Fallback: string matching legado
-    s = str(e).lower()
-    if any(k in s for k in ("invalid argument", "validation", "not supported", "unsupported", "unknown field")):
-        return False
-    if any(k in s for k in ("503", "429", "500", "502", "504", "overloaded", "unavailable", "resource exhausted", "internal error", "deadline exceeded", "timed out", "timeout", "read operation timed out", "connection reset", "connection refused", "remote end closed")):
-        if any(p in s for p in ("temperature", "top_p", "top_k", "candidate_count", "thinking")):
-            if "temperature" in s or "not supported" in s or "unsupported" in s:
-                return False
-        return True
-    try:
-        code = getattr(e, "code", None) or getattr(e, "status_code", None) or getattr(getattr(e, "response", None), "status_code", None)
-        if code in (429, 500, 502, 503, 504):
-            if any(p in s for p in ("temperature", "candidate_count")) and "not supported" in s:
-                return False
-            return True
-    except Exception:
-        pass
-    return False
-
-
-def _extrair_retry_after_segundos(erro_str: str):
-    """Extrai Retry-After do erro (header ou corpo)."""
-    try:
-        m = re.search(r"retry[^0-9]*([0-9]+(?:\.[0-9]+)?)\s*s", erro_str, re.IGNORECASE)
-        if m: return min(float(m.group(1)), 30.0)
-        m2 = re.search(r"Retry-After:\s*([0-9]+)", erro_str, re.IGNORECASE)
-        if m2: return min(float(m2.group(1)), 30.0)
-    except Exception:
-        pass
-    return None
-
-
-def _teto_visao_palavras(max_tokens_destino: int) -> dict:
-    """Orçamento da visão DERIVADO do teto do destino escolhido no Passo 0."""
-    total = int(min(max(int(max_tokens_destino) * VISAO_FATOR_FIDELIDADE,
-                         VISAO_MIN_PALAVRAS), VISAO_MAX_PALAVRAS))
-    soma = sum(PESO_CAMPO.values()) or 1
-    return {k: max(int(total * PESO_CAMPO.get(k, 10) / soma), VISAO_MIN_POR_CAMPO)
-            for k in PESO_CAMPO}
+    def _teto_visao_palavras(max_tokens_destino: int) -> dict:
+        """Orçamento da visão DERIVADO do teto do destino escolhido no Passo 0."""
+        total = int(min(max(int(max_tokens_destino) * VISAO_FATOR_FIDELIDADE,
+                             VISAO_MIN_PALAVRAS), VISAO_MAX_PALAVRAS))
+        soma = sum(PESO_CAMPO.values()) or 1
+        return {k: max(int(total * PESO_CAMPO.get(k, 10) / soma), VISAO_MIN_POR_CAMPO)
+                for k in PESO_CAMPO}
 
 
 def _montar_prompt_visao(estilo: str, sens: str, tetos: dict) -> str:
@@ -138,6 +95,73 @@ def _img_para_inline(img_file) -> tuple[str, str]:
     bruto = img_file.read()
     mime = getattr(img_file, "type", None) or "image/jpeg"
     return base64.b64encode(bruto).decode(), mime
+
+
+def _eh_erro_transitorio_visao(e) -> bool:
+    """Verifica se erro de visão é transitório (retry automático)."""
+    if genai_errors is not None:
+        if isinstance(e, genai_errors.ServerError):
+            return True
+        if isinstance(e, genai_errors.ClientError):
+            code = getattr(e, "code", None)
+            if code == 429:
+                return True
+            if code in (400, 401, 403, 404):
+                return False
+            return False
+    s = str(e).lower()
+    if any(k in s for k in ("invalid argument", "validation", "not supported", "unsupported", "unknown field")):
+        return False
+    if any(k in s for k in ("503", "429", "500", "502", "504", "overloaded", "unavailable", "resource exhausted", "internal error", "deadline exceeded", "timed out", "timeout", "read operation timed out", "connection reset", "connection refused", "remote end closed")):
+        return True
+    try:
+        code = getattr(e, "code", None) or getattr(e, "status_code", None) or getattr(getattr(e, "response", None), "status_code", None)
+        if code in (429, 500, 502, 503, 504):
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _extrair_retry_after_segundos(erro_str: str):
+    """Extrai Retry-After do erro (header ou corpo)."""
+    try:
+        m = re.search(r"retry[^0-9]*([0-9]+(?:\.[0-9]+)?)\s*s", erro_str, re.IGNORECASE)
+        if m: return min(float(m.group(1)), 30.0)
+        m2 = re.search(r"Retry-After:\s*([0-9]+)", erro_str, re.IGNORECASE)
+        if m2: return min(float(m2.group(1)), 30.0)
+    except Exception:
+        pass
+    return None
+
+
+def _gerar_com_retry_visao(corpo: dict, modelo: str, api_key: str, tentativas=3) -> dict:
+    """Chama API de visão via REST com retry exponencial e respeito a Retry-After."""
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent"
+    headers = {"Content-Type": "application/json", "x-goog-api-key": api_key}
+    data = json.dumps(corpo).encode("utf-8")
+    
+    for tentativa in range(tentativas):
+        try:
+            req = urllib.request.Request(url, data=data, headers=headers)
+            with urllib.request.urlopen(req, timeout=90) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            corpo_err = e.read().decode("utf-8", "replace")
+            if not _eh_erro_transitorio_visao(e) or tentativa == tentativas - 1:
+                raise RuntimeError(f"Visão · HTTP {e.code}: {corpo_err[:600]}") from e
+            retry_after = _extrair_retry_after_segundos(corpo_err)
+            espera = retry_after if retry_after is not None else (2 ** (tentativa + 1)) + random.uniform(0, 0.5)
+            time.sleep(min(espera, 30.0))
+        except Exception as e:
+            s = str(e).lower()
+            eh_timeout = any(k in s for k in ("timed out", "timeout", "read operation timed out"))
+            if not _eh_erro_transitorio_visao(e) or tentativa == tentativas - 1 or eh_timeout:
+                raise RuntimeError(f"Visão · {e}") from e
+            retry_after = _extrair_retry_after_segundos(str(e))
+            espera = retry_after if retry_after is not None else (2 ** (tentativa + 1)) + random.uniform(0, 0.5)
+            time.sleep(min(espera, 30.0))
+    raise RuntimeError("Todas as tentativas esgotadas")
 
 
 def _chamar_motor_visao(img_file, estilo_conversao: str, sens_escolhida: str,
