@@ -147,7 +147,7 @@ checks = [
     ('_gerar_com_retry_visao', '_gerar_com_retry_visao' in vision_src),
     ('Retry loop with candidatos', 'for modelo_try in candidatos' in vision_src),
     ('_eh_erro_transitorio_visao', '_eh_erro_transitorio_visao' in vision_src),
-    ('Timeout 90s no retry', 'timeout=90' in inspect.getsource(_gerar_com_retry_visao)),
+    ('Timeout 180s no retry', 'timeout=180' in inspect.getsource(_gerar_com_retry_visao)),
     ('MODELO_VISAO_PADRAO', 'MODELO_VISAO_PADRAO' in vision_src),
 ]
 for name, result in checks:

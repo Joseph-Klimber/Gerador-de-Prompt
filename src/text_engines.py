@@ -20,6 +20,11 @@ except ImportError:
     genai = None
     types = None
     genai_errors = None
+
+# Timezone do Brasil (UTC-3)
+from datetime import datetime, timezone, timedelta
+BR_TZ = timezone(timedelta(hours=-3))
+
 from config import OPCOES_SENSUALIDADE, OPCOES_GEMINI_3, MODELO_VISAO_PADRAO, MODELO_TEXTO_PADRAO
 BANCO_DE_MOTORES = {
     "ComfyUI / Pony SDXL": {"regra_positivo": "Tradução TAG-A-TAG. Mantenha 100% dos detalhes. Ordem: score_9, score_8_up, score_7_up, score_6_up, score_5_up, score_4_up -> source_* -> rating_* -> [contagem e gênero, ex: 1girl, solo] -> [descrição física completa] -> [roupa detalhada completa] -> [ação completa] -> [cenário completo]. Use vírgulas. Nunca resuma.", "regra_negativo": "Sem regras fixas. Crie tags que sejam o oposto exato das características principais (oposto da roupa, oposto da luz, oposto do cenário, oposto da qualidade). Ex: se positivo tem 'highly detailed', negativo tem 'low detail, blurry'."},
@@ -203,8 +208,8 @@ def _msg_erro_diagnostico(e):
     except Exception: return str(e)[:1200]
 
 def _now() -> str:
-    """Retorna timestamp atual formatado HH:MM:SS."""
-    return datetime.now().strftime("%H:%M:%S")
+    """Retorna timestamp atual formatado HH:MM:SS (horário de Brasília)."""
+    return datetime.now(BR_TZ).strftime("%H:%M:%S")
 
 
 def _msg(msg: str) -> str:

@@ -1,4 +1,3 @@
-# src/vision.py
 """Motor de Visão — Extração estruturada de imagens via Gemini Vision.
 Refatorado para usar google.genai client (consistente com text_engines.py)."""
 import base64
@@ -9,6 +8,7 @@ import re
 import time
 import random
 import streamlit as st
+from datetime import datetime, timezone, timedelta
 
 try:
     from google import genai
@@ -18,6 +18,9 @@ except ImportError:
     genai = None
     types = None
     genai_errors = None
+
+# Timezone do Brasil (UTC-3)
+BR_TZ = timezone(timedelta(hours=-3))
 
 from config import (
     PESO_CAMPO,
@@ -144,7 +147,7 @@ def _gerar_com_retry_visao(corpo: dict, modelo: str, api_key: str, tentativas=3)
     for tentativa in range(tentativas):
         try:
             req = urllib.request.Request(url, data=data, headers=headers)
-            with urllib.request.urlopen(req, timeout=90) as resp:
+            with urllib.request.urlopen(req, timeout=180) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
             corpo_err = e.read().decode("utf-8", "replace")
