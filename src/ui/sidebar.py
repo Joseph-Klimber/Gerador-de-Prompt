@@ -127,12 +127,10 @@ def _logout() -> None:
 
 def _render_sidebar_login() -> None:
     """Sidebar para tela de login (compacta)."""
-    st.caption("Modo Bypass Ativo (acesso direto).")
-    if st.button("Entrar Direto (Bypass)", use_container_width=True, type="primary"):
-        st.session_state[StateKeys.AUTENTICADO] = True
-        st.session_state[StateKeys.USER_EMAIL] = "bypass@local.admin"
-        st.session_state[StateKeys.EXPIRACAO] = "Ilimitado"
-        st.rerun()
+    st.caption("Faça login com o e-mail da compra.")
+    email_sb = st.text_input("E-mail", placeholder="seu@email.com", key="login_email_sb")
+    if st.button("🚀 Entrar", use_container_width=True, type="primary"):
+        _processar_login(email_sb)
 
 
 def render_login_page() -> None:
@@ -166,11 +164,8 @@ def render_login_page() -> None:
     
     email_input = st.text_input("E-mail da compra", placeholder="seu@email.com", key="login_email")
     
-    if st.button("🚀 Entrar (Bypass / Acesso Direto)", type="primary", use_container_width=True):
-        st.session_state[StateKeys.AUTENTICADO] = True
-        st.session_state[StateKeys.USER_EMAIL] = "bypass@local.admin"
-        st.session_state[StateKeys.EXPIRACAO] = "Ilimitado"
-        st.rerun()
+    if st.button("🚀 Entrar", type="primary", use_container_width=True):
+        _processar_login(email_input)
     
     st.caption("LGPD: Imagens com pessoas são processadas apenas para extração e descartadas. Nada é salvo no servidor.")
     st.stop()
