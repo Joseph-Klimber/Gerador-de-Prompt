@@ -167,9 +167,11 @@ def _gerar_com_retry_visao(corpo: dict, modelo: str, api_key: str, tentativas=3)
 def _chamar_motor_visao(img_file, estilo_conversao: str, sens_escolhida: str,
                        modelo_gemini: str, max_tokens_destino: int) -> dict:
     """Motor de visão. É origem de dados do prompt final."""
-    from src.config_store import carregar_config
+    from src.config_store import carregar_config, _CONFIG_CACHE
     from core.state import StateKeys
     email = st.session_state.get(StateKeys.USER_EMAIL, "")
+    # Bypass cache para garantir leitura fresca das chaves
+    _CONFIG_CACHE.pop(email, None)
     config = carregar_config(email)
 
     chaves_dict = config.get("chaves", {})
@@ -182,7 +184,21 @@ def _chamar_motor_visao(img_file, estilo_conversao: str, sens_escolhida: str,
         or chaves_dict.get("Chave Texto (BYOK)", "").strip()
     )
     if not api_key:
-        raise RuntimeError("Nenhuma chave configurada para Visão ou Texto. Conecte sua chave na barra lateral.")
+        # Diagnóstico detalhado
+        debug_info = {
+            "email": email,
+            "session_input_visao": bool(st.session_state.get("input_key_visao", "").strip()),
+            "session_input_texto": bool(st.session_state.get("input_key_texto", "").strip()),
+            "config_chaves_keys": list(chaves_dict.keys()) if chaves_dict else "vazio",
+            "config_chave_visao": bool(chaves_dict.get("Chave Visao", "").strip()) if chaves_dict else False,
+            "config_chave_visao_acento": bool(chaves_dict.get("Chave Visão", "").strip()) if chaves_dict else False,
+            "config_chave_texto": bool(chaves_dict.get("Chave Texto", "").strip()) if chaves_dict else False,
+        }
+        raise RuntimeError(
+            "Nenhuma chave de API encontrada. "
+            "Verifique: (1) está logado? (2) salvou as chaves no botão 'Conectar Motores Isolados' na barra lateral? "
+            f"Debug: {debug_info}"
+        )
 
     tetos = _teto_visao_palavras(max_tokens_destino)
     b64, mime = _img_para_inline(img_file)
