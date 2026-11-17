@@ -34,6 +34,59 @@ def _msg(msg: str) -> str:
     return f"[{_now()}] {msg}"
 
 
+def _chaves_configuradas() -> tuple[bool, str]:
+    """Verifica se chaves Visão e/ou Texto estão configuradas.
+    Returns: (ok, mensagem_se_falta)
+    """
+    from src.crypto import fernet_disponivel
+    from src.config_store import carregar_config
+    from core.state import StateKeys
+    
+    if not fernet_disponivel():
+        return False, "Criptografia desabilitada — configure PS_FERNET_KEY"
+    
+    email = st.session_state.get(StateKeys.USER_EMAIL, "")
+    cfg = carregar_config(email)
+    chaves = cfg.get("chaves", {})
+    
+    tem_visao = bool(chaves.get("Chave Visao", "").strip())
+    tem_texto = bool(chaves.get("Chave Texto", "").strip())
+    
+    # Para extração de imagem precisa Visão; para rascunho/auditoria/síntese precisa Texto
+    return (tem_visao or tem_texto), ""
+
+
+def _chave_visao_ok() -> tuple[bool, str]:
+    """Verifica se chave Visão está configurada."""
+    from src.crypto import fernet_disponivel
+    from src.config_store import carregar_config
+    from core.state import StateKeys
+    
+    if not fernet_disponivel():
+        return False, "Criptografia desabilitada — configure PS_FERNET_KEY"
+    
+    email = st.session_state.get(StateKeys.USER_EMAIL, "")
+    cfg = carregar_config(email)
+    tem_visao = bool(cfg.get("chaves", {}).get("Chave Visao", "").strip())
+    return tem_visao, "Chave Visão não configurada — conecte na barra lateral"
+
+
+def _chave_texto_ok() -> tuple[bool, str]:
+    """Verifica se chave Texto está configurada."""
+    from src.crypto import fernet_disponivel
+    from src.config_store import carregar_config
+    from core.state import StateKeys
+    
+    if not fernet_disponivel():
+        return False, "Criptografia desabilitada — configure PS_FERNET_KEY"
+    
+    email = st.session_state.get(StateKeys.USER_EMAIL, "")
+    cfg = carregar_config(email)
+    tem_texto = bool(cfg.get("chaves", {}).get("Chave Texto", "").strip())
+    return tem_texto, "Chave Texto não configurada — conecte na barra lateral"
+
+
+
 def render_passo_0_destino() -> bool:
     """Passo 0: Motor Destino (obrigatório e primeiro).
     
@@ -150,10 +203,13 @@ def render_passo_2_visao(destino_ok: bool) -> None:
             st.warning(_msg("Não foi possível gerar a miniatura desta imagem — a extração pode continuar."))
         st.caption("🔍 Miniatura reduzida para visualização; o Motor de Visão recebe a imagem original em alta.")
 
+    # Verificar chave Visão
+    visao_ok, visao_msg = _chave_visao_ok()
+    
     btn_ler = st.button(
         "👁️ Extrair Imagem (Motor de Visão)",
         use_container_width=True,
-        disabled=not destino_ok,
+        disabled=not destino_ok or not visao_ok,
     )
     
     if not destino_ok:
@@ -161,6 +217,8 @@ def render_passo_2_visao(destino_ok: bool) -> None:
             "🔒 Selecione o motor de destino no Passo 0 para liberar a extração — o "
             "orçamento da visão é derivado do teto desse motor."
         )
+    elif not visao_ok:
+        st.error(_msg(visao_msg))
 
         # Validação client-side 10MB (Roteiro: mensagem exata "Imagem limite: 10 MB.")
         if img_file and getattr(img_file, "size", 0) > 10 * 1024 * 1024:
@@ -299,15 +357,18 @@ def render_passo_4_rascunho_auditoria(destino_ok: bool) -> None:
     st.markdown("---")
     st.markdown("### 4️⃣ Passo 4: Rascunho & Validação (Opcional)")
 
+    # Verificar chave Texto
+    texto_ok, texto_msg = _chave_texto_ok()
+    
     btn_pre = st.button(
         "👁️ Rascunhar Cena (Via Motor de Texto)",
         use_container_width=True,
-        disabled=not destino_ok,
+        disabled=not destino_ok or not texto_ok,
     )
     btn_ava = st.button(
         "🔍 Auditar no Compositômetro (Raio-X)",
         use_container_width=True,
-        disabled=not destino_ok,
+        disabled=not destino_ok or not texto_ok,
     )
 
     if not destino_ok:
@@ -315,6 +376,9 @@ def render_passo_4_rascunho_auditoria(destino_ok: bool) -> None:
             "🔒 O rascunho e a auditoria dependem do motor de destino (Passo 0) — sem ele "
             "não há formato-alvo para rascunhar."
         )
+        return
+    elif not texto_ok:
+        st.error(_msg(texto_msg))
         return
 
     # Rascunho
@@ -452,16 +516,22 @@ def render_passo_5_sintese(destino_ok: bool) -> None:
     else:
         st.caption("Selecione o destino no Passo 0 para ver o teto e formato.")
 
+    # Verificar chave Texto
+    texto_ok, texto_msg = _chave_texto_ok()
+    
     btn_exec = st.button(
         "⚡ Gerar Código do Prompt",
         type="primary",
         use_container_width=True,
-        disabled=not destino_ok,
+        disabled=not destino_ok or not texto_ok,
     )
 
     if btn_exec:
         if not destino_ok:
             st.error(_msg("Selecione para qual motor"))
+            return
+        if not texto_ok:
+            st.error(_msg(texto_msg))
             return
         if not st.session_state[StateKeys.IDEIA_INPUT].strip():
             st.warning(_msg("Escreva sua Ideia no Passo 1."))
