@@ -15,13 +15,15 @@ from core.destination import (
     perfil_do_destino, teto_destino, estrutura_destino, dica_tecnica_destino,
     validar_destino_escolhido,
 )
-from core.prompt_builder import build_rascunho_prompt, build_auditoria_prompt
+from core.prompt_builder import build_rascunho_prompt, build_auditoria_prompt, PromptContext, montar_prompt_mestre
 from src.text_engines import (
     BANCO_DE_MOTORES, SYS_GERADOR_PREPROMPT, SYS_COMPOSITOMETRO, SYS_MESTRE_CORE,
     _chamar_motor_texto, _msg_erro_amigavel, _msg_erro_diagnostico, parse_json_ia,
     _ps_markup_origin, _build_gemini_config,
 )
 from src.vision import _chamar_motor_visao
+from src.config_store import carregar_config
+from src.crypto import fernet_disponivel
 
 
 def _now() -> str:
@@ -37,53 +39,66 @@ def _msg(msg: str) -> str:
 def _chaves_configuradas() -> tuple[bool, str]:
     """Verifica se chaves Visão e/ou Texto estão configuradas.
     Returns: (ok, mensagem_se_falta)
+    Cacheado por sessão para evitar múltiplas chamadas de rede.
     """
-    from src.crypto import fernet_disponivel
-    from src.config_store import carregar_config
-    from core.state import StateKeys
-    
+    cache_key = "_chaves_config_cache"
+    if cache_key in st.session_state:
+        return st.session_state[cache_key]
+
     if not fernet_disponivel():
-        return False, "Criptografia desabilitada — configure PS_FERNET_KEY"
-    
+        result = (False, "Criptografia desabilitada — configure PS_FERNET_KEY")
+        st.session_state[cache_key] = result
+        return result
+
     email = st.session_state.get(StateKeys.USER_EMAIL, "")
     cfg = carregar_config(email)
     chaves = cfg.get("chaves", {})
-    
+
     tem_visao = bool(chaves.get("Chave Visao", "").strip())
     tem_texto = bool(chaves.get("Chave Texto", "").strip())
-    
+
     # Para extração de imagem precisa Visão; para rascunho/auditoria/síntese precisa Texto
-    return (tem_visao or tem_texto), ""
+    result = ((tem_visao or tem_texto), "")
+    st.session_state[cache_key] = result
+    return result
 
 
 def _chave_visao_ok() -> tuple[bool, str]:
-    """Verifica se chave Visão está configurada."""
-    from src.crypto import fernet_disponivel
-    from src.config_store import carregar_config
-    from core.state import StateKeys
-    
+    """Verifica se chave Visão está configurada. Cacheado por sessão."""
+    cache_key = "_chave_visao_cache"
+    if cache_key in st.session_state:
+        return st.session_state[cache_key]
+
     if not fernet_disponivel():
-        return False, "Criptografia desabilitada — configure PS_FERNET_KEY"
-    
+        result = (False, "Criptografia desabilitada — configure PS_FERNET_KEY")
+        st.session_state[cache_key] = result
+        return result
+
     email = st.session_state.get(StateKeys.USER_EMAIL, "")
     cfg = carregar_config(email)
     tem_visao = bool(cfg.get("chaves", {}).get("Chave Visao", "").strip())
-    return tem_visao, "Chave Visão não configurada — conecte na barra lateral"
+    result = (tem_visao, "Chave Visão não configurada — conecte na barra lateral")
+    st.session_state[cache_key] = result
+    return result
 
 
 def _chave_texto_ok() -> tuple[bool, str]:
-    """Verifica se chave Texto está configurada."""
-    from src.crypto import fernet_disponivel
-    from src.config_store import carregar_config
-    from core.state import StateKeys
-    
+    """Verifica se chave Texto está configurada. Cacheado por sessão."""
+    cache_key = "_chave_texto_cache"
+    if cache_key in st.session_state:
+        return st.session_state[cache_key]
+
     if not fernet_disponivel():
-        return False, "Criptografia desabilitada — configure PS_FERNET_KEY"
-    
+        result = (False, "Criptografia desabilitada — configure PS_FERNET_KEY")
+        st.session_state[cache_key] = result
+        return result
+
     email = st.session_state.get(StateKeys.USER_EMAIL, "")
     cfg = carregar_config(email)
     tem_texto = bool(cfg.get("chaves", {}).get("Chave Texto", "").strip())
-    return tem_texto, "Chave Texto não configurada — conecte na barra lateral"
+    result = (tem_texto, "Chave Texto não configurada — conecte na barra lateral")
+    st.session_state[cache_key] = result
+    return result
 
 
 
@@ -183,7 +198,7 @@ def render_passo_2_visao(destino_ok: bool) -> None:
     """Passo 2: Referência Óptica (Imagem Opcional) — Extração via Visão. Largura total."""
     st.markdown("### 2️⃣ Passo 2: Referência Óptica (Opcional)")
     st.caption("Sem inspiração para escrever? Faça upload de uma imagem. A Via de Visão extrairá os micro-detalhes para o Passo 1.")
-    
+
     img_file = st.file_uploader(
         "Upload de Referência",
         type=["png", "jpg", "jpeg", "webp"],
@@ -205,13 +220,13 @@ def render_passo_2_visao(destino_ok: bool) -> None:
 
     # Verificar chave Visão
     visao_ok, visao_msg = _chave_visao_ok()
-    
+
     btn_ler = st.button(
         "👁️ Extrair Imagem (Motor de Visão)",
         use_container_width=True,
         disabled=not destino_ok or not visao_ok,
     )
-    
+
     if not destino_ok:
         st.caption(
             "🔒 Selecione o motor de destino no Passo 0 para liberar a extração — o "
@@ -226,12 +241,6 @@ def render_passo_2_visao(destino_ok: bool) -> None:
             st.caption("🔒 Upload bloqueado localmente — imagem não foi enviada ao modelo.")
             return  # Sai da função sem chamar IA
 
-        # Validação client-side 10MB (Roteiro: mensagem exata "Imagem limite: 10 MB.")
-        if img_file and getattr(img_file, "size", 0) > 10 * 1024 * 1024:
-            st.error(_msg("Imagem limite: 10 MB."))
-            st.caption("🔒 Upload bloqueado localmente — imagem não foi enviada ao modelo.")
-            return  # Sai da função sem chamar IA
-    
     # Info de normalização da imagem
     if st.session_state.get(StateKeys.NORM_INFO):
         _ni = st.session_state[StateKeys.NORM_INFO]
@@ -248,7 +257,7 @@ def render_passo_2_visao(destino_ok: bool) -> None:
             f"{_rotulo} · {_ni.get('antes', '?')} → **{_ni.get('depois', '?')} px** "
             f"· {_ni.get('tiles', '?')} tiles ≈ {_ni.get('tokens_aprox', 0)} tokens de imagem"
         )
-    
+
     if btn_ler:
             if not img_file:
                 st.warning(_msg("Selecione uma imagem primeiro."))
@@ -498,9 +507,6 @@ def _render_diagnostico() -> None:
 
 def render_passo_5_sintese(destino_ok: bool) -> None:
     """Passo 5: Síntese Final — compila prompt para o Mestre."""
-    from core.prompt_builder import montar_prompt_mestre
-    from core.token_budget import orcamento_fonte, estimar_tokens
-    from config import TETO_FONTE_PCT
 
     st.markdown("---")
     st.markdown("### 5️⃣ Passo 5: Síntese Final")
@@ -518,7 +524,7 @@ def render_passo_5_sintese(destino_ok: bool) -> None:
 
     # Verificar chave Texto
     texto_ok, texto_msg = _chave_texto_ok()
-    
+
     btn_exec = st.button(
         "⚡ Gerar Código do Prompt",
         type="primary",
@@ -544,7 +550,6 @@ def render_passo_5_sintese(destino_ok: bool) -> None:
                 structure = perfil.structure
 
                 # Constrói prompt do Mestre
-                from core.prompt_builder import PromptContext, montar_prompt_mestre
                 modelo_base = st.session_state.get(StateKeys.MODELO_TEXTO_SELECT, MODELO_TEXTO_PADRAO)
 
                 ctx = PromptContext(

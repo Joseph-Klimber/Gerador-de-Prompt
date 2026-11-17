@@ -5,9 +5,17 @@ import json
 import pathlib
 import os
 import time
+import urllib.request
+import hmac
+import hashlib
+import base64
 from datetime import datetime
 from src.crypto import fernet_disponivel, _fernet, _get_ps_fernet_key
 from src.auth import _get_apps_script_url
+
+# Cache em memória para evitar chamadas de rede repetidas
+_CONFIG_CACHE: dict[str, tuple[dict, float]] = {}
+_CACHE_TTL = 300  # 5 minutos
 
 # Detecta Streamlit Cloud (filesystem efêmero — não persiste entre reboots)
 IS_STREAMLIT_CLOUD = (
@@ -34,7 +42,6 @@ def _msg(msg: str) -> str:
 
 def _config_path(email: str) -> pathlib.Path:
     """Caminho do arquivo de config local (hash do e-mail)."""
-    import hashlib
     h = hashlib.sha256(email.encode()).hexdigest()[:16]
     return CONFIG_DIR / f"config_{h}.json"
 
@@ -58,83 +65,8 @@ def _decrypt(token: str) -> dict | None:
         return None
 
 
-def carregar_config(email: str) -> dict:
-    """Carrega configuração do usuário (local + nuvem se disponível).
-    
-    Prioridade: local (mais rápido) → nuvem (fallback).
-    No Streamlit Cloud: pula local (filesystem efêmero), vai direto pra nuvem.
-    """
-    if not email:
-        return {}
-    
-    # 1. Tenta local (só se NÃO estiver no Streamlit Cloud)
-    if not IS_STREAMLIT_CLOUD:
-        path = _config_path(email)
-        if path.exists():
-            try:
-                content = path.read_text(encoding="utf-8")
-                data = _decrypt(content)
-                if data:
-                    return data
-            except Exception:
-                pass
-    
-    # 2. Fallback nuvem (se Apps Script configurado)
-        APPS_SCRIPT_URL = _get_apps_script_url()
-        if APPS_SCRIPT_URL:
-            max_retries = 2
-            backoff_delays = [1, 2]
-            payload = {"action": "carregar", "email": email}
-            data_bytes = json.dumps(payload).encode("utf-8")
-        
-            for attempt in range(max_retries + 1):
-                try:
-                    import urllib.request
-                    req = urllib.request.Request(
-                        APPS_SCRIPT_URL,
-                        data=data_bytes,
-                        headers={"Content-Type": "application/json"},
-                        method="POST",
-                    )
-                    with urllib.request.urlopen(req, timeout=10) as resp:
-                        data = json.loads(resp.read().decode("utf-8"))
-                    # Verifica HMAC na resposta (proteção contra adulteração)
-                    if not _verify_config_hmac(data):
-                        raise ValueError("HMAC inválido na resposta do servidor")
-                    if data.get("ok"):
-                        # Nuvem retorna payload criptografado (novo formato) ou config em claro (legado)
-                        if data.get("payload"):
-                            # Novo formato: payload criptografado
-                            decrypted = _decrypt(data["payload"])
-                            if decrypted:
-                                config_data = decrypted
-                            else:
-                                config_data = {}
-                        elif data.get("config"):
-                            # Formato legado: config em claro (compatibilidade)
-                            config_data = data["config"]
-                        else:
-                            config_data = {}
-
-                        # Salva localmente para próxima vez (só se não Cloud)
-                        if config_data and not IS_STREAMLIT_CLOUD:
-                            salvar_config(config_data, email=email)
-                        return config_data
-                except Exception as e:
-                    if attempt == max_retries:
-                        # Log error silently, fallback to empty config
-                        pass
-                if attempt < max_retries:
-                    time.sleep(backoff_delays[attempt])
-    
-    return {}
-
-
 def _hmac_sign(payload: str) -> str:
     """Gera assinatura HMAC-SHA256 para payload usando a chave mestra."""
-    import hmac
-    import hashlib
-    import base64
     key = _get_ps_fernet_key() or ""
     hmac_key = hashlib.sha256(key.encode()).digest()
     sig = hmac.new(hmac_key, payload.encode(), hashlib.sha256).digest()
@@ -143,14 +75,12 @@ def _hmac_sign(payload: str) -> str:
 
 def _hmac_verify(payload: str, signature: str) -> bool:
     """Verifica assinatura HMAC-SHA256 do payload."""
-    import hmac
     expected = _hmac_sign(payload)
     return hmac.compare_digest(expected, signature)
 
 
 def _verify_config_hmac(response_data: dict) -> bool:
     """Verifica HMAC na resposta do Apps Script (espera campo 'hmac' no JSON)."""
-    import json
     hmac_received = response_data.pop("hmac", None)
     if not hmac_received:
         return False
@@ -158,23 +88,101 @@ def _verify_config_hmac(response_data: dict) -> bool:
     return _hmac_verify(payload_str, hmac_received)
 
 
+def _fetch_from_apps_script(email: str) -> dict:
+    """Busca configuração do Apps Script (com retry)."""
+    APPS_SCRIPT_URL = _get_apps_script_url()
+    if not APPS_SCRIPT_URL:
+        return {}
+
+    max_retries = 2
+    backoff_delays = [1, 2]
+    payload = {"action": "carregar", "email": email}
+    data_bytes = json.dumps(payload).encode("utf-8")
+
+    for attempt in range(max_retries + 1):
+        try:
+            req = urllib.request.Request(
+                APPS_SCRIPT_URL,
+                data=data_bytes,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            if not _verify_config_hmac(data):
+                raise ValueError("HMAC inválido na resposta do servidor")
+            if data.get("ok"):
+                if data.get("payload"):
+                    decrypted = _decrypt(data["payload"])
+                    return decrypted if decrypted else {}
+                elif data.get("config"):
+                    return data["config"]
+                return {}
+        except Exception:
+            if attempt == max_retries:
+                return {}
+            time.sleep(backoff_delays[attempt])
+    return {}
+
+
+def carregar_config(email: str) -> dict:
+    """Carrega configuração do usuário (local + nuvem se disponível).
+
+    Prioridade: local (mais rápido) → nuvem (fallback).
+    No Streamlit Cloud: pula local (filesystem efêmero), vai direto pra nuvem.
+    Cacheado por 5 minutos para evitar chamadas de rede repetidas.
+    """
+    if not email:
+        return {}
+
+    # Verifica cache
+    now = time.time()
+    if email in _CONFIG_CACHE:
+        cached_data, cached_time = _CONFIG_CACHE[email]
+        if now - cached_time < _CACHE_TTL:
+            return cached_data
+
+    # 1. Tenta local (só se NÃO estiver no Streamlit Cloud)
+    if not IS_STREAMLIT_CLOUD:
+        path = _config_path(email)
+        if path.exists():
+            try:
+                content = path.read_text(encoding="utf-8")
+                data = _decrypt(content)
+                if data:
+                    _CONFIG_CACHE[email] = (data, now)
+                    return data
+            except Exception:
+                pass
+
+    # 2. Fallback nuvem (se Apps Script configurado)
+    config_data = _fetch_from_apps_script(email)
+
+    # Salva localmente para próxima vez (só se não Cloud)
+    if config_data and not IS_STREAMLIT_CLOUD:
+        salvar_config(config_data, email=email)
+
+    _CONFIG_CACHE[email] = (config_data, now)
+    return config_data
+
+
 def salvar_config(dados: dict, email: str) -> tuple[bool, str | None]:
     """Salva configuração (local + nuvem se disponível).
-    
+
     Returns:
         (ok, erro_msg)
     No Streamlit Cloud: salva só na nuvem (filesystem efêmero).
     """
     if not email:
         return False, "E-mail não fornecido"
-    
+
     if not fernet_disponivel():
         return False, "Criptografia indisponível (configure PS_FERNET_KEY)"
-    
+
     encrypted = _encrypt(dados)
     if not encrypted:
         return False, "Falha na criptografia"
-    
+
     # 1. Salva local (só se NÃO estiver no Streamlit Cloud)
     if not IS_STREAMLIT_CLOUD:
         try:
@@ -182,10 +190,7 @@ def salvar_config(dados: dict, email: str) -> tuple[bool, str | None]:
             path.write_text(encrypted, encoding="utf-8")
         except Exception as e:
             return False, f"Erro ao salvar local: {e}"
-    else:
-        # No Cloud: avisa que config fica só na sessão atual
-        pass
-    
+
     # 2. Tenta nuvem (não bloqueia se falhar) - SEMPRE envia payload criptografado com assinatura HMAC
     APPS_SCRIPT_URL = _get_apps_script_url()
     if APPS_SCRIPT_URL:
@@ -194,10 +199,9 @@ def salvar_config(dados: dict, email: str) -> tuple[bool, str | None]:
         payload_dict = {"action": "salvar", "email": email, "payload": encrypted}
         payload_str = json.dumps(payload_dict)
         sig = _hmac_sign(payload_str)
-        
+
         for attempt in range(max_retries + 1):
             try:
-                import urllib.request
                 req = urllib.request.Request(
                     APPS_SCRIPT_URL,
                     data=payload_str.encode("utf-8"),
@@ -221,8 +225,10 @@ def salvar_config(dados: dict, email: str) -> tuple[bool, str | None]:
                     return True, _msg(f"Aviso: nuvem indisponível ({e}) — local salvo")
             if attempt < max_retries:
                 time.sleep(backoff_delays[attempt])
-    
+
     if IS_STREAMLIT_CLOUD and not APPS_SCRIPT_URL:
         return False, "APPS_SCRIPT_URL não configurado — config não será persistida"
-    
+
+    # Invalida cache após salvar
+    _CONFIG_CACHE.pop(email, None)
     return True, None
