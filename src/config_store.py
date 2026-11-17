@@ -68,40 +68,43 @@ def carregar_config(email: str) -> dict:
                 pass
     
     # 2. Fallback nuvem (se Apps Script configurado)
-    APPS_SCRIPT_URL = _get_apps_script_url()
-    if APPS_SCRIPT_URL:
-        try:
-            import urllib.request
-            payload = {"action": "carregar", "email": email}
-            req = urllib.request.Request(
-                APPS_SCRIPT_URL,
-                data=json.dumps(payload).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-            if data.get("ok"):
-                # Nuvem retorna payload criptografado (novo formato) ou config em claro (legado)
-                if data.get("payload"):
-                    # Novo formato: payload criptografado
-                    decrypted = _decrypt(data["payload"])
-                    if decrypted:
-                        config_data = decrypted
+        APPS_SCRIPT_URL = _get_apps_script_url()
+        if APPS_SCRIPT_URL:
+            try:
+                import urllib.request
+                payload = {"action": "carregar", "email": email}
+                req = urllib.request.Request(
+                    APPS_SCRIPT_URL,
+                    data=json.dumps(payload).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                # Verifica HMAC na resposta (proteção contra adulteração)
+                if not _verify_config_hmac(data):
+                    raise ValueError("HMAC inválido na resposta do servidor")
+                if data.get("ok"):
+                    # Nuvem retorna payload criptografado (novo formato) ou config em claro (legado)
+                    if data.get("payload"):
+                        # Novo formato: payload criptografado
+                        decrypted = _decrypt(data["payload"])
+                        if decrypted:
+                            config_data = decrypted
+                        else:
+                            config_data = {}
+                    elif data.get("config"):
+                        # Formato legado: config em claro (compatibilidade)
+                        config_data = data["config"]
                     else:
                         config_data = {}
-                elif data.get("config"):
-                    # Formato legado: config em claro (compatibilidade)
-                    config_data = data["config"]
-                else:
-                    config_data = {}
-                
-                # Salva localmente para próxima vez (só se não Cloud)
-                if config_data and not IS_STREAMLIT_CLOUD:
-                    salvar_config(config_data, email=email)
-                return config_data
-        except Exception:
-            pass
+
+                    # Salva localmente para próxima vez (só se não Cloud)
+                    if config_data and not IS_STREAMLIT_CLOUD:
+                        salvar_config(config_data, email=email)
+                    return config_data
+            except Exception:
+                pass
     
     return {}
 
@@ -115,6 +118,23 @@ def _hmac_sign(payload: str) -> str:
     hmac_key = hashlib.sha256(key.encode()).digest()
     sig = hmac.new(hmac_key, payload.encode(), hashlib.sha256).digest()
     return base64.urlsafe_b64encode(sig).decode().rstrip("=")
+
+
+def _hmac_verify(payload: str, signature: str) -> bool:
+    """Verifica assinatura HMAC-SHA256 do payload."""
+    import hmac
+    expected = _hmac_sign(payload)
+    return hmac.compare_digest(expected, signature)
+
+
+def _verify_config_hmac(response_data: dict) -> bool:
+    """Verifica HMAC na resposta do Apps Script (espera campo 'hmac' no JSON)."""
+    import json
+    hmac_received = response_data.pop("hmac", None)
+    if not hmac_received:
+        return False
+    payload_str = json.dumps(response_data, sort_keys=True, separators=(",", ":"))
+    return _hmac_verify(payload_str, hmac_received)
 
 
 def salvar_config(dados: dict, email: str) -> tuple[bool, str | None]:
