@@ -189,8 +189,17 @@ def _chamar_motor_visao(img_file, estilo_conversao: str, sens_escolhida: str,
     Inclui retry exponencial, fallback de modelos e respeito a Retry-After.
     """
     from src.config_store import carregar_config
-    config = carregar_config(st.session_state.get("user_email", ""))
-    api_key = st.session_state.get("input_key_visao", "").strip() or config.get("chaves", {}).get("Chave Visao", "")
+    from core.state import StateKeys
+    email = st.session_state.get(StateKeys.USER_EMAIL, "")
+    config = carregar_config(email)
+    
+    # Busca a chave tanto em chaves["Chave Visao"] quanto em chaves["Chave Visão"]
+    chaves_dict = config.get("chaves", {})
+    api_key = (
+        st.session_state.get("input_key_visao", "").strip()
+        or chaves_dict.get("Chave Visao", "").strip()
+        or chaves_dict.get("Chave Visão", "").strip()
+    )
     if not api_key:
         raise RuntimeError("Nenhuma chave configurada para Visão")
 
