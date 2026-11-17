@@ -1,5 +1,6 @@
 # ui/sidebar.py
 """Barra lateral: Centro de Conexão e Autenticação."""
+from datetime import datetime
 import streamlit as st
 
 from src.crypto import fernet_disponivel, mascarar_email
@@ -8,6 +9,17 @@ from core.state import StateKeys, DEFAULTS
 from src.ui.state_adapter import init_state, sync_pending, get_ideia_fonte, backup_ideia, restore_ideia_if_empty, is_destino_valido
 from src.config_store import carregar_config, salvar_config
 from src.auth import verificar_acesso_sheets
+
+
+
+def _now() -> str:
+    """Retorna timestamp atual formatado HH:MM:SS."""
+    return datetime.now().strftime("%H:%M:%S")
+
+
+def _msg(msg: str) -> str:
+    """Prefixa mensagem com timestamp."""
+    return f"[{_now()}] {msg}"
 
 
 def render_sidebar() -> None:
@@ -27,7 +39,7 @@ def _render_sidebar_logged_in() -> None:
     st.caption(f"Logado: {mascarar_email(email)}")
     
     if not fernet_disponivel():
-        st.warning("⚠️ Criptografia desabilitada — configure PS_FERNET_KEY.")
+        st.warning(_msg("⚠️ Criptografia desabilitada — configure PS_FERNET_KEY."))
     
     st.markdown("---")
     st.markdown("#### 🔌 Centro de Conexão")
@@ -83,11 +95,11 @@ def _conectar_motores(chave_visao: str, modelo_visao: str, chave_texto: str,
                        modelo_texto: str, email: str) -> None:
     """Salva configuração dos motores."""
     if not fernet_disponivel():
-        st.error("Criptografia desabilitada — configure PS_FERNET_KEY antes de salvar.")
+        st.error(_msg("Criptografia desabilitada — configure PS_FERNET_KEY antes de salvar."))
         return
     
     if modelo_visao not in OPCOES_GEMINI_3 or modelo_texto not in OPCOES_GEMINI_3:
-        st.error("Modelo inválido — use 3.5/3.6/3.7-flash (abaixo de 3.X é obsoleto).")
+        st.error(_msg("Modelo inválido — use 3.5/3.6/3.7-flash (abaixo de 3.X é obsoleto)."))
         return
     
     dados = {
@@ -103,7 +115,7 @@ def _conectar_motores(chave_visao: str, modelo_visao: str, chave_texto: str,
     if ok:
         st.success("Motores conectados com sucesso!")
     else:
-        st.warning(msg or "Erro ao salvar na nuvem — cópia local salva.")
+        st.warning(_msg(msg or "Erro ao salvar na nuvem — cópia local salva."))
 
 
 def _logout() -> None:
@@ -126,7 +138,7 @@ def _render_sidebar_login() -> None:
 def render_login_page() -> None:
     """Renderiza a tela de login completa (página principal quando não autenticado)."""
     if not fernet_disponivel():
-        st.warning("⚠️ Criptografia desabilitada — configure PS_FERNET_KEY em .streamlit/secrets.toml (Etapa 1.3).")
+        st.warning(_msg("⚠️ Criptografia desabilitada — configure PS_FERNET_KEY em .streamlit/secrets.toml (Etapa 1.3)."))
     
     st.markdown('<p class="ps-kicker">PROMPT STUDIO COCKPIT · ATRITO ZERO</p>', unsafe_allow_html=True)
     st.markdown('<h1 class="hero-title">Pare de lutar contra a IA.</h1>', unsafe_allow_html=True)
@@ -168,10 +180,10 @@ def _processar_login(email_input: str) -> None:
     """Processa tentativa de login."""
     email = (email_input or "").strip()
     if not email:
-        st.error("Digite seu e-mail.")
+        st.error(_msg("Digite seu e-mail."))
         return
     if "@" not in email:
-        st.error("E-mail inválido — verifique o e-mail da compra.")
+        st.error(_msg("E-mail inválido — verifique o e-mail da compra."))
         return
     
     with st.spinner("Verificando acesso..."):
@@ -184,7 +196,7 @@ def _processar_login(email_input: str) -> None:
         st.success("Acesso liberado!")
         st.rerun()
     else:
-        st.error(erro or "E-mail não encontrado — verifique o e-mail da compra.")
+        st.error(_msg(erro or "E-mail não encontrado — verifique o e-mail da compra."))
 
 
 def _render_showcase() -> None:

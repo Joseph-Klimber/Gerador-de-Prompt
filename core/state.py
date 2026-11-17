@@ -39,7 +39,8 @@ class StateKeys:
     ESTILO_CONVERSAO = "ck_estilo_conversao"
     FOCO_CONTEXTO = "ck_foco_contexto"
     SENS_SLIDER = "ck_sens_slider"
-    
+    MODIFICADORES_HASH = "_ck_modificadores_hash"
+
     # Passo 4: Rascunho / Auditoria
     PREPROMPT = "ck_preprompt"
     PREPROMPT_EDITADO = "ck_preprompt_editado"

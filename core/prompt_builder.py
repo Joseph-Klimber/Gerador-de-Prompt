@@ -10,6 +10,7 @@ from src.text_engines import BANCO_DE_MOTORES
 from core.destination import injetar_estrutura_destino, teto_destino
 from core.state import StateKeys, prioridade_fonte
 from core.contracts import EstiloConversao
+from core.token_budget import estimar_tokens, orcamento_fonte
 
 
 @dataclass(frozen=True)

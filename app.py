@@ -19,6 +19,7 @@ Arquitetura:
 import pathlib
 import sys
 
+from datetime import datetime
 import streamlit as st
 
 # ── Path setup ──
@@ -55,6 +56,17 @@ from src.ui.steps import (
 )
 
 
+
+def _now() -> str:
+    """Retorna timestamp atual formatado HH:MM:SS."""
+    return datetime.now().strftime("%H:%M:%S")
+
+
+def _msg(msg: str) -> str:
+    """Prefixa mensagem com timestamp."""
+    return f"[{_now()}] {msg}"
+
+
 def main() -> None:
     """Entry point da aplicação."""
     # Inicializa estado
@@ -81,7 +93,7 @@ def main() -> None:
     from src.config_store import carregar_config
 
     if not fernet_disponivel():
-        st.warning("⚠️ Conecte suas chaves na barra lateral para ativar os motores. (Criptografia desabilitada sem PS_FERNET_KEY)")
+        st.warning(_msg("⚠️ Conecte suas chaves na barra lateral para ativar os motores. (Criptografia desabilitada sem PS_FERNET_KEY)"))
     else:
         _cfg_check = carregar_config(st.session_state[StateKeys.USER_EMAIL])
         if not _cfg_check.get("chaves", {}).get("Chave Visao") and not _cfg_check.get("chaves", {}).get("Chave Texto"):

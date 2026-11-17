@@ -8,6 +8,7 @@ import html
 import time
 import random
 import unicodedata
+from datetime import datetime
 import streamlit as st
 
 # Google GenAI imports com tratamento de erro robusto
@@ -200,14 +201,25 @@ def _msg_erro_diagnostico(e):
         raw=str(e); code=getattr(e,"code",None) or getattr(e,"status_code",None) or getattr(getattr(e,"response",None),"status_code",None) or "?"
         return f"RAW [{code}]: {raw[:1200]}"
     except Exception: return str(e)[:1200]
+
+def _now() -> str:
+    """Retorna timestamp atual formatado HH:MM:SS."""
+    return datetime.now().strftime("%H:%M:%S")
+
+
+def _msg(msg: str) -> str:
+    """Prefixa mensagem com timestamp."""
+    return f"[{_now()}] {msg}"
+
+
 def _msg_erro_amigavel(e):
     texto=str(e)
-    if "401" in texto or "Unauthorized" in texto or "403" in texto: return "🔑 **Chave inválida, sem permissão ou expirada.** Gere outra em aistudio.google.com/app/apikey e conecte novamente."
-    if "404" in texto or "not found" in texto.lower(): return "⚠️ **Modelo não encontrado (404).** O id selecionado (gemini-3.5/3.6/3.7-flash) pode não estar liberado para sua chave/região. Tente outro dos 3 em Ferramentas Avançadas."
-    if "429" in texto or "quota" in texto.lower() or "resource exhausted" in texto.lower(): return "⏳ **Limite de uso da API atingido (429/Quota).** Sua cota gratuita para esta chave acabou. Troque a chave, aguarde o reset (24h) ou use outra conta."
-    if "503" in texto or "overloaded" in texto.lower() or "unavailable" in texto.lower(): return "🔌 **Servidores do Google sobrecarregados (503).** O código já tentou 3 vezes com backoff. Se persiste: é sobrecarga regional — tente outro modelo (3.5/3.6/3.7) em Ferramentas Avançadas, troque de chave/projeto ou aguarde 5-10 min."
-    if any(k in texto.lower() for k in ("timed out", "timeout", "read operation timed out", "deadline exceeded")): return "⏱️ **Tempo limite de conexão esgotado (Timeout de Rede).** A API do Google demorou para responder ao processar os dados. Verifique sua conexão ou tente novamente."
-    return f"⚠️ **Erro Sistémico:** {texto[:500]}"
+    if "401" in texto or "Unauthorized" in texto or "403" in texto: return _msg("🔑 **Chave inválida, sem permissão ou expirada.** Gere outra em aistudio.google.com/app/apikey e conecte novamente.")
+    if "404" in texto or "not found" in texto.lower(): return _msg("⚠️ **Modelo não encontrado (404).** O id selecionado (gemini-3.5/3.6/3.7-flash) pode não estar liberado para sua chave/região. Tente outro dos 3 em Ferramentas Avançadas.")
+    if "429" in texto or "quota" in texto.lower() or "resource exhausted" in texto.lower(): return _msg("⏳ **Limite de uso da API atingido (429/Quota).** Sua cota gratuita para esta chave acabou. Troque a chave, aguarde o reset (24h) ou use outra conta.")
+    if "503" in texto or "overloaded" in texto.lower() or "unavailable" in texto.lower(): return _msg("🔌 **Servidores do Google sobrecarregados (503).** O código já tentou 3 vezes com backoff. Se persiste: é sobrecarga regional — tente outro modelo (3.5/3.6/3.7) em Ferramentas Avançadas, troque de chave/projeto ou aguarde 5-10 min.")
+    if any(k in texto.lower() for k in ("timed out", "timeout", "read operation timed out", "deadline exceeded")): return _msg("⏱️ **Tempo limite de conexão esgotado (Timeout de Rede).** A API do Google demorou para responder ao processar os dados. Verifique sua conexão ou tente novamente.")
+    return _msg(f"⚠️ **Erro Sistémico:** {texto[:500]}")
 def _chamar_motor_texto(system_prompt, user_prompt, modelo_gemini=None, temperature=0.25):
     from src.config_store import carregar_config
     config = carregar_config(st.session_state.get("user_email", ""))

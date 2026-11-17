@@ -1,6 +1,7 @@
 # ui/steps.py
 """Componentes de UI para cada passo do cockpit (Passos 0-5)."""
 import streamlit as st
+from datetime import datetime
 from PIL import Image, ImageOps
 
 from config import (
@@ -21,6 +22,16 @@ from src.text_engines import (
     _ps_markup_origin, _build_gemini_config,
 )
 from src.vision import _chamar_motor_visao
+
+
+def _now() -> str:
+    """Retorna timestamp atual formatado HH:MM:SS."""
+    return datetime.now().strftime("%H:%M:%S")
+
+
+def _msg(msg: str) -> str:
+    """Prefixa mensagem com timestamp."""
+    return f"[{_now()}] {msg}"
 
 
 def render_passo_0_destino() -> bool:
@@ -83,7 +94,22 @@ def _on_ideia_change() -> None:
 def render_passo_1_ideia(destino_ok: bool) -> None:
     """Passo 1: A Sua Ideia (narrativa visual)."""
     st.markdown("### 3️⃣ Passo 3: A Sua Ideia (A Narrativa Visual)")
-    st.caption("O ponto de partida. Descreva o que imagina ou veja a caixa preencher-se usando o Passo 2.")
+
+    # Indicador visual das modificações ativas (do Passo 1 - Modificadores Globais)
+    estilo = st.session_state.get(StateKeys.ESTILO_CONVERSAO, "Manter Estilo Original")
+    foco = st.session_state.get(StateKeys.FOCO_CONTEXTO, "Harmônico (Preencher/Embelezar)")
+    sens = st.session_state.get(StateKeys.SENS_SLIDER, OPCOES_SENSUALIDADE[1])
+    mods_ativos = []
+    if estilo != "Manter Estilo Original":
+        mods_ativos.append(f"🎨 {estilo}")
+    if foco != "Harmônico (Preencher/Embelezar)":
+        mods_ativos.append(f"🎯 {foco}")
+    if sens != "Sugestiva (Insinuação artística)":
+        mods_ativos.append(f"💋 {sens}")
+    if mods_ativos:
+        st.caption(_msg("Modificadores ativos: " + " | ".join(mods_ativos)))
+    else:
+        st.caption(_msg("O ponto de partida. Descreva o que imagina ou veja a caixa preencher-se usando o Passo 2."))
 
     ideia_val = st.text_area(
         "Insira a sua Ideia:",
@@ -121,7 +147,7 @@ def render_passo_2_visao(destino_ok: bool) -> None:
             _thumb.thumbnail((512, 512))
             st.image(_thumb, caption=f"📎 {img_file.name} — miniatura máx. 512×512")
         except Exception:
-            st.warning("Não foi possível gerar a miniatura desta imagem — a extração pode continuar.")
+            st.warning(_msg("Não foi possível gerar a miniatura desta imagem — a extração pode continuar."))
         st.caption("🔍 Miniatura reduzida para visualização; o Motor de Visão recebe a imagem original em alta.")
 
     btn_ler = st.button(
@@ -138,13 +164,13 @@ def render_passo_2_visao(destino_ok: bool) -> None:
 
         # Validação client-side 10MB (Roteiro: mensagem exata "Imagem limite: 10 MB.")
         if img_file and getattr(img_file, "size", 0) > 10 * 1024 * 1024:
-            st.error("Imagem limite: 10 MB.")
+            st.error(_msg("Imagem limite: 10 MB."))
             st.caption("🔒 Upload bloqueado localmente — imagem não foi enviada ao modelo.")
             return  # Sai da função sem chamar IA
 
         # Validação client-side 10MB (Roteiro: mensagem exata "Imagem limite: 10 MB.")
         if img_file and getattr(img_file, "size", 0) > 10 * 1024 * 1024:
-            st.error("Imagem limite: 10 MB.")
+            st.error(_msg("Imagem limite: 10 MB."))
             st.caption("🔒 Upload bloqueado localmente — imagem não foi enviada ao modelo.")
             return  # Sai da função sem chamar IA
     
@@ -167,7 +193,7 @@ def render_passo_2_visao(destino_ok: bool) -> None:
     
     if btn_ler:
             if not img_file:
-                st.warning("Selecione uma imagem primeiro.")
+                st.warning(_msg("Selecione uma imagem primeiro."))
             else:
                 with st.spinner("Analisando matriz óptica com Varredura Ultra-Densa..."):
                     try:
@@ -204,7 +230,7 @@ def render_passo_2_visao(destino_ok: bool) -> None:
                         st.session_state.pop(StateKeys.PREPROMPT, None)
                         st.rerun()
                     except Exception as e:
-                        st.error(_msg_erro_amigavel(e))
+                        st.error(_msg(_msg_erro_amigavel(e)))
                         with st.expander("🔍 Diagnóstico técnico — copie e me envie se persistir", expanded=False):
                             st.code(_msg_erro_diagnostico(e), language="text")
                             st.caption(
@@ -241,6 +267,22 @@ def render_passo_3_modificadores(destino_ok: bool) -> None:
     """Passo 3: Modificadores Globais — metade da tela, lado a lado com o Passo 0."""
     st.markdown("### 1️⃣ Passo 1: Modificadores Globais")
     st.caption("ℹ️ *Aviso: Estes filtros guiam a geração do seu prompt final. (Também alteram a leitura caso envie uma Imagem no Passo 2).")
+
+    # Detectar mudança de modificadores e invalidar rascunho/síntese
+    modificadores_atuais = (
+        st.session_state.get(StateKeys.ESTILO_CONVERSAO, "Manter Estilo Original"),
+        st.session_state.get(StateKeys.FOCO_CONTEXTO, "Harmônico (Preencher/Embelezar)"),
+        st.session_state.get(StateKeys.SENS_SLIDER, OPCOES_SENSUALIDADE[1]),
+    )
+    modificadores_anteriores = st.session_state.get(StateKeys.MODIFICADORES_HASH)
+    if modificadores_anteriores and modificadores_anteriores != hash(modificadores_atuais):
+        # Modificadores mudaram - limpar rascunho e síntese
+        st.session_state.pop(StateKeys.PREPROMPT, None)
+        st.session_state.pop(StateKeys.PROMPT_FINAL, None)
+        st.session_state.pop(StateKeys.DIAGNOSTICO, None)
+        st.session_state.pop(StateKeys.SUGESTOES_MARCADAS, None)
+        st.caption(_msg("⚠️ Modificadores alterados — rascunho e prompt final descartados. Gere novamente."))
+    st.session_state[StateKeys.MODIFICADORES_HASH] = hash(modificadores_atuais)
 
     with st.container(border=True):
         # Estilo em linha própria: o preset Anti-Porcelana tem nome longo
@@ -281,7 +323,7 @@ def render_passo_4_rascunho_auditoria(destino_ok: bool) -> None:
         backup_ideia()
         ideia_fonte = get_ideia_fonte()
         if not ideia_fonte:
-            st.warning("Escreva sua Ideia no Passo 1.")
+            st.warning(_msg("Escreva sua Ideia no Passo 1."))
         else:
             st.session_state[StateKeys.IDEIA_HIST_FIX] = ideia_fonte
             st.session_state[StateKeys.PENDING_IDEIA] = ideia_fonte
@@ -302,14 +344,14 @@ def render_passo_4_rascunho_auditoria(destino_ok: bool) -> None:
                     st.session_state[StateKeys.PENDING_PREPROMPT_EDITADO] = txt
                     st.rerun()
                 except Exception as e:
-                    st.error(_msg_erro_amigavel(e))
+                    st.error(_msg(_msg_erro_amigavel(e)))
 
     # Auditoria
     if btn_ava:
         restore_ideia_if_empty()
         ideia_fonte_auditoria = get_ideia_fonte()
         if not ideia_fonte_auditoria:
-            st.warning("Escreva sua Ideia no Passo 1.")
+            st.warning(_msg("Escreva sua Ideia no Passo 1."))
         else:
             with st.spinner("Raio-X em andamento com o Motor de Texto..."):
                 try:
@@ -321,12 +363,12 @@ def render_passo_4_rascunho_auditoria(destino_ok: bool) -> None:
                     )
                     diag = parse_json_ia(txt)
                     if not diag:
-                        st.error("⚠️ Erro de formato no Raio-X. Tente novamente.")
+                        st.error(_msg("⚠️ Erro de formato no Raio-X. Tente novamente."))
                     else:
                         st.session_state[StateKeys.DIAGNOSTICO] = diag
                         st.rerun()
                 except Exception as e:
-                    st.error(_msg_erro_amigavel(e))
+                    st.error(_msg(_msg_erro_amigavel(e)))
 
     # Exibe rascunho com diff
     if st.session_state.get(StateKeys.PREPROMPT):
@@ -419,10 +461,10 @@ def render_passo_5_sintese(destino_ok: bool) -> None:
 
     if btn_exec:
         if not destino_ok:
-            st.error("Selecione para qual motor")
+            st.error(_msg("Selecione para qual motor"))
             return
         if not st.session_state[StateKeys.IDEIA_INPUT].strip():
-            st.warning("Escreva sua Ideia no Passo 1.")
+            st.warning(_msg("Escreva sua Ideia no Passo 1."))
             return
 
         with st.spinner(f"Compilando sintaxe ultra-otimizada para {destino}..."):
@@ -456,7 +498,7 @@ def render_passo_5_sintese(destino_ok: bool) -> None:
                 st.session_state[StateKeys.DEST_USADO] = destino
                 st.rerun()
             except Exception as e:
-                st.error(_msg_erro_amigavel(e))
+                st.error(_msg(_msg_erro_amigavel(e)))
                 with st.expander("🔍 Diagnóstico técnico — copie e me envie se persistir"):
                     st.code(_msg_erro_diagnostico(e), language="text")
                     _modelo_diag = st.session_state.get(StateKeys.MODELO_TEXTO_SELECT, MODELO_TEXTO_PADRAO)
