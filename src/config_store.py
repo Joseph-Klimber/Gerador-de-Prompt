@@ -60,7 +60,8 @@ def _decrypt(token: str) -> dict | None:
         return None
     try:
         decrypted = _fernet().decrypt(token.encode()).decode()
-        return json.loads(decrypted)
+        result = json.loads(decrypted)
+        return result if isinstance(result, dict) else {}
     except Exception:
         return None
 
@@ -114,9 +115,10 @@ def _fetch_from_apps_script(email: str) -> dict:
             if data.get("ok"):
                 if data.get("payload"):
                     decrypted = _decrypt(data["payload"])
-                    return decrypted if decrypted else {}
+                    return decrypted if isinstance(decrypted, dict) else {}
                 elif data.get("config"):
-                    return data["config"]
+                    cfg = data["config"]
+                    return cfg if isinstance(cfg, dict) else {}
                 return {}
         except Exception:
             if attempt == max_retries:
@@ -157,6 +159,10 @@ def carregar_config(email: str) -> dict:
 
     # 2. Fallback nuvem (se Apps Script configurado)
     config_data = _fetch_from_apps_script(email)
+
+    # Garante que é dict
+    if not isinstance(config_data, dict):
+        config_data = {}
 
     # Salva localmente para próxima vez (só se não Cloud)
     if config_data and not IS_STREAMLIT_CLOUD:
