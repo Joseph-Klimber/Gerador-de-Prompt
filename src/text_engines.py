@@ -1,6 +1,7 @@
 """text_engines.py — Etapa 3 (BANCO_DE_MOTORES + SYS_* + motor Texto + helpers)
 Reaproveitado do legado 1.0-3.py sem reescrever prompts (F07/F08).
 Ajuste: MODELO_TEXTO_PADRAO = gemini-3.5-flash nas duas vias (não 3.7). Abaixo de 3.X é obsoleto (C-A2).
+Cascade de API key: input_key_texto → Chave Texto → Chave Texto (BYOK) → input_key_visao → Chave Visao → Chave Visão.
 """
 import re
 import json
@@ -9,6 +10,7 @@ import time
 import random
 import unicodedata
 import streamlit as st
+from datetime import datetime, timezone, timedelta
 
 # Google GenAI imports com tratamento de erro robusto
 try:
@@ -19,7 +21,22 @@ except ImportError:
     genai = None
     types = None
     genai_errors = None
+
 from config import OPCOES_SENSUALIDADE, OPCOES_GEMINI_3, MODELO_VISAO_PADRAO, MODELO_TEXTO_PADRAO
+from src.config_store import carregar_config
+
+# Brasil timezone (UTC-3) para timestamps user-facing
+BR_TZ = timezone(timedelta(hours=-3))
+
+
+def _now() -> str:
+    """Timestamp no fuso do Brasil (HH:MM:SS)."""
+    return datetime.now(BR_TZ).strftime("%H:%M:%S")
+
+
+def _msg(text: str) -> str:
+    """Prefixa mensagem com timestamp [HH:MM:SS]."""
+    return f"[{_now()}] {text}"
 BANCO_DE_MOTORES = {
     "ComfyUI / Pony SDXL": {"regra_positivo": "Tradução TAG-A-TAG. Mantenha 100% dos detalhes. Ordem: score_9, score_8_up, score_7_up, score_6_up, score_5_up, score_4_up -> source_* -> rating_* -> [contagem e gênero, ex: 1girl, solo] -> [descrição física completa] -> [roupa detalhada completa] -> [ação completa] -> [cenário completo]. Use vírgulas. Nunca resuma.", "regra_negativo": "Sem regras fixas. Crie tags que sejam o oposto exato das características principais (oposto da roupa, oposto da luz, oposto do cenário, oposto da qualidade). Ex: se positivo tem 'highly detailed', negativo tem 'low detail, blurry'."},
     "ComfyUI / Illustrious": {"regra_positivo": "Tradução TAG-A-TAG hierárquica. Mantenha 100% dos detalhes. Ordem: masterpiece, best quality, amazing quality, very aesthetic, absurdres, newest -> rating -> [contagem e gênero] -> [corpo e rosto] -> [roupa completa e materiais] -> [pose exata] -> [cenário completo] -> [luz e câmera]. Use vírgulas. Nunca resuma.", "regra_negativo": "Sem regras fixas. Crie tags antônimas. Oponha-se diretamente ao estilo, anatomia e elementos visuais do prompt positivo. Adicione 'displeasing, very displeasing'."},
@@ -201,63 +218,102 @@ def _msg_erro_diagnostico(e):
         return f"RAW [{code}]: {raw[:1200]}"
     except Exception: return str(e)[:1200]
 def _msg_erro_amigavel(e):
-    texto=str(e)
-    if "401" in texto or "Unauthorized" in texto or "403" in texto: return "🔑 **Chave inválida, sem permissão ou expirada.** Gere outra em aistudio.google.com/app/apikey e conecte novamente."
-    if "404" in texto or "not found" in texto.lower(): return "⚠️ **Modelo não encontrado (404).** O id selecionado (gemini-3.5/3.6/3.7-flash) pode não estar liberado para sua chave/região. Tente outro dos 3 em Ferramentas Avançadas."
-    if "429" in texto or "quota" in texto.lower() or "resource exhausted" in texto.lower(): return "⏳ **Limite de uso da API atingido (429/Quota).** Sua cota gratuita para esta chave acabou. Troque a chave, aguarde o reset (24h) ou use outra conta."
-    if "503" in texto or "overloaded" in texto.lower() or "unavailable" in texto.lower(): return "🔌 **Servidores do Google sobrecarregados (503).** O código já tentou 3 vezes com backoff. Se persiste: é sobrecarga regional — tente outro modelo (3.5/3.6/3.7) em Ferramentas Avançadas, troque de chave/projeto ou aguarde 5-10 min."
-    if any(k in texto.lower() for k in ("timed out", "timeout", "read operation timed out", "deadline exceeded")): return "⏱️ **Tempo limite de conexão esgotado (Timeout de Rede).** A API do Google demorou para responder ao processar os dados. Verifique sua conexão ou tente novamente."
-    return f"⚠️ **Erro Sistémico:** {texto[:500]}"
-def _chamar_motor_texto(system_prompt, user_prompt, modelo_gemini=None, temperature=0.25):
-    from src.config_store import carregar_config
-    config = carregar_config(st.session_state.get("user_email", ""))
-    chave_texto = st.session_state.get("input_key_texto", "").strip() or config.get("chaves", {}).get("Chave Texto", "")
-    if not chave_texto or genai is None:
-        raise RuntimeError("Nenhuma chave configurada para Texto. Adicione a 'Chave Gemini (Texto)' no painel lateral.")
-    modelo_segundo_gemini = (modelo_gemini or "").strip() if modelo_gemini else ""
-    if not modelo_segundo_gemini:
-        modelo_segundo_gemini = (st.session_state.get("modelo_texto_select") or "").strip()
-    if not modelo_segundo_gemini:
-        modelo_segundo_gemini = config.get("modelo_texto", MODELO_TEXTO_PADRAO)
-    if modelo_segundo_gemini not in OPCOES_GEMINI_3:
-        modelo_segundo_gemini = MODELO_TEXTO_PADRAO
-    # Removido token de verificação [REF-VERIF:...] — poluía contexto e consumia tokens
-    sys_final = system_prompt
-    candidatos = [modelo_segundo_gemini] + [m for m in OPCOES_GEMINI_3 if m != modelo_segundo_gemini]
-    ultimo_erro = None
-    for modelo_try in candidatos:
-        for modo_temp in (temperature, None):
-            try:
-                client = genai.Client(api_key=chave_texto)
-                cfg = _build_gemini_config(sys_final, modelo_try, temperature=modo_temp)
-                resp = _gerar_com_retry(client, modelo_try, user_prompt, cfg)
-                texto = getattr(resp, "text", "")
-                texto = str(texto or "").strip()
-                if texto:
-                    sufixo = "" if modo_temp is not None else " sem temp"
-                    return texto, f"{modelo_try} (Texto{sufixo})"
-                raise RuntimeError("O modelo retornou uma resposta em branco.")
-            except Exception as e:
-                ultimo_erro = e
-                s = str(e).lower()
-                eh_transitorio = _eh_erro_transitorio_gemini(e)
-                eh_validation = any(k in s for k in ("invalid argument", "validation", "not supported", "unsupported"))
-                if eh_validation and modo_temp is not None:
-                    continue
-                if eh_transitorio or "503" in s or "overloaded" in s or "unavailable" in s or "429" in s or "resource exhausted" in s:
+    texto = str(e)
+    if "401" in texto or "Unauthorized" in texto or "403" in texto:
+        return _msg("🔑 **Chave inválida, sem permissão ou expirada.** Gere outra em aistudio.google.com/app/apikey e conecte novamente.")
+    if "404" in texto or "not found" in texto.lower():
+        return _msg("⚠️ **Modelo não encontrado (404).** O id selecionado (gemini-3.5/3.6/3.7-flash) pode não estar liberado para sua chave/região. Tente outro dos 3 em Ferramentas Avançadas.")
+    if "429" in texto or "quota" in texto.lower() or "resource exhausted" in texto.lower():
+        return _msg("⏳ **Limite de uso da API atingido (429/Quota).** Sua cota gratuita para esta chave acabou. Troque a chave, aguarde o reset (24h) ou use outra conta.")
+    if "503" in texto or "overloaded" in texto.lower() or "unavailable" in texto.lower():
+        return _msg("🔌 **Servidores do Google sobrecarregados (503).** O código já tentou 3 vezes com backoff. Se persiste: é sobrecarga regional — tente outro modelo (3.5/3.6/3.7) em Ferramentas Avançadas, troque de chave/projeto ou aguarde 5-10 min.")
+    if any(k in texto.lower() for k in ("timed out", "timeout", "read operation timed out", "deadline exceeded")):
+        return _msg("⏱️ **Tempo limite de conexão esgotado (Timeout de Rede).** A API do Google demorou para responder ao processar os dados. Verifique sua conexão ou tente novamente.")
+    return _msg(f"⚠️ **Erro Sistémico:** {texto[:500]}")
+
+
+    def _resolve_api_key_texto(email: str) -> str | None:
+        """Cascade de chaves Texto: session → config → visão session → visão config."""
+        # 1. session input_key_texto
+        key = st.session_state.get("input_key_texto", "").strip()
+        if key:
+            return key
+        # 2. config Chave Texto
+        config = carregar_config(email)
+        key = config.get("chaves", {}).get("Chave Texto", "").strip()
+        if key:
+            return key
+        # 3. config Chave Texto (BYOK)
+        key = config.get("chaves", {}).get("Chave Texto (BYOK)", "").strip()
+        if key:
+            return key
+        # 4. session input_key_visao
+        key = st.session_state.get("input_key_visao", "").strip()
+        if key:
+            return key
+        # 5. config Chave Visao (sem acento)
+        key = config.get("chaves", {}).get("Chave Visao", "").strip()
+        if key:
+            return key
+        # 6. config Chave Visão (com acento)
+        key = config.get("chaves", {}).get("Chave Visão", "").strip()
+        if key:
+            return key
+        return None
+
+
+    def _chamar_motor_texto(system_prompt, user_prompt, modelo_gemini=None, temperature=0.25):
+        email = st.session_state.get("user_email", "")
+        chave_texto = _resolve_api_key_texto(email)
+        if not chave_texto or genai is None:
+            raise RuntimeError(_msg("Nenhuma chave configurada para Texto. Adicione a 'Chave Gemini (Texto)' no painel lateral."))
+
+        modelo_segundo_gemini = (modelo_gemini or "").strip() if modelo_gemini else ""
+        if not modelo_segundo_gemini:
+            modelo_segundo_gemini = (st.session_state.get("modelo_texto_select") or "").strip()
+        if not modelo_segundo_gemini:
+            config = carregar_config(email)
+            modelo_segundo_gemini = config.get("modelo_texto", MODELO_TEXTO_PADRAO)
+        if modelo_segundo_gemini not in OPCOES_GEMINI_3:
+            modelo_segundo_gemini = MODELO_TEXTO_PADRAO
+
+        sys_final = system_prompt
+        candidatos = [modelo_segundo_gemini] + [m for m in OPCOES_GEMINI_3 if m != modelo_segundo_gemini]
+        ultimo_erro = None
+
+        for modelo_try in candidatos:
+            for modo_temp in (temperature, None):
+                try:
+                    client = genai.Client(api_key=chave_texto)
+                    cfg = _build_gemini_config(sys_final, modelo_try, temperature=modo_temp)
+                    resp = _gerar_com_retry(client, modelo_try, user_prompt, cfg)
+                    texto = getattr(resp, "text", "")
+                    texto = str(texto or "").strip()
+                    if texto:
+                        sufixo = "" if modo_temp is not None else " sem temp"
+                        return texto, f"{modelo_try} (Texto{sufixo})"
+                    raise RuntimeError(_msg("O modelo retornou uma resposta em branco."))
+                except Exception as e:
+                    ultimo_erro = e
+                    s = str(e).lower()
+                    eh_transitorio = _eh_erro_transitorio_gemini(e)
+                    eh_validation = any(k in s for k in ("invalid argument", "validation", "not supported", "unsupported"))
+                    if eh_validation and modo_temp is not None:
+                        continue
+                    if eh_transitorio or "503" in s or "overloaded" in s or "unavailable" in s or "429" in s or "resource exhausted" in s:
+                        if modo_temp is not None:
+                            continue
+                        break
                     if modo_temp is not None:
                         continue
                     break
-                if modo_temp is not None:
-                    continue
-                break
-        if ultimo_erro is not None and (_eh_erro_transitorio_gemini(ultimo_erro) or "503" in str(ultimo_erro).lower() or "overloaded" in str(ultimo_erro).lower()):
-            if modelo_try == candidatos[-1]:
-                break
-            continue
-        if ultimo_erro is not None and not _eh_erro_transitorio_gemini(ultimo_erro) and "503" not in str(ultimo_erro).lower():
-            if "404" in str(ultimo_erro).lower() or "not found" in str(ultimo_erro).lower():
-                if modelo_try != candidatos[-1]:
-                    continue
-        break
-    raise RuntimeError(f"Falha no Segundo Gemini (Engenharia de Texto) após fallback {candidatos}: {str(ultimo_erro)}")
+            if ultimo_erro is not None and (_eh_erro_transitorio_gemini(ultimo_erro) or "503" in str(ultimo_erro).lower() or "overloaded" in str(ultimo_erro).lower()):
+                if modelo_try == candidatos[-1]:
+                    break
+                continue
+            if ultimo_erro is not None and not _eh_erro_transitorio_gemini(ultimo_erro) and "503" not in str(ultimo_erro).lower():
+                if "404" in str(ultimo_erro).lower() or "not found" in str(ultimo_erro).lower():
+                    if modelo_try != candidatos[-1]:
+                        continue
+            break
+        raise RuntimeError(_msg(f"Falha no Segundo Gemini (Engenharia de Texto) após fallback {candidatos}: {str(ultimo_erro)}"))

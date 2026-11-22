@@ -1,10 +1,13 @@
 # ui/sidebar.py
 """Barra lateral: Centro de Conexão e Autenticação."""
+import os
+from pathlib import Path
+
 import streamlit as st
 
 from src.crypto import fernet_disponivel, mascarar_email
 from config import OPCOES_GEMINI_3, MODELO_VISAO_PADRAO, MODELO_TEXTO_PADRAO
-from core.state import StateKeys, init_state
+from core.state import StateKeys, DEFAULTS
 from src.config_store import carregar_config, salvar_config
 from src.auth import verificar_acesso_sheets
 
@@ -113,13 +116,15 @@ def _logout() -> None:
 
 
 def _render_sidebar_login() -> None:
-    """Sidebar para tela de login (compacta)."""
-    st.caption("Modo Bypass Ativo (acesso direto).")
-    if st.button("Entrar Direto (Bypass)", use_container_width=True, type="primary"):
-        st.session_state[StateKeys.AUTENTICADO] = True
-        st.session_state[StateKeys.USER_EMAIL] = "bypass@local.admin"
-        st.session_state[StateKeys.EXPIRACAO] = "Ilimitado"
-        st.rerun()
+    """Sidebar para tela de login (compacta) — via Sheets, sem bypass."""
+    st.caption("Entre com o e-mail da compra na Kiwify.")
+    email_side = st.text_input(
+        "E-mail da compra",
+        placeholder="seu@email.com",
+        key="login_email_sidebar",
+    )
+    if st.button("Entrar", use_container_width=True, type="primary"):
+        _processar_login(email_side)
 
 
 def render_login_page() -> None:
@@ -153,11 +158,8 @@ def render_login_page() -> None:
     
     email_input = st.text_input("E-mail da compra", placeholder="seu@email.com", key="login_email")
     
-    if st.button("🚀 Entrar (Bypass / Acesso Direto)", type="primary", use_container_width=True):
-        st.session_state[StateKeys.AUTENTICADO] = True
-        st.session_state[StateKeys.USER_EMAIL] = "bypass@local.admin"
-        st.session_state[StateKeys.EXPIRACAO] = "Ilimitado"
-        st.rerun()
+    if st.button("🚀 Entrar", type="primary", use_container_width=True):
+        _processar_login(email_input)
     
     st.caption("LGPD: Imagens com pessoas são processadas apenas para extração e descartadas. Nada é salvo no servidor.")
     st.stop()
@@ -188,8 +190,6 @@ def _processar_login(email_input: str) -> None:
 
 def _render_showcase() -> None:
     """Renderiza os dois cards de exemplo (elfa + carro)."""
-    from pathlib import Path
-    
     col_a, col_b = st.columns(2)
     
     with col_a:
@@ -222,7 +222,6 @@ def _render_showcase() -> None:
 
 def _render_showcase_image(filename: str, fallback_emoji: str) -> None:
     """Renderiza imagem de showcase ou fallback."""
-    from pathlib import Path
     img_path = Path(__file__).parent.parent.parent / "assets" / filename
     try:
         if img_path.exists():
@@ -241,8 +240,6 @@ def _render_showcase_image(filename: str, fallback_emoji: str) -> None:
 
 def _render_planos() -> None:
     """Renderiza cards de planos com botões Kiwify."""
-    import os
-    
     st.markdown('<div class="plan-container">', unsafe_allow_html=True)
     st.markdown("### Escolha seu plano")
     st.caption("Pagamento fora do app — compra na Kiwify libera seu e-mail na planilha.")

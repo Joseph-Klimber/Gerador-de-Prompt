@@ -10,8 +10,7 @@ from config import (
 from src.text_engines import OPCOES_DESTINO
 from core.state import StateKeys, sync_pending, clear_ideia_cascade, clear_sintese, get_ideia_fonte, backup_ideia, restore_ideia_if_empty
 from core.destination import (
-    perfil_do_destino, teto_destino, estrutura_destino, dica_tecnica_destino,
-    validar_destino_escolhido,
+    perfil_do_destino, teto_destino, validar_destino_escolhido,
 )
 from core.prompt_builder import build_rascunho_prompt, build_auditoria_prompt
 from src.text_engines import (
