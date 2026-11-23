@@ -268,6 +268,16 @@ for root, dirs, files in os.walk('src'):
 print('   OK Nenhum segredo/credencial hardcoded nos fontes')
 print()
 
+# 11. BYPASS LOCAL
+print('11. BYPASS LOCAL')
+from core.state import LOCAL_EMAIL
+assert LOCAL_EMAIL == 'local@prompt-studio.local', 'LOCAL_EMAIL deve ser o e-mail-fixo da spec'
+import src.config_store as _cs
+assert 'LOCAL_EMAIL' in inspect.getsource(_cs.carregar_config), 'carregar_config deve pular a nuvem p/ LOCAL_EMAIL'
+assert 'LOCAL_EMAIL' in inspect.getsource(_cs.salvar_config), 'salvar_config deve pular a nuvem p/ LOCAL_EMAIL'
+print('   OK LOCAL_EMAIL + guardas de nuvem no config_store')
+print()
+
 print('='*60)
 if FALHAS:
     print(f'{len(FALHAS)} FALHA(S): ' + '; '.join(FALHAS))

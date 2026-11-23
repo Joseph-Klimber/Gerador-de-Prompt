@@ -64,6 +64,10 @@ class StateKeys:
     PENDING_IMG_EST = "_pending_img_est"
 
 
+# Identidade fixa do bypass local (sem planilha) — ver specs/2026-11-23-bypass-local-login-design.md
+LOCAL_EMAIL = "local@prompt-studio.local"
+
+
 # ── Defaults de Inicialização ──
 DEFAULTS: dict[str, Any] = {
     StateKeys.AUTENTICADO: False,

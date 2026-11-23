@@ -18,6 +18,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Any
 
 from src.crypto import fernet_disponivel, _fernet, _get_ps_fernet_key
+from core.state import LOCAL_EMAIL
 
 # Detecta Streamlit Cloud (filesystem efêmero — não persiste entre reboots)
 IS_STREAMLIT_CLOUD = (
@@ -175,7 +176,7 @@ def carregar_config(email: str) -> dict:
 
     # 2. Fallback nuvem (se Apps Script configurado)
     APPS_SCRIPT_URL = _get_apps_script_url()
-    if APPS_SCRIPT_URL:
+    if APPS_SCRIPT_URL and email != LOCAL_EMAIL:
         # Assina request body
         request_body = {"action": "carregar", "email": email}
         body_str = json.dumps(request_body, separators=(",", ":"), ensure_ascii=False)
@@ -252,7 +253,7 @@ def salvar_config(dados: dict, email: str) -> tuple[bool, str | None]:
 
     # 2. Tenta nuvem (payload criptografado + X-Signature)
     APPS_SCRIPT_URL = _get_apps_script_url()
-    if APPS_SCRIPT_URL:
+    if APPS_SCRIPT_URL and email != LOCAL_EMAIL:
         payload = {
             "action": "salvar",
             "email": email,
