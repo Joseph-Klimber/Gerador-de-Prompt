@@ -2,6 +2,8 @@
 """Bateria de testes completa - Prompt Studio Cockpit"""
 import sys
 import os
+
+FALHAS = []
 sys.path.insert(0, '.')
 
 print('='*60)
@@ -148,11 +150,13 @@ checks = [
     ('_gerar_com_retry_visao', '_gerar_com_retry_visao' in vision_src),
     ('Retry loop with candidatos', 'for modelo_try in candidatos' in vision_src),
     ('_eh_erro_transitorio_visao', '_eh_erro_transitorio_visao' in vision_src),
-    ('Timeout 90s no retry', 'timeout=90' in inspect.getsource(_gerar_com_retry_visao)),
+    ('Timeout 180s no retry', 'timeout=180' in inspect.getsource(_gerar_com_retry_visao)),
     ('MODELO_VISAO_PADRAO', 'MODELO_VISAO_PADRAO' in vision_src),
 ]
 for name, result in checks:
     status = 'OK' if result else 'FALHA'
+    if not result:
+        FALHAS.append(name)
     print(f'   {status} {name}')
 print()
 
@@ -167,6 +171,8 @@ ui_checks = [
 ]
 for name, result in ui_checks:
     status = 'OK' if result else 'FALHA'
+    if not result:
+        FALHAS.append(name)
     print(f'   {status} {name}')
 print()
 
@@ -181,6 +187,8 @@ checks = [
 ]
 for name, result in checks:
     status = 'OK' if result else 'FALHA'
+    if not result:
+        FALHAS.append(name)
     print(f'   {status} {name}')
 print()
 
@@ -193,6 +201,8 @@ text_ui_checks = [
 ]
 for name, result in text_ui_checks:
     status = 'OK' if result else 'FALHA'
+    if not result:
+        FALHAS.append(name)
     print(f'   {status} {name}')
 print()
 
@@ -259,5 +269,9 @@ print('   OK Nenhum segredo/credencial hardcoded nos fontes')
 print()
 
 print('='*60)
+if FALHAS:
+    print(f'{len(FALHAS)} FALHA(S): ' + '; '.join(FALHAS))
+    print('='*60)
+    sys.exit(1)
 print('TODOS OS TESTES PASSARAM - SISTEMA INTEGRO E PRONTO')
 print('='*60)
