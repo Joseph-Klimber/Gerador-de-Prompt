@@ -286,6 +286,12 @@ assert 'LOCAL_BYPASS' in _side_src, 'botão deve ser gateado pela flag LOCAL_BYP
 print('   OK bypass: gate + botao nas duas telas de login')
 print()
 
+assert _cs._config_path(LOCAL_EMAIL).exists(), 'migração da config local não feita'
+_cfg_local = _cs.carregar_config(LOCAL_EMAIL)
+assert isinstance(_cfg_local, dict) and _cfg_local, 'config do bypass deve carregar (chaves preservadas)'
+print('   OK config migrada e carregando pelo e-mail-fixo')
+print()
+
 print('='*60)
 if FALHAS:
     print(f'{len(FALHAS)} FALHA(S): ' + '; '.join(FALHAS))
