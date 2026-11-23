@@ -278,6 +278,14 @@ assert 'LOCAL_EMAIL' in inspect.getsource(_cs.salvar_config), 'salvar_config dev
 print('   OK LOCAL_EMAIL + guardas de nuvem no config_store')
 print()
 
+_side_src = open('src/ui/sidebar.py', encoding='utf-8').read()
+assert 'def _local_bypass_ativo' in _side_src, 'helper de gate ausente'
+assert 'except Exception' in _side_src.split('def _local_bypass_ativo')[1].split('def _entrar_bypass_local')[0], '_local_bypass_ativo deve tolerar secrets ilegível (try/except -> False)'
+assert _side_src.count('Entrar (app local)') >= 2, 'botão nas DUAS telas de login (principal e sidebar)'
+assert 'LOCAL_BYPASS' in _side_src, 'botão deve ser gateado pela flag LOCAL_BYPASS'
+print('   OK bypass: gate + botao nas duas telas de login')
+print()
+
 print('='*60)
 if FALHAS:
     print(f'{len(FALHAS)} FALHA(S): ' + '; '.join(FALHAS))
