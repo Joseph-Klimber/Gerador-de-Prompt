@@ -48,7 +48,13 @@
 
 /* Reset & base */
 .stApp { background: var(--ps-bg); color: var(--ps-text); }
-.block-container { padding-top: 2rem; padding-bottom: 3rem; max-width: 1200px; }
+.block-container { padding-top: 2rem; padding-bottom: 4rem; max-width: 1200px; }
+
+/* Hide Streamlit default footer and menu */
+#MainMenu { visibility: hidden; }
+footer { visibility: hidden; }
+header { visibility: hidden; }
+.stDeployButton { display: none; }
 
 /* Typography */
 .ps-kicker { 
