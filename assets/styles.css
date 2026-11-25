@@ -53,7 +53,7 @@
 /* Hide Streamlit default footer and menu */
 #MainMenu { visibility: hidden; }
 footer { visibility: hidden; }
-header { visibility: hidden; }
+header [data-testid="stHeaderActionElements"] { display: none; } /* esconde menu hambúrguer e deploy, mas mantém header */
 .stDeployButton { display: none; }
 
 /* Typography */
