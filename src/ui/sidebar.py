@@ -148,8 +148,8 @@ def render_login_page() -> None:
     # Showcase
     _render_showcase()
     
-    # Planos
-    _render_planos()
+    # Planos (preços mascarados no beta)
+    _render_planos(mask_prices=True)
     
     # Formulário de login
     st.markdown("---")
@@ -238,8 +238,9 @@ def _render_showcase_image(filename: str, fallback_emoji: str) -> None:
         st.caption(f"{filename} no servidor")
 
 
-def _render_planos() -> None:
-    """Renderiza cards de planos com botões Kiwify."""
+def _render_planos(mask_prices: bool = False) -> None:
+    """Renderiza cards de planos com botões Kiwify.
+    mask_prices=True esconde preços (beta testing)."""
     st.markdown('<div class="plan-container">', unsafe_allow_html=True)
     st.markdown("### Escolha seu plano")
     st.caption("Pagamento fora do app — compra na Kiwify libera seu e-mail na planilha.")

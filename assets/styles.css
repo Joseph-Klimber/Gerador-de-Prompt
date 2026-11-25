@@ -16,6 +16,36 @@
   --ps-focus: #22d3ee;
 }
 
+/* Beta Testing Watermark */
+.stApp::before {
+  content: "BETA TESTING";
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-20deg);
+  font-size: 18vw;
+  font-weight: 900;
+  color: rgba(34, 211, 238, 0.03);
+  pointer-events: none;
+  z-index: 9999;
+  user-select: none;
+  white-space: nowrap;
+}
+
+/* Login page lighter watermark */
+.stApp[data-testid="stMain"] > div:first-child::after {
+  content: "BETA TESTING";
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: rgba(34, 211, 238, 0.15);
+  pointer-events: none;
+  z-index: 9998;
+  user-select: none;
+}
+
 /* Reset & base */
 .stApp { background: var(--ps-bg); color: var(--ps-text); }
 .block-container { padding-top: 2rem; padding-bottom: 3rem; max-width: 1200px; }
