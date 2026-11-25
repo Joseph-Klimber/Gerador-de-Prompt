@@ -268,30 +268,6 @@ for root, dirs, files in os.walk('src'):
 print('   OK Nenhum segredo/credencial hardcoded nos fontes')
 print()
 
-# 11. BYPASS LOCAL
-print('11. BYPASS LOCAL')
-from core.state import LOCAL_EMAIL
-assert LOCAL_EMAIL == 'local@prompt-studio.local', 'LOCAL_EMAIL deve ser o e-mail-fixo da spec'
-import src.config_store as _cs
-assert 'LOCAL_EMAIL' in inspect.getsource(_cs.carregar_config), 'carregar_config deve pular a nuvem p/ LOCAL_EMAIL'
-assert 'LOCAL_EMAIL' in inspect.getsource(_cs.salvar_config), 'salvar_config deve pular a nuvem p/ LOCAL_EMAIL'
-print('   OK LOCAL_EMAIL + guardas de nuvem no config_store')
-print()
-
-_side_src = open('src/ui/sidebar.py', encoding='utf-8').read()
-assert 'def _local_bypass_ativo' in _side_src, 'helper de gate ausente'
-assert 'except Exception' in _side_src.split('def _local_bypass_ativo')[1].split('def _entrar_bypass_local')[0], '_local_bypass_ativo deve tolerar secrets ilegível (try/except -> False)'
-assert _side_src.count('Entrar (app local)') >= 2, 'botão nas DUAS telas de login (principal e sidebar)'
-assert 'LOCAL_BYPASS' in _side_src, 'botão deve ser gateado pela flag LOCAL_BYPASS'
-print('   OK bypass: gate + botao nas duas telas de login')
-print()
-
-assert _cs._config_path(LOCAL_EMAIL).exists(), 'migração da config local não feita'
-_cfg_local = _cs.carregar_config(LOCAL_EMAIL)
-assert isinstance(_cfg_local, dict) and _cfg_local, 'config do bypass deve carregar (chaves preservadas)'
-print('   OK config migrada e carregando pelo e-mail-fixo')
-print()
-
 print('='*60)
 if FALHAS:
     print(f'{len(FALHAS)} FALHA(S): ' + '; '.join(FALHAS))

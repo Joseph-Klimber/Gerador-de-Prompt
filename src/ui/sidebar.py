@@ -7,7 +7,7 @@ import streamlit as st
 
 from src.crypto import fernet_disponivel, mascarar_email
 from config import OPCOES_GEMINI_3, MODELO_VISAO_PADRAO, MODELO_TEXTO_PADRAO
-from core.state import StateKeys, DEFAULTS, LOCAL_EMAIL
+from core.state import StateKeys, DEFAULTS
 from src.config_store import carregar_config, salvar_config
 from src.auth import verificar_acesso_sheets
 
@@ -116,7 +116,7 @@ def _logout() -> None:
 
 
 def _render_sidebar_login() -> None:
-    """Sidebar para tela de login (compacta) — via Sheets; bypass local só com flag LOCAL_BYPASS."""
+    """Sidebar para tela de login (compacta) — via Sheets."""
     st.caption("Entre com o e-mail da compra na Kiwify.")
     email_side = st.text_input(
         "E-mail da compra",
@@ -125,8 +125,6 @@ def _render_sidebar_login() -> None:
     )
     if st.button("Entrar", use_container_width=True, type="primary"):
         _processar_login(email_side)
-    if _local_bypass_ativo() and st.button("🔓 Entrar (app local)", use_container_width=True):
-        _entrar_bypass_local()
 
 
 def render_login_page() -> None:
@@ -162,9 +160,6 @@ def render_login_page() -> None:
     
     if st.button("🚀 Entrar", type="primary", use_container_width=True):
         _processar_login(email_input)
-
-    if _local_bypass_ativo() and st.button("🔓 Entrar (app local)", use_container_width=True):
-        _entrar_bypass_local()
     
     st.caption("LGPD: Imagens com pessoas são processadas apenas para extração e descartadas. Nada é salvo no servidor.")
     st.stop()
@@ -191,22 +186,6 @@ def _processar_login(email_input: str) -> None:
         st.rerun()
     else:
         st.error(erro or "E-mail não encontrado — verifique o e-mail da compra.")
-
-
-def _local_bypass_ativo() -> bool:
-    """Bypass local habilitado apenas pela flag LOCAL_BYPASS no secrets.toml (não versionado)."""
-    try:
-        return bool(st.secrets.get("LOCAL_BYPASS", False))
-    except Exception:
-        return False
-
-
-def _entrar_bypass_local() -> None:
-    """Entra direto, sem e-mail nem planilha — identidade fixa LOCAL_EMAIL (app local)."""
-    st.session_state[StateKeys.AUTENTICADO] = True
-    st.session_state[StateKeys.USER_EMAIL] = LOCAL_EMAIL
-    st.session_state[StateKeys.EXPIRACAO] = "Local — sem validação"
-    st.rerun()
 
 
 def _render_showcase() -> None:
