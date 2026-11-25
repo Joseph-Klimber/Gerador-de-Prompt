@@ -77,7 +77,10 @@ def main() -> None:
 
     # Aviso de chaves não conectadas
     from src.crypto import fernet_disponivel
-    from src.config_store import carregar_config
+    from src.config_store import carregar_config, _CONFIG_CACHE
+
+    # Invalida cache da sessão atual para refletir salvamento acabado de fazer na sidebar
+    _CONFIG_CACHE.pop(st.session_state[StateKeys.USER_EMAIL], None)
 
     if not fernet_disponivel():
         st.warning("⚠️ Conecte suas chaves na barra lateral para ativar os motores. (Criptografia desabilitada sem PS_FERNET_KEY)")
